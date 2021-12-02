@@ -19,6 +19,7 @@ deployment = {
   'docker.release': 'index.docker.io',
   'docker.organisation': 'vaticle',
   'docker.repository': 'typedb',
+  'docker.snapshot': 'index.docker.io/vaticle/typedb-snapshot',
   'github.organisation': 'vaticle',
   'github.repository': 'typedb'
 }

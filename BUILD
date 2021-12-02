@@ -229,6 +229,19 @@ checkstyle_test(
     license_type = "agpl",
 )
 
+
+container_bundle(
+    name = "assemble-docker-snapshot-bundle",
+    images = {
+        "{}:{{DOCKER_VERSION}}".format(deployment_docker['docker.snapshot']): ":assemble-docker",
+    }
+)
+
+docker_push(
+    name = "deploy-docker-snapshot",
+    bundle = ":assemble-docker-snapshot-bundle",
+)
+
 # CI targets that are not declared in any BUILD file, but are called externally
 filegroup(
     name = "ci",
