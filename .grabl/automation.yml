@@ -26,28 +26,28 @@ config:
     factory-tracing: [build, release]
 
 build:
-#  quality:
-#    filter:
-#      owner: vaticle
-#      branch: master
-#    build-analysis:
-#      image: vaticle-ubuntu-20.04
-#      command: |
-#        SONARCLOUD_CODE_ANALYSIS_CREDENTIAL=$SONARCLOUD_CREDENTIAL \
-#          bazel run @vaticle_dependencies//tool/sonarcloud:code-analysis -- \
-#          --project-key=vaticle_typedb \
-#          --branch=$GRABL_BRANCH --commit-id=$GRABL_COMMIT
-#    dependency-analysis:
-#      image: vaticle-ubuntu-20.04
-#      command: |
-#        bazel run @vaticle_dependencies//factory/analysis:dependency-analysis
-#  correctness:
-#    build:
-#      image: vaticle-ubuntu-20.04
-#      command: |
-#        bazel build //...
-#        bazel run @vaticle_dependencies//tool/checkstyle:test-coverage
-#        bazel test $(bazel query 'kind(checkstyle_test, //...)') --test_output=streamed
+  quality:
+    filter:
+      owner: vaticle
+      branch: master
+    build-analysis:
+      image: vaticle-ubuntu-20.04
+      command: |
+        SONARCLOUD_CODE_ANALYSIS_CREDENTIAL=$SONARCLOUD_CREDENTIAL \
+          bazel run @vaticle_dependencies//tool/sonarcloud:code-analysis -- \
+          --project-key=vaticle_typedb \
+          --branch=$GRABL_BRANCH --commit-id=$GRABL_COMMIT
+    dependency-analysis:
+      image: vaticle-ubuntu-20.04
+      command: |
+        bazel run @vaticle_dependencies//factory/analysis:dependency-analysis
+  correctness:
+    build:
+      image: vaticle-ubuntu-20.04
+      command: |
+        bazel build //...
+        bazel run @vaticle_dependencies//tool/checkstyle:test-coverage
+        bazel test $(bazel query 'kind(checkstyle_test, //...)') --test_output=streamed
 #    build-dependency:
 #      image: vaticle-ubuntu-20.04
 #      command: |
