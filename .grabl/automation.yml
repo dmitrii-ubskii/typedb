@@ -27,9 +27,9 @@ config:
 
 build:
   quality:
-    filter:
-      owner: vaticle
-      branch: master
+#    filter:
+#      owner: vaticle
+#      branch: master
     build-analysis:
       image: vaticle-ubuntu-20.04
       command: |
@@ -165,7 +165,7 @@ release:
 #    owner: vaticle
 #    branch: master
 
-#  validation:
+  validation:
 #    validate-dependencies:
 #      image: vaticle-ubuntu-20.04
 #      command: bazel test //:release-validate-deps --test_output=streamed
