@@ -164,18 +164,19 @@ release:
 #  filter:
 #    owner: vaticle
 #    branch: master
-  deploy-docker-snapshot:
-    image: vaticle-ubuntu-20.04
-    command: |
-      echo -n "0.0.0-$(git rev-parse HEAD)" > VERSION
-      docker login -u $REPO_DOCKER_USERNAME -p $REPO_DOCKER_PASSWORD
-      # do not include version, otherwise the distribution path will be dynamic and require extra logic to access
-      bazel run --define version="" //:deploy-docker-snapshot
+
 #  validation:
 #    validate-dependencies:
 #      image: vaticle-ubuntu-20.04
 #      command: bazel test //:release-validate-deps --test_output=streamed
-#  deployment:
+  deployment:
+    deploy-docker-snapshot:
+      image: vaticle-ubuntu-20.04
+      command: |
+        echo -n "0.0.0-$(git rev-parse HEAD)" > VERSION
+        docker login -u $REPO_DOCKER_USERNAME -p $REPO_DOCKER_PASSWORD
+        # do not include version, otherwise the distribution path will be dynamic and require extra logic to access
+        bazel run --define version="" //:deploy-docker-snapshot
 #    deploy-github:
 #      image: vaticle-ubuntu-20.04
 #      filter:
