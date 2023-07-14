@@ -81,6 +81,7 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
 
         protected Processor(Pair<Concludable, ConceptMap> boundConcludable, Driver<Processor> driver, Driver<ExplainableController> controller, Context context, Supplier<String> debugName) {
             super(driver, controller, context, debugName);
+            System.out.println("Create ExplainableController.Processor for " + debugName.get());
             this.logicMgr = controller.actor().registry().logicManager();
             this.concludable = boundConcludable.first();
             this.bounds = boundConcludable.second();
@@ -106,6 +107,7 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
         }
 
         private Explanation toExplanation(Rule.Condition.ConditionBranch branch, ConceptMap conceptMap, Unifier unifier) {
+            System.out.println("toExplanation was called! ExplainableController did get an answer!");
             Map<Identifier.Variable, Concept> conclusionAnswer = new HashMap<>();
             branch.rule().conclusion().retrievableIds().forEach(id -> conclusionAnswer.put(id, conceptMap.get(id)));
             // Fill in the missing ones (anonymous) from the concludable bounds

@@ -15,6 +15,7 @@ import com.vaticle.typedb.core.reasoner.processor.reactive.Reactive;
 import com.vaticle.typedb.core.reasoner.processor.reactive.RootSink;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -34,6 +35,11 @@ public class RootExplainableController extends
         this.reasonerConsumer = reasonerConsumer;
     }
 
+    @Override
+    public void initialise() {
+        setUpUpstreamControllers();
+        getOrCreateProcessor(boundConcludable);
+    }
     @Override
     protected void setUpUpstreamControllers() {
         explainableController = registry().getOrCreateExplainableController();
@@ -59,6 +65,7 @@ public class RootExplainableController extends
         protected Processor(Pair<Concludable, ConceptMap> boundConcludable, ReasonerConsumer<Explanation> reasonerConsumer,
                             Driver<Processor> driver, Driver<RootExplainableController> controller, Context context, Supplier<String> debugName) {
             super(driver, controller, context, debugName);
+            System.out.println("RootExplainableController processor was created!");
             this.boundConcludable = boundConcludable;
             this.reasonerConsumer = reasonerConsumer;
         }
@@ -68,7 +75,10 @@ public class RootExplainableController extends
         public void setUp() {
             setHubReactive(fanInFanOut(this));
             rootSink = new RootSink<>(this, reasonerConsumer);
-            hubReactive().registerSubscriber(rootSink);
+            hubReactive().map(x -> {
+                System.out.println("RootExplainableController did get an answer!");
+                return x;
+            }).registerSubscriber(rootSink);
 
             InputPort<Explanation> input = createInputPort();
             requestConnection(new Request(input.identifier(), driver(), null, boundConcludable));
