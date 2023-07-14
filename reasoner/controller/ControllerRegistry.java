@@ -75,6 +75,7 @@ public class ControllerRegistry {
     private final TraversalEngine traversalEngine;
     private final AbstractController.Context controllerContext;
     private final Driver<MaterialisationController> materialisationController;
+    private Driver<ExplainableController> explainableController;
     private final AtomicBoolean terminated;
     private TypeDBException terminationCause;
 
@@ -103,6 +104,7 @@ public class ControllerRegistry {
         this.materialisationController = Actor.driver(driver -> new MaterialisationController(
                 driver, controllerContext, traversalEngine(), conceptManager()), executorService
         );
+        this.explainableController = null;
     }
 
     public TraversalEngine traversalEngine() {
@@ -264,6 +266,21 @@ public class ControllerRegistry {
             LOG.debug("Create ConditionController: '{}'", condition);
             return createController(actorFn);
         });
+    }
+
+    Driver<ExplainableController> getOrCreateExplainableController() {
+        if (explainableController == null) initialiseExplainableController();
+        assert explainableController != null;
+        return explainableController;
+    }
+
+    private synchronized void initialiseExplainableController() {
+        if (explainableController == null) {
+            Function<Driver<ExplainableController>, ExplainableController> actorFn =
+                    driver -> new ExplainableController(driver, controllerContext);
+            LOG.debug("Lazy initialise ExplainableController");
+            explainableController = createController(actorFn);
+        }
     }
 
     public void setExecutorService(ActorExecutorGroup executorService) {

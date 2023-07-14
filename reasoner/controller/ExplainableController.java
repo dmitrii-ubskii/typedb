@@ -25,15 +25,12 @@ import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
-import com.vaticle.typedb.core.pattern.variable.Variable;
-import com.vaticle.typedb.core.reasoner.ReasonerConsumer;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
 import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
 import com.vaticle.typedb.core.reasoner.processor.AbstractRequest;
 import com.vaticle.typedb.core.reasoner.processor.InputPort;
 import com.vaticle.typedb.core.reasoner.processor.reactive.PoolingStream;
 import com.vaticle.typedb.core.reasoner.processor.reactive.Reactive;
-import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,12 +38,13 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
+import static com.vaticle.typedb.core.reasoner.controller.ConjunctionController.merge;
 
 public class ExplainableController extends AbstractController<Pair<Concludable, ConceptMap>, ConceptMap, Explanation, ExplainableController.Processor.Request, ExplainableController.Processor, ExplainableController> {
 
     private final Map<Rule.Condition.ConditionBranch, Driver<NestedConjunctionController>> conditionBodyControllers;
 
-    public ExplainableController(Driver<ExplainableController> driver, Context controllerContext, ReasonerConsumer<Explanation> reasonerConsumer) {
+    public ExplainableController(Driver<ExplainableController> driver, Context controllerContext) {
         super(driver, controllerContext, () -> ExplainableController.class.getSimpleName());
         conditionBodyControllers = new HashMap<>();
     }
@@ -61,8 +59,9 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
     }
 
     @Override
-    public void routeConnectionRequest(Processor.Request connectionRequest) {
-        TODO
+    public void routeConnectionRequest(Processor.Request req) {
+        conditionBodyControllers.get(req.conditionBranch)
+                .execute(actor -> actor.establishProcessorConnection(req.withMap(c -> merge(c, req.bounds()))));
     }
 
     @Override
@@ -98,7 +97,7 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
                     input.map(conceptMap -> toExplanation(branch, conceptMap)).registerSubscriber(fanIn);
                     mappedBounds.forEach(mappedBound -> {
                         requestConnection(new Processor.Request(
-                                input.identifier(), driver(), branch.conjunction(), mappedBound
+                                input.identifier(), driver(), branch, mappedBound
                         ));
                     });
                 }
@@ -111,11 +110,14 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
 
         static class Request extends AbstractRequest<ResolvableConjunction, ConceptMap, ConceptMap> {
 
+            private final Rule.Condition.ConditionBranch conditionBranch; // TODO: See if we can just use this as id
+
             Request(
                     Reactive.Identifier inputPortId, Driver<? extends Processor> inputPortProcessor,
-                    ResolvableConjunction controllerId, ConceptMap processorId
+                    Rule.Condition.ConditionBranch controllerIdBranch, ConceptMap processorId
             ) {
-                super(inputPortId, inputPortProcessor, controllerId, processorId);
+                super(inputPortId, inputPortProcessor, controllerIdBranch.conjunction(), processorId);
+                this.conditionBranch = controllerIdBranch;
             }
 
         }
