@@ -70,7 +70,7 @@ public class ControllerRegistry {
     private final Map<Driver<ConcludableController.Match>, Set<Concludable>> controllerConcludables;
     private final Map<Rule, Driver<ConditionController>> conditions;
     private final Map<Rule, Driver<ConclusionController.Match>> conclusions; // by Rule not Rule.Conclusion because well defined equality exists
-    private final Map<Rule, Driver<ConclusionController.Explain>> explainConclusions;
+    private final Map<Rule, Driver<ExplainableController>> explainConclusions;
     private final Set<Driver<? extends AbstractController<?, ?, ?, ?, ?, ?>>> controllers;
     private final TraversalEngine traversalEngine;
     private final AbstractController.Context controllerContext;
@@ -169,8 +169,8 @@ public class ControllerRegistry {
     }
 
     public void createExplainableRoot(Concludable concludable, ConceptMap bounds, ReasonerConsumer<Explanation> reasonerConsumer) {
-        Function<Driver<ConcludableController.Explain>, ConcludableController.Explain> actorFn =
-                driver -> new ConcludableController.Explain(driver, concludable, bounds, controllerContext, reasonerConsumer);
+        Function<Driver<ExplainableController>, ExplainableController> actorFn =
+                driver -> new ExplainableController(driver, concludable, bounds, controllerContext, reasonerConsumer);
         LOG.debug("Create Explainable Root for: '{}'", concludable);
         createRootController(reasonerConsumer, actorFn);
     }
@@ -255,17 +255,6 @@ public class ControllerRegistry {
             LOG.debug("Create ConclusionController: '{}'", conclusion);
             return createController(actorFn);
         });
-    }
-
-    Driver<ConclusionController.Explain> getOrCreateExplainConclusion(Rule.Conclusion conclusion) {
-        return explainConclusions.computeIfAbsent(
-                conclusion.rule(), r -> {
-                    Function<Driver<ConclusionController.Explain>, ConclusionController.Explain> actorFn =
-                            driver -> new ConclusionController.Explain(driver, conclusion, materialisationController, controllerContext);
-                    LOG.debug("Create Explain ConclusionController: '{}'", conclusion);
-                    return createController(actorFn);
-                }
-        );
     }
 
     Driver<ConditionController> getOrCreateCondition(Rule.Condition condition) {

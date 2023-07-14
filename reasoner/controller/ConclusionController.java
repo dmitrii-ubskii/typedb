@@ -29,7 +29,6 @@ import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.Materialiser.Materialisation;
 import com.vaticle.typedb.core.logic.Rule;
 import com.vaticle.typedb.core.logic.Rule.Conclusion.Materialisable;
-import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
 import com.vaticle.typedb.core.reasoner.controller.ConclusionController.Request.ConditionRequest;
 import com.vaticle.typedb.core.reasoner.controller.ConclusionController.Request.MaterialiserRequest;
 import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
@@ -43,7 +42,6 @@ import com.vaticle.typedb.core.reasoner.processor.reactive.common.PublisherRegis
 import com.vaticle.typedb.core.reasoner.processor.reactive.common.SubscriberRegistry;
 import com.vaticle.typedb.core.traversal.common.Identifier.Variable;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -105,24 +103,6 @@ public abstract class ConclusionController<
             );
         }
 
-    }
-
-    public static class Explain extends ConclusionController<PartialExplanation, Processor.Explain, Explain> {
-
-        Explain(Driver<Explain> driver, Rule.Conclusion conclusion,
-                Driver<MaterialisationController> materialisationController, Context context) {
-            super(driver, conclusion, materialisationController, context);
-        }
-
-        @Override
-        protected Processor.Explain createProcessorFromDriver(Driver<Processor.Explain> processorDriver,
-                                                              ConceptMap bounds) {
-            return new Processor.Explain(
-                    processorDriver, driver(), processorContext(), conclusion.rule(), bounds,
-                    registry().conceptManager(),
-                    () -> Processor.class.getSimpleName() + "(pattern: " + conclusion + ", bounds: " + bounds + ")"
-            );
-        }
     }
 
     protected static class Request<CONTROLLER_ID, BOUNDS>
@@ -268,21 +248,6 @@ public abstract class ConclusionController<
             }
         }
 
-        protected static class Explain extends Processor<PartialExplanation, Explain> {
-
-            Explain(Driver<Explain> driver,
-                    Driver<? extends ConclusionController<PartialExplanation, Explain, ?>> controller,
-                    Context context, Rule rule, ConceptMap bounds, ConceptManager conceptManager,
-                    Supplier<String> debugName) {
-                super(driver, controller, context, rule, bounds, conceptManager, debugName);
-            }
-
-            @Override
-            protected Stream<Either<ConceptMap, Map<Variable, Concept>>, PartialExplanation> createStream() {
-                return new ConclusionStream.Explain(this);
-            }
-
-        }
 
         private static abstract class ConclusionStream<OUTPUT> extends TransformationStream<Either<ConceptMap, Map<Variable, Concept>>, OUTPUT> {
 
@@ -351,32 +316,6 @@ public abstract class ConclusionController<
                 @Override
                 protected Map<Variable, Concept> packageAnswer(Publisher<Either<ConceptMap, Map<Variable, Concept>>> publisher, Map<Variable, Concept> conclusionAnswer) {
                     return conclusionAnswer;
-                }
-            }
-
-            protected static class Explain extends ConclusionStream<PartialExplanation> {
-
-                private final Map<Publisher<Either<ConceptMap, Map<Variable, Concept>>>, ConceptMap> conditionAnswers;
-
-                private Explain(Processor<?, ?> processor) {
-                    super(processor);
-                    this.conditionAnswers = new HashMap<>();
-                }
-
-                @Override
-                protected void mayStoreConditionAnswer(
-                        Publisher<Either<ConceptMap, Map<Variable, Concept>>> materialisationInput,
-                        ConceptMap conditionAnswer
-                ) {
-                    conditionAnswers.put(materialisationInput, conditionAnswer);
-                }
-
-                @Override
-                protected PartialExplanation packageAnswer(
-                        Publisher<Either<ConceptMap, Map<Variable, Concept>>> materialiserInput,
-                        Map<Variable, Concept> conclusionAnswer
-                ) {
-                    return PartialExplanation.create(conclusionProcessor().rule(), conclusionAnswer, conditionAnswers.get(materialiserInput));
                 }
             }
 
