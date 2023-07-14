@@ -19,6 +19,7 @@
 package com.vaticle.typedb.core.reasoner.controller;
 
 import com.vaticle.typedb.common.collection.Pair;
+import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
 import com.vaticle.typedb.core.logic.LogicManager;
 import com.vaticle.typedb.core.logic.Rule;
@@ -26,11 +27,13 @@ import com.vaticle.typedb.core.logic.resolvable.Concludable;
 import com.vaticle.typedb.core.logic.resolvable.ResolvableConjunction;
 import com.vaticle.typedb.core.logic.resolvable.Unifier;
 import com.vaticle.typedb.core.reasoner.answer.Explanation;
+import com.vaticle.typedb.core.reasoner.answer.PartialExplanation;
 import com.vaticle.typedb.core.reasoner.processor.AbstractProcessor;
 import com.vaticle.typedb.core.reasoner.processor.AbstractRequest;
 import com.vaticle.typedb.core.reasoner.processor.InputPort;
 import com.vaticle.typedb.core.reasoner.processor.reactive.PoolingStream;
 import com.vaticle.typedb.core.reasoner.processor.reactive.Reactive;
+import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +41,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
-import static com.vaticle.typedb.core.reasoner.controller.ConjunctionController.merge;
 
 public class ExplainableController extends AbstractController<Pair<Concludable, ConceptMap>, ConceptMap, Explanation, ExplainableController.Processor.Request, ExplainableController.Processor, ExplainableController> {
 
@@ -75,27 +77,26 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
         private final LogicManager logicMgr;
         private final Concludable concludable;
         private final ConceptMap bounds;
+        private final Map<Rule, Set<Unifier>> unifiers;
 
         protected Processor(Pair<Concludable, ConceptMap> boundConcludable, Driver<Processor> driver, Driver<ExplainableController> controller, Context context, Supplier<String> debugName) {
             super(driver, controller, context, debugName);
             this.logicMgr = controller.actor().registry().logicManager();
             this.concludable = boundConcludable.first();
             this.bounds = boundConcludable.second();
+            this.unifiers = logicMgr.applicableRules(concludable);
         }
 
         @Override
         public void setUp() {
             PoolingStream<Explanation> fanIn = new PoolingStream.BufferStream<>(this);
             setHubReactive(fanIn);
-            Map<Rule, Set<Unifier>> unifiers = logicMgr.applicableRules(concludable);
             for (Map.Entry<Rule, Set<Unifier>> ruleUnifier : unifiers.entrySet()) {
-                Set<ConceptMap> mappedBounds = iterate(ruleUnifier.getValue())
-                        .map(unifier -> unifier.unify(bounds).get().first().filter(ruleUnifier.getKey().conclusion().retrievableIds()))
-                        .toSet();
                 for (Rule.Condition.ConditionBranch branch : ruleUnifier.getKey().condition().branches()) {
-                    InputPort<ConceptMap> input = createInputPort();
-                    input.map(conceptMap -> toExplanation(branch, conceptMap)).registerSubscriber(fanIn);
-                    mappedBounds.forEach(mappedBound -> {
+                    ruleUnifier.getValue().forEach(unifier -> {
+                        ConceptMap mappedBound = unifier.unify(bounds).get().first().filter(ruleUnifier.getKey().conclusion().retrievableIds());
+                        InputPort<ConceptMap> input = createInputPort();
+                        input.map(conceptMap -> toExplanation(branch, conceptMap, unifier)).registerSubscriber(fanIn);
                         requestConnection(new Processor.Request(
                                 input.identifier(), driver(), branch, mappedBound
                         ));
@@ -104,8 +105,21 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
             }
         }
 
-        private Explanation toExplanation(Rule.Condition.ConditionBranch branch, ConceptMap conceptMap) {
-            TODO
+        private Explanation toExplanation(Rule.Condition.ConditionBranch branch, ConceptMap conceptMap, Unifier unifier) {
+            Map<Identifier.Variable, Concept> conclusionAnswer = new HashMap<>();
+            branch.rule().conclusion().retrievableIds().forEach(id -> conclusionAnswer.put(id, conceptMap.get(id)));
+            // Fill in the missing ones (anonymous) from the concludable bounds
+            iterate(branch.rule().conclusion().pattern().variables())
+                    .filter(v -> !conclusionAnswer.containsKey(v.id()))
+                    .forEachRemaining(anonInConclusion -> {
+                        assert anonInConclusion.id().isAnonymous();
+                        Set<Identifier.Variable.Retrievable> concludableIds = unifier.reverseUnifier().get(anonInConclusion.id());
+                        assert concludableIds.size() == 1;
+                        concludableIds.stream().findFirst().ifPresent(concludableId -> conclusionAnswer.put(anonInConclusion.id(), this.bounds.get(concludableId)));
+                    });
+
+            PartialExplanation partialExplanation = PartialExplanation.create(branch.rule(), conclusionAnswer, conceptMap);
+            return new Explanation(partialExplanation.rule(),  unifier.mapping(),  partialExplanation.conclusionAnswer(), partialExplanation.conditionAnswer());
         }
 
         static class Request extends AbstractRequest<ResolvableConjunction, ConceptMap, ConceptMap> {
