@@ -61,7 +61,7 @@ public class ExplainableController extends AbstractController<Pair<Concludable, 
     @Override
     public void routeConnectionRequest(Processor.Request req) {
         conditionBodyControllers.get(req.conditionBranch)
-                .execute(actor -> actor.establishProcessorConnection(req.withMap(c -> merge(c, req.bounds()))));
+                .execute(actor -> actor.establishProcessorConnection(req));
     }
 
     @Override

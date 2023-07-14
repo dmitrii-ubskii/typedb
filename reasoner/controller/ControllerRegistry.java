@@ -19,6 +19,7 @@
 package com.vaticle.typedb.core.reasoner.controller;
 
 import com.vaticle.typedb.common.collection.ConcurrentSet;
+import com.vaticle.typedb.common.collection.Pair;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.parameters.Context;
 import com.vaticle.typedb.core.concept.ConceptManager;
@@ -171,8 +172,8 @@ public class ControllerRegistry {
     }
 
     public void createExplainableRoot(Concludable concludable, ConceptMap bounds, ReasonerConsumer<Explanation> reasonerConsumer) {
-        Function<Driver<ExplainableController>, ExplainableController> actorFn =
-                driver -> new RootExplainableController(driver, controllerContext, reasonerConsumer);
+        Function<Driver<RootExplainableController>, RootExplainableController> actorFn =
+                driver -> new RootExplainableController(new Pair<>(concludable, bounds), driver, controllerContext, reasonerConsumer);
         LOG.debug("Create Explainable Root for: '{}'", concludable);
         createRootController(reasonerConsumer, actorFn);
     }
