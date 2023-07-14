@@ -170,7 +170,7 @@ public class ControllerRegistry {
 
     public void createExplainableRoot(Concludable concludable, ConceptMap bounds, ReasonerConsumer<Explanation> reasonerConsumer) {
         Function<Driver<ExplainableController>, ExplainableController> actorFn =
-                driver -> new ExplainableController(driver, concludable, bounds, controllerContext, reasonerConsumer);
+                driver -> new RootExplainableController(driver, controllerContext, reasonerConsumer);
         LOG.debug("Create Explainable Root for: '{}'", concludable);
         createRootController(reasonerConsumer, actorFn);
     }
