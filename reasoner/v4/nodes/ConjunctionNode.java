@@ -61,11 +61,6 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
     protected void handleDone(Port onPort) {
         if (allPortsDone()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());

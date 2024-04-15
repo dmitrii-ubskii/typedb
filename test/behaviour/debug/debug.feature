@@ -138,7 +138,6 @@ Feature: Debugging Space
     Then verify answer size is: 3
 
 
-
   Scenario: test cycles
     Given reasoning schema
      """

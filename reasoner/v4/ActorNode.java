@@ -46,23 +46,18 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
-    public void readAnswerAt(ActorNode.Port reader, int index, @Nullable Integer pullerId) {
-        int effectivePullerId = (pullerId != null) ? pullerId : reader.owner.nodeId;
-
+    public void readAnswerAt(ActorNode.Port reader, int index) {
         Optional<Message> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner, reader, peekAnswer.get());
             return;
-        } else if (effectivePullerId >= nodeId) { //  strictly < would let you loop.
-            send(reader.owner, reader, new Message.Snapshot(nodeId, answerTable.size()));
+        } else if (reader.owner.nodeId >= nodeId) { //  strictly < would let you loop.
+            send(reader.owner, reader, new Message.HitElder(nodeId, answerTable.size()));
         } else {
             propagatePull(reader, index); // This is now effectively a 'pull'
         }
     }
 
-    public final void readAnswerAt(ActorNode.Port reader, int index) {
-        throw TypeDBException.of(ILLEGAL_STATE);
-    }
     protected abstract void propagatePull(Port reader, int index);
 
     public void receive(Port onPort, Message received) {
@@ -73,10 +68,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             }
             case CONCLUSION: {
                 handleConclusion(onPort, received.asConclusion());
-                break;
-            }
-            case SNAPSHOT: {
-                handleSnapshot(onPort);
                 break;
             }
             case DONE: {
@@ -91,10 +82,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
 
     protected void handleConclusion(Port onPort, Message.Conclusion conclusion) {
-        throw TypeDBException.of(ILLEGAL_STATE);
-    }
-
-    protected void handleSnapshot(Port onPort) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
 
@@ -167,17 +154,11 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
 
         private void recordReceive(Message msg) {
             assert state == State.PULLING;
-            if (msg.type() == Message.MessageType.SNAPSHOT) { // TODO
-                throw TypeDBException.of(UNIMPLEMENTED);
-            }
 
             assert lastRequestedIndex == msg.index();
             if (msg.type() == Message.MessageType.DONE) {
                 state = State.DONE;
                 owner.recordDone(this);
-            } else if (msg.type() == Message.MessageType.SNAPSHOT) {
-                this.isPending = true;
-                state = State.READY;
             } else {
                 state = State.READY;
             }
@@ -189,7 +170,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends Actor<NODE
             state = State.PULLING;
             lastRequestedIndex += 1;
             int readIndex = lastRequestedIndex;
-            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex, null));
+            remote.driver().execute(nodeActor -> nodeActor.readAnswerAt(Port.this, readIndex));
         }
 
         public ActorNode<?> owner() {

@@ -75,11 +75,6 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
     }
 
     @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
     protected void handleDone(Port onPort) {
         if (allPortsDone()) {
             FunctionalIterator<Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());

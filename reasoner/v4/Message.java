@@ -24,8 +24,6 @@ public abstract class Message {
     public enum MessageType {
         ANSWER,
         CONCLUSION,
-        SNAPSHOT,
-        TERMINATION_PROPOSAL,
         DONE,
     }
 
@@ -93,17 +91,6 @@ public abstract class Message {
 
         public Done(int index) {
             super(MessageType.DONE, index);
-        }
-    }
-
-    public static class Snapshot extends Message {
-        public final int ofNode;
-        public final int answerCount;
-
-        public Snapshot(int ofNode, int answerCount) {
-            super(MessageType.SNAPSHOT, -1);
-            this.ofNode = ofNode;
-            this.answerCount = answerCount;
         }
     }
 }

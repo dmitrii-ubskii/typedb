@@ -46,11 +46,6 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     @Override
-    protected void handleSnapshot(Port onPort) {
-        throw TypeDBException.of(UNIMPLEMENTED);
-    }
-
-    @Override
     protected void handleAnswer(Port onPort, Message.Answer answer) {
         requestMaterialisation(onPort, answer);
         // Do NOT readNext.
