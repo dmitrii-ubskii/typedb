@@ -240,6 +240,12 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
                 Basic.this.finish();
                 nodeRegistry.perfCounters().stopPrinting();
             }
+
+            @Override
+            protected void handleTerminateSCC(Port onPort, Message.TerminateSCC terminateSCC) {
+                recordDone(onPort);
+                handleDone(onPort);
+            }
         }
     }
 }

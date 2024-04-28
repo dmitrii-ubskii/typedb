@@ -50,9 +50,11 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     public void receiveMaterialisation(Port port, Optional<Message.Conclusion> thenConcepts) {
+        System.err.printf("Node[%d] received MATERIALISATION\n", this.nodeId);
         pendingMaterialisations -= 1;
         if (thenConcepts.isPresent()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());
+            // If there were an answer, this should bump the tableSize and prevent premature termination.
             Message toSend = answerTable.recordConclusion(thenConcepts.get().conclusionAnswer());
             subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
         }

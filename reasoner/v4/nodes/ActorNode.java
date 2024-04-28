@@ -44,7 +44,8 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             send(reader.owner, reader, peekAnswer.get());
         } else {
             if (reader.owner.nodeId >= this.nodeId) {
-                send(reader.owner, reader, new Message.HitInversion(new Message.InversionStatus(this.nodeId, -1, true), answerTable.size()));
+                Message.InversionStatus inversion = forwardedInversion != null ? forwardedInversion : new Message.InversionStatus(this.nodeId, -1, true);
+                send(reader.owner, reader, new Message.HitInversion(inversion, answerTable.size()));
             }
             propagatePull(reader, index);
         }
@@ -89,29 +90,29 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void checkInversionStatusChange() {
-        Optional<Message.InversionStatus> oldestInversion = findOldestInversionStatus();
-        if (oldestInversion.isEmpty()) return;
-        if (forwardedInversion == null || !forwardedInversion.equals(oldestInversion.get())) {
-            forwardedInversion = oldestInversion.get();
-            // TODO: Check if it's termination time.
-            if (forwardedInversion.nodeId == this.nodeId) {
-                if (forwardedInversion.throughAllPaths && forwardedInversion.nodeTableSize == answerTable.size()) {
-                    // TODO: May need to declare DONE in both directions, else self-sustaining cycles can exist
-                    Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size() + 1);
-                    // Fake receiving from the actige ports
-                    activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
-                } else {
-                    Message.InversionStatus inversionStatus = new Message.InversionStatus(this.nodeId, answerTable.size(), true);
-                    downstreamPorts.forEach(port -> {
-                        send(port.owner, port, new Message.HitInversion(inversionStatus, answerTable.size()));
-                    });
-                    System.err.printf("Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
-                            this.nodeId, forwardedInversion.nodeTableSize, answerTable.size(), forwardedInversion.throughAllPaths);
-                }
-            } else {
-                downstreamPorts.forEach(port -> send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size())));
+        Message.InversionStatus oldestInversion = findOldestInversionStatus().orElse(null);
+        if (oldestInversion == null) return;
+        // TODO: Check if it's termination time.
+        if (oldestInversion.nodeId == this.nodeId) {
+            if (oldestInversion.throughAllPaths && oldestInversion.nodeTableSize == answerTable.size()) {
+                assert 0 == hitInversionComparator.compare(oldestInversion, forwardedInversion);
+                // TODO: May need to declare DONE in both directions, else self-sustaining cycles can exist
+                Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size() + 1);
+                // Fake receiving from the active ports
+                activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
+            } else if (forwardedInversion == null || !oldestInversion.equals(forwardedInversion)) {
+                System.err.printf("Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
+                        this.nodeId, oldestInversion.nodeTableSize, answerTable.size(), oldestInversion.throughAllPaths);
+                forwardedInversion = new Message.InversionStatus(this.nodeId, answerTable.size(), true);
+                downstreamPorts.forEach(port -> {
+                    send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size()));
+                });
             }
+        } else {
+            forwardedInversion = oldestInversion;
+            downstreamPorts.forEach(port -> send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size())));
         }
+
     }
 
     protected boolean checkTermination() {
