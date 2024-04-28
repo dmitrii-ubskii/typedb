@@ -26,11 +26,15 @@ public abstract class Message {
         throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), HitInversion.class);
     }
 
+    public TerminateSCC asTerminateSCC() {
+        throw TypeDBException.of(ILLEGAL_CAST, this.getClass(), TerminateSCC.class);
+    }
+
     public enum MessageType {
         ANSWER,
         CONCLUSION,
         HIT_INVERSION,
-        TERMINATION_PROPOSAL,
+        TERMINATE_SCC,
         DONE,
     }
 
@@ -128,6 +132,23 @@ public abstract class Message {
             HitInversion other = (HitInversion) o;
             return super.equals(other) &&
                     nodeId == other.nodeId && throughAllPaths == other.throughAllPaths;
+        }
+    }
+
+    public static class TerminateSCC extends Message {
+        private final HitInversion expectedInversion;
+
+        public TerminateSCC(HitInversion expectedInversion, int index) {
+            super(MessageType.TERMINATE_SCC, index);
+            this.expectedInversion = expectedInversion;
+        }
+
+        public TerminateSCC asTerminateSCC() {
+            return this;
+        }
+
+        public HitInversion expectedInversion() {
+            return expectedInversion;
         }
     }
 }

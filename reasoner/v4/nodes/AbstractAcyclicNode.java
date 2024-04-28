@@ -69,6 +69,10 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
                 handleHitInversion(onPort, received.asHitInversion());
                 break;
             }
+            case TERMINATE_SCC: {
+                handleTerminateSCC(onPort, received.asTerminateSCC());
+                break;
+            }
             case DONE: {
                 recordDone(onPort);
                 handleDone(onPort);
@@ -88,6 +92,11 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     protected void handleHitInversion(ActorNode.Port onPort, Message.HitInversion hitInversion) {
         throw TypeDBException.of(ILLEGAL_STATE);
     }
+
+    protected void handleTerminateSCC(ActorNode.Port onPort, Message.TerminateSCC terminateSCC) {
+        throw TypeDBException.of(ILLEGAL_STATE);
+    }
+
 
     protected abstract void handleDone(ActorNode.Port onPort);
 
@@ -109,7 +118,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         receive(port, message);
     }
 
-    private void recordDone(ActorNode.Port port) {
+    protected void recordDone(ActorNode.Port port) {
         assert activePorts.contains(port);
         activePorts.remove(port);
     }

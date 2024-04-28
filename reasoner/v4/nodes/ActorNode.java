@@ -1,6 +1,5 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
@@ -9,8 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.Supplier;
 
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
-import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.UNIMPLEMENTED;
 import static com.vaticle.typedb.core.common.iterator.Iterators.iterate;
 
 public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAcyclicNode<NODE> {
@@ -19,11 +16,24 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     private final List<ActorNode.Port> downstreamPorts;
     private Message.HitInversion forwardedInversion;
+    private Message.TerminateSCC forwardedTermination;
+    private static final Comparator<Message.HitInversion> hitInversionComparator = (a, b) -> {
+        if (a == null) { return b == null ? 0 : 1; }
+        else if (b == null) return -1;
+        int res;
+        if (0 == (res = Integer.compare(a.nodeId, b.nodeId))) {
+            if (0 == (res = Integer.compare(b.index(), a.index())))  { ; // Note: a and b are swapped - Bigger index, better
+                res = Boolean.compare(b.throughAllPaths, a.throughAllPaths); // These are also swapped because true is better
+            }
+        }
+        return res;
+    };
 
     protected ActorNode(NodeRegistry nodeRegistry, Driver<NODE> driver, Supplier<String> debugName) {
         super(nodeRegistry, driver, debugName);
         forwardedInversion = null;
         downstreamPorts = new ArrayList<>();
+
     }
 
     // TODO: Since port has the index in it, maybe we don't need index here?
@@ -42,8 +52,27 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
 
+    @Override
     protected void handleHitInversion(Port onPort, Message.HitInversion hitInversion) {
         checkInversionStatusChange();
+    }
+
+    @Override
+    protected void handleTerminateSCC(ActorNode.Port onPort, Message.TerminateSCC terminateSCC) {
+        // This is basically copying what Done does, but sends the terminateSCC message instead.
+        if (0 == hitInversionComparator.compare(terminateSCC.expectedInversion(), forwardedInversion)) {
+            if (forwardedTermination == null) {
+                forwardedTermination = new Message.TerminateSCC(terminateSCC.expectedInversion(), answerTable.size());
+                answerTable.clearAndReturnSubscribers(answerTable.size());
+                answerTable.recordDone();
+                downstreamPorts.forEach(port -> send(port.owner, port, forwardedTermination));
+            }
+            assert 0 == hitInversionComparator.compare(forwardedTermination.expectedInversion(),  terminateSCC.expectedInversion());
+        } else {
+            // Treat this as a regular DONE message
+            recordDone(onPort);
+            handleDone(onPort);
+        }
     }
 
     @Override
@@ -61,7 +90,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // TODO: Check if it's termination time.
             if (forwardedInversion.nodeId == this.nodeId) {
                 if (forwardedInversion.throughAllPaths && forwardedInversion.index() == answerTable.size()) {
-                    throw TypeDBException.of(UNIMPLEMENTED); // TODO: Also need to declare DONE
+                    // TODO: May need to declare DONE in both directions, else self-sustaining cycles can exist
+                    Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size());
+                    // Fake receiving from the actige ports
+                    activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
                 } else {
                     downstreamPorts.forEach(port -> {
                         send(port.owner, port, new Message.HitInversion(this.nodeId, true, answerTable.size()));
@@ -87,24 +119,13 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     private Optional<Message.HitInversion> findOldestInversionStatus() {
-        Comparator<Message.HitInversion> comparator = (a, b) -> {
-            if (a == null) { return b == null ? 0 : 1; }
-            else if (b == null) return -1;
-            int res;
-            if (0 == (res = Integer.compare(a.nodeId, b.nodeId))) {
-                if (0 == (res = Integer.compare(b.index(), a.index())))  { ; // Note: a and b are swapped - Bigger index, better
-                    res = Boolean.compare(b.throughAllPaths, a.throughAllPaths); // These are also swapped because true is better
-                }
-            }
-            return res;
-        };
         Message.HitInversion bestInversion = activePorts.stream()
                 .map(port -> port.receivedInversion).filter(Objects::nonNull)
-                .min(comparator).orElse(null);
+                .min(hitInversionComparator).orElse(null);
         if (bestInversion == null) return Optional.empty();
         else {
             boolean throughAllPaths = bestInversion.throughAllPaths && activePorts.stream().map(p->p.receivedInversion)
-                    .allMatch(otherInversion -> 0 == comparator.compare(bestInversion, otherInversion));
+                    .allMatch(otherInversion -> 0 == hitInversionComparator.compare(bestInversion, otherInversion));
             return Optional.of(new Message.HitInversion(bestInversion.nodeId, throughAllPaths, bestInversion.index()));
         }
     }
@@ -141,16 +162,20 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
         protected void recordReceive(Message msg) {
             // assert state == State.PULLING; // Relaxed for HitInversion
-            assert msg.type() == Message.MessageType.HIT_INVERSION || lastRequestedIndex == msg.index();
-            if (msg.type() == Message.MessageType.DONE) {
-                state = State.DONE;
-            } else if (msg.type() == Message.MessageType.HIT_INVERSION) {
-                this.receivedInversion = msg.asHitInversion();
-                // state = State.READY;
-            } else {
-                state = State.READY;
+            switch (msg.type()) {
+                case HIT_INVERSION:
+                    this.receivedInversion = msg.asHitInversion();
+                    break;
+                case ANSWER:
+                case CONCLUSION:
+                    assert state == State.PULLING && lastRequestedIndex == msg.index();
+                    state = State.READY;
+                    break;
+                case DONE:
+                case TERMINATE_SCC:
+                    state = State.DONE;
+                    break;
             }
-            // assert state != State.PULLING;
         }
 
 
