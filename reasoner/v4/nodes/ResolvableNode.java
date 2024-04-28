@@ -61,7 +61,7 @@ public abstract class ResolvableNode<RESOLVABLE extends Resolvable<?>, NODE exte
         }
 
         @Override
-        protected void handleAnswer(Port onPort, Message.Answer answer) {
+        protected void doHandleAnswer(Port onPort, Message.Answer answer) {
             throw TypeDBException.of(ILLEGAL_STATE);
         }
 

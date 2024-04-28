@@ -231,7 +231,7 @@ public abstract class ReasonerProducerV4<ROOTNODE extends ActorNode<ROOTNODE>, A
 
 
             @Override
-            protected void handleAnswer(Port onPort, Message.Answer answer) {
+            protected void doHandleAnswer(Port onPort, Message.Answer answer) {
                 Basic.this.receiveAnswer(answer.answer());
             }
 

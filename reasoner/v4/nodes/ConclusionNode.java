@@ -38,7 +38,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     @Override
-    protected void handleAnswer(Port onPort, Message.Answer answer) {
+    protected void doHandleAnswer(Port onPort, Message.Answer answer) {
         requestMaterialisation(onPort, answer);
         // Do NOT readNext.
     }
@@ -66,6 +66,11 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     protected void checkInversionStatusChange() {
         if (pendingMaterialisations > 0) return;
         else super.checkInversionStatusChange();
+    }
+
+    @Override
+    protected int DEBUG__pendingMaterialisations() {
+        return pendingMaterialisations;
     }
 
     @Override

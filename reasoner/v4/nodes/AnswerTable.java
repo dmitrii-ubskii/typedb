@@ -53,6 +53,7 @@ public class AnswerTable {
 
     public Message recordAnswer(ConceptMap answer) {
         assert !complete;
+        ActorNode.LOG.debug("Node[?] wrote answer @ {}", answers.size());
         Message msg = new Message.Answer(answers.size(), answer);
         answers.add(msg);
         return msg;
@@ -60,12 +61,14 @@ public class AnswerTable {
 
     public Message recordConclusion(Map<Identifier.Variable, Concept> conclusionAnswer) { // TODO: Generics
         Message msg = new Message.Conclusion(answers.size(), conclusionAnswer);
+        ActorNode.LOG.debug("Node[?] wrote conclusion  @ {}", answers.size());
         answers.add(msg);
         return msg;
     }
 
     public Message recordDone() {
         assert !complete;
+        ActorNode.LOG.debug("Node[?] wrote Done @ {}", answers.size());
         Message msg = new Message.Done(answers.size());
         answers.add(msg);
         this.complete = true;
