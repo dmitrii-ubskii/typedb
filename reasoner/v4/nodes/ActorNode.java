@@ -6,9 +6,7 @@ import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Supplier;
 
 import static com.vaticle.typedb.core.common.exception.ErrorMessage.Internal.ILLEGAL_STATE;
@@ -67,7 +65,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             // TODO: Check if it's termination time.
             if (forwardedInversion.nodeId == this.nodeId) {
                 if (forwardedInversion.throughAllPaths && forwardedInversion.index() == answerTable.size()) {
-                    throw TypeDBException.of(UNIMPLEMENTED);
+                    throw TypeDBException.of(UNIMPLEMENTED); // TODO: Also need to declare DONE
                 } else {
                     downstreamPorts.forEach(port -> {
                         send(port.owner, port, new Message.HitInversion(this.nodeId, true, answerTable.size()));
@@ -93,31 +91,25 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     private Optional<Message.HitInversion> findOldestInversionStatus() {
-        int oldestNodeId = Integer.MAX_VALUE;
-        int oldestCount = 0;
-        int highestIndex = 0;
-        int lowestIndex = 0;
-        boolean throughAllPaths = true;
-        for (Port port: activePorts) {
-            if(port.receivedInversion == null) continue;
-            if (port.receivedInversion.nodeId < oldestNodeId) {
-                oldestNodeId = port.receivedInversion.nodeId;
-                oldestCount = 0;
-                highestIndex = port.receivedInversion.index();
-                lowestIndex = port.receivedInversion.index();
+        Comparator<Message.HitInversion> comparator = (a, b) -> {
+            if (a == null) { return b == null ? 0 : 1; }
+            else if (b == null) return -1;
+            int res;
+            if (0 == (res = Integer.compare(a.nodeId, b.nodeId))) {
+                if (0 == (res = Integer.compare(b.index(), a.index())))  { ; // Note: a and b are swapped - Bigger index, better
+                    res = Boolean.compare(b.throughAllPaths, a.throughAllPaths); // These are also swapped because true is better
+                }
             }
-            oldestCount += 1;
-            throughAllPaths = throughAllPaths && port.receivedInversion.throughAllPaths;
-        }
-
-        if (oldestNodeId == Integer.MAX_VALUE) return Optional.empty();
+            return res;
+        };
+        Message.HitInversion bestInversion = activePorts.stream()
+                .map(port -> port.receivedInversion).filter(Objects::nonNull)
+                .min(comparator).orElse(null);
+        if (bestInversion == null) return Optional.empty();
         else {
-            return Optional.of(
-                new Message.HitInversion(
-                        oldestNodeId,
-                        activePorts.size() == oldestCount && throughAllPaths && highestIndex == lowestIndex,
-                        highestIndex
-            ));
+            boolean throughAllPaths = bestInversion.throughAllPaths && activePorts.stream().map(p->p.receivedInversion)
+                    .allMatch(otherInversion -> 0 == comparator.compare(bestInversion, otherInversion));
+            return Optional.of(new Message.HitInversion(bestInversion.nodeId, throughAllPaths, bestInversion.index()));
         }
     }
 
