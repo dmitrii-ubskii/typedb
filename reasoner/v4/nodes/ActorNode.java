@@ -42,10 +42,6 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     protected abstract void handleAnswer(Port onPort, Message.Answer answer);
 
-    protected void handleConclusion(Port onPort, Message.Conclusion conclusion) {
-        throw TypeDBException.of(ILLEGAL_STATE);
-    }
-
     protected void handleHitInversion(Port onPort, Message.HitInversion hitInversion) {
         checkInversionStatusChange();
     }
