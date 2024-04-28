@@ -1,5 +1,7 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
+We make the mistake of forwarding inversion status messages before we have even read the available messages.
+
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
