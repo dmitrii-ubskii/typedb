@@ -54,7 +54,7 @@ public class ConcludableNode extends ResolvableNode<Concludable, ConcludableNode
         });
     }
 
-    protected void handleAnswer(Port onPort, Message.Answer received) {
+    protected void doHandleAnswer(Port onPort, Message.Answer received) {
         assert onPort == lookupPort;
         recordAndForwardAnswers(Iterators.single(received.answer()));
         onPort.readNext();

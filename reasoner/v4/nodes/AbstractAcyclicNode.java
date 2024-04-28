@@ -6,7 +6,6 @@ import com.vaticle.typedb.core.common.iterator.Iterators;
 import com.vaticle.typedb.core.concurrent.actor.Actor;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -83,6 +82,7 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
         }
     }
 
+    protected abstract void doHandleAnswer(ActorNode.Port onPort, Message.Answer answer);
     protected abstract void handleAnswer(ActorNode.Port onPort, Message.Answer answer);
 
     protected void handleConclusion(ActorNode.Port onPort, Message.Conclusion conclusion) {
@@ -109,11 +109,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     // TODO: See if i can safely get recipient from port
     protected void send(ActorNode<?> recipient, ActorNode.Port recipientPort, Message message) {
         assert recipientPort.remote().equals(this);
+        System.err.printf("Node[%d] sent %s to Node[%d]\n", this.nodeId, message, recipient.nodeId);
         recipient.driver().execute(actor -> actor.receiveOnPort(recipientPort, message));
     }
 
     protected void receiveOnPort(ActorNode.Port port, Message message) {
-        ActorNode.LOG.debug(port.owner() + " received " + message + " from " + port.remote());
+        System.err.printf("Node[%d] received %s from Node[%d]\n", this.nodeId, message, port.remote().nodeId);
         port.recordReceive(message); // Is it strange that I call this implicitly?
         receive(port, message);
     }
@@ -135,5 +136,10 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     @Override
     public void terminate(Throwable e) {
         super.terminate(e);
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + ":id = " + nodeId;
     }
 }

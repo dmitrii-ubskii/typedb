@@ -1,7 +1,5 @@
 package com.vaticle.typedb.core.reasoner.v4.nodes;
 
-We make the mistake of forwarding inversion status messages before we have even read the available messages.
-
 import com.vaticle.typedb.core.common.iterator.FunctionalIterator;
 import com.vaticle.typedb.core.reasoner.v4.Message;
 import org.slf4j.Logger;
@@ -17,14 +15,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     static final Logger LOG = LoggerFactory.getLogger(ActorNode.class);
 
     private final List<ActorNode.Port> downstreamPorts;
-    private Message.HitInversion forwardedInversion;
+    private Message.InversionStatus forwardedInversion;
     private Message.TerminateSCC forwardedTermination;
-    private static final Comparator<Message.HitInversion> hitInversionComparator = (a, b) -> {
+    private static final Comparator<Message.InversionStatus> hitInversionComparator = (a, b) -> {
         if (a == null) { return b == null ? 0 : 1; }
         else if (b == null) return -1;
         int res;
         if (0 == (res = Integer.compare(a.nodeId, b.nodeId))) {
-            if (0 == (res = Integer.compare(b.index(), a.index())))  { ; // Note: a and b are swapped - Bigger index, better
+            if (0 == (res = Integer.compare(b.nodeTableSize, a.nodeTableSize)))  { ; // Note: a and b are swapped - Bigger index, better
                 res = Boolean.compare(b.throughAllPaths, a.throughAllPaths); // These are also swapped because true is better
             }
         }
@@ -44,18 +42,24 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         Optional<Message> peekAnswer = answerTable.answerAt(index);
         if (peekAnswer.isPresent()) {
             send(reader.owner, reader, peekAnswer.get());
-        } else if (reader.owner.nodeId >= this.nodeId) {
-            send(reader.owner, reader, new Message.HitInversion(this.nodeId, true, -1));
         } else {
-            // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
-            propagatePull(reader, index); // This is now effectively a 'pull'
+            if (reader.owner.nodeId >= this.nodeId) {
+                send(reader.owner, reader, new Message.HitInversion(new Message.InversionStatus(this.nodeId, -1, true), answerTable.size()));
+            }
+            propagatePull(reader, index);
         }
     }
 
-    protected abstract void handleAnswer(Port onPort, Message.Answer answer);
+    protected void handleAnswer(ActorNode.Port onPort, Message.Answer answer) {
+        doHandleAnswer(onPort, answer);
+        checkInversionStatusChange();
+    }
+
+    protected abstract void doHandleAnswer(Port onPort, Message.Answer answer);
 
     @Override
     protected void handleHitInversion(Port onPort, Message.HitInversion hitInversion) {
+        if (forwardedTermination != null) return;
         checkInversionStatusChange();
     }
 
@@ -64,9 +68,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         // This is basically copying what Done does, but sends the terminateSCC message instead.
         if (0 == hitInversionComparator.compare(terminateSCC.expectedInversion(), forwardedInversion)) {
             if (forwardedTermination == null) {
-                forwardedTermination = new Message.TerminateSCC(terminateSCC.expectedInversion(), answerTable.size());
                 answerTable.clearAndReturnSubscribers(answerTable.size());
                 answerTable.recordDone();
+                forwardedTermination = new Message.TerminateSCC(terminateSCC.expectedInversion(), answerTable.size());
                 downstreamPorts.forEach(port -> send(port.owner, port, forwardedTermination));
             }
             assert 0 == hitInversionComparator.compare(forwardedTermination.expectedInversion(),  terminateSCC.expectedInversion());
@@ -85,26 +89,27 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected void checkInversionStatusChange() {
-        Optional<Message.HitInversion> oldestInversion = findOldestInversionStatus();
+        Optional<Message.InversionStatus> oldestInversion = findOldestInversionStatus();
         if (oldestInversion.isEmpty()) return;
         if (forwardedInversion == null || !forwardedInversion.equals(oldestInversion.get())) {
             forwardedInversion = oldestInversion.get();
             // TODO: Check if it's termination time.
             if (forwardedInversion.nodeId == this.nodeId) {
-                if (forwardedInversion.throughAllPaths && forwardedInversion.index() == answerTable.size()) {
+                if (forwardedInversion.throughAllPaths && forwardedInversion.nodeTableSize == answerTable.size()) {
                     // TODO: May need to declare DONE in both directions, else self-sustaining cycles can exist
-                    Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size());
+                    Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size() + 1);
                     // Fake receiving from the actige ports
                     activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
                 } else {
+                    Message.InversionStatus inversionStatus = new Message.InversionStatus(this.nodeId, answerTable.size(), true);
                     downstreamPorts.forEach(port -> {
-                        send(port.owner, port, new Message.HitInversion(this.nodeId, true, answerTable.size()));
+                        send(port.owner, port, new Message.HitInversion(inversionStatus, answerTable.size()));
                     });
-                    LOG.debug("Received this.nodeId={} on all ports, but tableSie {} < {}",
-                            this.nodeId, forwardedInversion.index(), answerTable.size());
+                    System.err.printf("Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
+                            this.nodeId, forwardedInversion.nodeTableSize, answerTable.size(), forwardedInversion.throughAllPaths);
                 }
             } else {
-                downstreamPorts.forEach(port -> send(port.owner, port, forwardedInversion));
+                downstreamPorts.forEach(port -> send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size())));
             }
         }
     }
@@ -120,18 +125,26 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         subscribers.forEachRemaining(subscriber -> send(subscriber.owner(), subscriber, toSend));
     }
 
-    private Optional<Message.HitInversion> findOldestInversionStatus() {
-        Message.HitInversion bestInversion = activePorts.stream()
-                .map(port -> port.receivedInversion).filter(Objects::nonNull)
+    private Optional<Message.InversionStatus> findOldestInversionStatus() {
+        Message.InversionStatus bestInversion = activePorts.stream()
+                .map(port -> port.receivedInversion).filter(Objects::nonNull).map(Message.HitInversion::inversionStatus)
                 .min(hitInversionComparator).orElse(null);
         if (bestInversion == null) return Optional.empty();
         else {
-            boolean throughAllPaths = bestInversion.throughAllPaths && activePorts.stream().map(p->p.receivedInversion)
-                    .allMatch(otherInversion -> 0 == hitInversionComparator.compare(bestInversion, otherInversion));
-            return Optional.of(new Message.HitInversion(bestInversion.nodeId, throughAllPaths, bestInversion.index()));
+            assert DEBUG__pendingMaterialisations() == 0;
+            // TODO: true also requires the status is what's expected on the port.
+            boolean throughAllPaths = bestInversion.throughAllPaths &&
+                    activePorts.stream().allMatch(p -> {
+                        return p.receivedInversion != null && p.receivedInversion.index() <= p.lastRequestedIndex() &&
+                            0 == hitInversionComparator.compare(bestInversion, p.receivedInversion.inversionStatus());
+                    });
+            return Optional.of(new Message.InversionStatus(bestInversion.nodeId, bestInversion.nodeTableSize, throughAllPaths));
         }
     }
 
+    protected int DEBUG__pendingMaterialisations() {
+        return 0;
+    }
 
     protected Port createPort(ActorNode<?> remote) {
         Port port = new Port(this, remote);
@@ -169,6 +182,9 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                     this.receivedInversion = msg.asHitInversion();
                     break;
                 case ANSWER:
+                    assert state == State.PULLING && lastRequestedIndex == msg.index();
+                    state = State.READY;
+                    break;
                 case CONCLUSION:
                     assert state == State.PULLING && lastRequestedIndex == msg.index();
                     state = State.READY;

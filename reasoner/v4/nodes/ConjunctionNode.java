@@ -53,7 +53,7 @@ public class ConjunctionNode extends ActorNode<ConjunctionNode> {
     }
 
     @Override
-    protected void handleAnswer(Port onPort, Message.Answer received) {
+    protected void doHandleAnswer(Port onPort, Message.Answer received) {
         if (onPort == leftChildPort) receiveLeft(onPort, received.asAnswer().answer());
         else receiveRight(onPort, received.asAnswer().answer());
     }

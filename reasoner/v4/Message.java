@@ -53,7 +53,7 @@ public abstract class Message {
 
     @Override
     public String toString() {
-        return String.format("Msg:[%d: %s]", index, msgType.name());
+        return String.format("Msg[%d: %s]", index, msgType.name());
     }
 
     public static class Answer extends Message {
@@ -76,7 +76,8 @@ public abstract class Message {
 
         @Override
         public String toString() {
-            return String.format("Msg:[%d: %s | %s]", index(), type().name(), answer);
+//            return String.format("Msg:[%d: %s | %s]", index(), type().name(), answer);
+            return String.format("Msg:[%d: %s]", index(), type().name());
         }
     }
 
@@ -106,13 +107,11 @@ public abstract class Message {
     }
 
     public static class HitInversion extends Message {
-        public final int nodeId;
-        public final boolean throughAllPaths;
-         // As an optimisation, we pass index = -1 to avoid flooding when we know it's too early.
-        public HitInversion(int nodeId, boolean throughAllPaths, int index) {
+        private final InversionStatus inversionStatus;
+
+        public HitInversion(InversionStatus inversionStatus, int index) {
             super(MessageType.HIT_INVERSION, index);
-            this.nodeId = nodeId;
-            this.throughAllPaths = throughAllPaths;
+            this.inversionStatus = inversionStatus;
         }
 
 
@@ -120,25 +119,20 @@ public abstract class Message {
             return this;
         }
 
-        @Override
-        public int hashCode() {
-            return Objects.hash(this.nodeId, this.throughAllPaths);
+        public InversionStatus inversionStatus() {
+            return inversionStatus;
         }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            HitInversion other = (HitInversion) o;
-            return super.equals(other) &&
-                    nodeId == other.nodeId && throughAllPaths == other.throughAllPaths;
+        public String toString() {
+            return String.format("Msg[%d: HitInversion(%s)]", index(), inversionStatus);
         }
     }
 
     public static class TerminateSCC extends Message {
-        private final HitInversion expectedInversion;
+        private final InversionStatus expectedInversion;
 
-        public TerminateSCC(HitInversion expectedInversion, int index) {
+        public TerminateSCC(InversionStatus expectedInversion, int index) {
             super(MessageType.TERMINATE_SCC, index);
             this.expectedInversion = expectedInversion;
         }
@@ -147,8 +141,44 @@ public abstract class Message {
             return this;
         }
 
-        public HitInversion expectedInversion() {
+        public InversionStatus expectedInversion() {
             return expectedInversion;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Msg[%d: terminateSCC(%s)]", index(), expectedInversion);
+        }
+    }
+
+    public static class InversionStatus {
+        public final int nodeId;
+        public final int nodeTableSize;  // As an optimisation, we pass index = -1 to avoid flooding when we know it's too early.
+        public final boolean throughAllPaths; // AND uptoDate
+
+        public InversionStatus(int nodeId, int nodeTableSize, boolean throughAllPaths) {
+            this.nodeId = nodeId;
+            this.nodeTableSize = nodeTableSize;
+            this.throughAllPaths = throughAllPaths;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            InversionStatus other = (InversionStatus) o;
+            return nodeId == other.nodeId && nodeTableSize == other.nodeTableSize && throughAllPaths == other.throughAllPaths;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(this.nodeId, this.throughAllPaths);
+        }
+
+
+        @Override
+        public String toString() {
+            return String.format("InversionStatus[%d, %d, %s]", nodeId, nodeTableSize, Boolean.toString(throughAllPaths));
         }
     }
 }
