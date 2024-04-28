@@ -1,10 +1,8 @@
 package com.vaticle.typedb.core.reasoner.v4;
 
-import com.vaticle.typedb.core.common.collection.ByteArray;
 import com.vaticle.typedb.core.common.exception.TypeDBException;
 import com.vaticle.typedb.core.concept.Concept;
 import com.vaticle.typedb.core.concept.answer.ConceptMap;
-import com.vaticle.typedb.core.reasoner.v4.nodes.ActorNode;
 import com.vaticle.typedb.core.traversal.common.Identifier;
 
 import java.util.Map;
@@ -106,9 +104,9 @@ public abstract class Message {
     public static class HitInversion extends Message {
         public final int nodeId;
         public final boolean throughAllPaths;
-
-        public HitInversion(int nodeId, boolean throughAllPaths) {
-            super(MessageType.HIT_INVERSION, -1);
+         // As an optimisation, we pass index = -1 to avoid flooding when we know it's too early.
+        public HitInversion(int nodeId, boolean throughAllPaths, int index) {
+            super(MessageType.HIT_INVERSION, index);
             this.nodeId = nodeId;
             this.throughAllPaths = throughAllPaths;
         }

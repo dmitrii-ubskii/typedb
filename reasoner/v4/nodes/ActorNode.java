@@ -35,7 +35,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
         if (peekAnswer.isPresent()) {
             send(reader.owner, reader, peekAnswer.get());
         } else if (reader.owner.nodeId >= this.nodeId) {
-            send(reader.owner, reader, new Message.HitInversion(this.nodeId, true));
+            send(reader.owner, reader, new Message.HitInversion(this.nodeId, true, -1));
         } else {
             // TODO: Is this a problem? If it s already pulling, we have no clean way of handling it
             propagatePull(reader, index); // This is now effectively a 'pull'
@@ -66,11 +66,14 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
             forwardedInversion = oldestInversion.get();
             // TODO: Check if it's termination time.
             if (forwardedInversion.nodeId == this.nodeId) {
-                if (forwardedInversion.throughAllPaths) {
-                    // TODO: Work out whether it's safe to terminate or whether there could be a message in flight.
+                if (forwardedInversion.throughAllPaths && forwardedInversion.index() == answerTable.size()) {
                     throw TypeDBException.of(UNIMPLEMENTED);
                 } else {
-                    LOG.debug("Received this.nodeId={} on all ports, but not all true", this.nodeId);  // TODO: Remove if we eventually do terminate
+                    downstreamPorts.forEach(port -> {
+                        send(port.owner, port, new Message.HitInversion(this.nodeId, true, answerTable.size()));
+                    });
+                    LOG.debug("Received this.nodeId={} on all ports, but tableSie {} < {}",
+                            this.nodeId, forwardedInversion.index(), answerTable.size());
                 }
             } else {
                 downstreamPorts.forEach(port -> send(port.owner, port, forwardedInversion));
@@ -92,21 +95,30 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     private Optional<Message.HitInversion> findOldestInversionStatus() {
         int oldestNodeId = Integer.MAX_VALUE;
         int oldestCount = 0;
+        int highestIndex = 0;
+        int lowestIndex = 0;
         boolean throughAllPaths = true;
         for (Port port: activePorts) {
             if(port.receivedInversion == null) continue;
             if (port.receivedInversion.nodeId < oldestNodeId) {
                 oldestNodeId = port.receivedInversion.nodeId;
                 oldestCount = 0;
+                highestIndex = port.receivedInversion.index();
+                lowestIndex = port.receivedInversion.index();
             }
             oldestCount += 1;
             throughAllPaths = throughAllPaths && port.receivedInversion.throughAllPaths;
         }
 
         if (oldestNodeId == Integer.MAX_VALUE) return Optional.empty();
-        else return Optional.of(
-                new Message.HitInversion(oldestNodeId, activePorts.size() == oldestCount && throughAllPaths)
-        );
+        else {
+            return Optional.of(
+                new Message.HitInversion(
+                        oldestNodeId,
+                        activePorts.size() == oldestCount && throughAllPaths && highestIndex == lowestIndex,
+                        highestIndex
+            ));
+        }
     }
 
 
