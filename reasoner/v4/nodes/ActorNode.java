@@ -60,14 +60,15 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
 
     @Override
     protected void handleHitInversion(Port onPort, Message.HitInversion hitInversion) {
-        if (forwardedTermination != null) return;
+        if (answerTable.isComplete()) return;
+        else if (this.nodeId < hitInversion.inversionStatus().nodeId) return;
         checkInversionStatusChange();
     }
 
     @Override
     protected void handleTerminateSCC(ActorNode.Port onPort, Message.TerminateSCC terminateSCC) {
         // This is basically copying what Done does, but sends the terminateSCC message instead.
-        if (0 == hitInversionComparator.compare(terminateSCC.expectedInversion(), forwardedInversion)) {
+        if (terminateSCC.expectedInversion().nodeId <= this.nodeId && 0 == hitInversionComparator.compare(terminateSCC.expectedInversion(), forwardedInversion)) {
             if (forwardedTermination == null) {
                 answerTable.clearAndReturnSubscribers(answerTable.size());
                 answerTable.recordDone();
@@ -100,7 +101,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 Message.TerminateSCC terminateMsg = new Message.TerminateSCC(forwardedInversion, answerTable.size() + 1);
                 // Fake receiving from the active ports
                 activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
-            } else if (forwardedInversion == null || !oldestInversion.equals(forwardedInversion)) {
+            } else if (forwardedInversion == null || answerTable.size() > forwardedInversion.nodeTableSize) {
                 System.err.printf("Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
                         this.nodeId, oldestInversion.nodeTableSize, answerTable.size(), oldestInversion.throughAllPaths);
                 forwardedInversion = new Message.InversionStatus(this.nodeId, answerTable.size(), true);
