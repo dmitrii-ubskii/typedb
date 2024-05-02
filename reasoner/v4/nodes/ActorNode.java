@@ -88,7 +88,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     protected void handleDone(Port onPort) {
         if (checkTermination()) {
             onTermination();
-        } else checkInversionStatusChange();
+        } else checkInversionStatusChange(); // Important
     }
 
     protected void checkInversionStatusChange() {
@@ -111,8 +111,10 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 });
             }
         } else {
-            forwardedInversion = oldestInversion;
-            downstreamPorts.forEach(port -> send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size())));
+            if (0 != hitInversionComparator.compare(oldestInversion, forwardedInversion)) { // No point sendint it again ?
+                forwardedInversion = oldestInversion;
+                downstreamPorts.forEach(port -> send(port.owner, port, new Message.HitInversion(forwardedInversion, answerTable.size())));
+            }
         }
 
     }
