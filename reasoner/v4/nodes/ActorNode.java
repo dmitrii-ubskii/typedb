@@ -69,6 +69,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     protected void handleTerminateSCC(ActorNode.Port onPort, Message.TerminateSCC terminateSCC) {
         // This is basically copying what Done does, but sends the terminateSCC message instead.
         if (terminateSCC.expectedInversion().nodeId <= this.nodeId && 0 == hitInversionComparator.compare(terminateSCC.expectedInversion(), forwardedInversion)) {
+            // It's important that we forward the TerminateSCC according to the same conditions we forwarded HitInversion so avoid self-sustaining cycles.
             if (forwardedTermination == null) {
                 answerTable.clearAndReturnSubscribers(answerTable.size());
                 answerTable.recordDone();
