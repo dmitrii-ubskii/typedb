@@ -50,7 +50,7 @@ public class ConclusionNode extends ActorNode<ConclusionNode> {
     }
 
     public void receiveMaterialisation(Port port, Optional<Message.Conclusion> thenConcepts) {
-        System.err.printf("Node[%d] received MATERIALISATION\n", this.nodeId);
+        System.err.printf("MATERIALISATION: Node[%d] received MATERIALISATION\n", this.nodeId);
         pendingMaterialisations -= 1;
         if (thenConcepts.isPresent()) {
             FunctionalIterator<ActorNode.Port> subscribers = answerTable.clearAndReturnSubscribers(answerTable.size());

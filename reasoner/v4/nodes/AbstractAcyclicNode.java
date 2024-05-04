@@ -109,12 +109,12 @@ public abstract class AbstractAcyclicNode<NODE extends AbstractAcyclicNode<NODE>
     // TODO: See if i can safely get recipient from port
     protected void send(ActorNode<?> recipient, ActorNode.Port recipientPort, Message message) {
         assert recipientPort.remote().equals(this);
-        System.err.printf("Node[%d] sent %s to Node[%d]\n", this.nodeId, message, recipient.nodeId);
+        System.err.printf("SEND: Node[%d] sent %s to Node[%d]\n", this.nodeId, message, recipient.nodeId);
         recipient.driver().execute(actor -> actor.receiveOnPort(recipientPort, message));
     }
 
     protected void receiveOnPort(ActorNode.Port port, Message message) {
-        System.err.printf("Node[%d] received %s from Node[%d]\n", this.nodeId, message, port.remote().nodeId);
+        System.err.printf("RECEIVE: Node[%d] received %s from Node[%d]\n", this.nodeId, message, port.remote().nodeId);
         port.recordReceive(message); // Is it strange that I call this implicitly?
         receive(port, message);
     }

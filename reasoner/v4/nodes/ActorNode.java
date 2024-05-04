@@ -103,7 +103,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
                 // Fake receiving from the active ports
                 activePorts.forEach(port -> handleTerminateSCC(port, terminateMsg));
             } else if (forwardedInversion == null || answerTable.size() > forwardedInversion.nodeTableSize) {
-                System.err.printf("Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
+                System.err.printf("LEADER: Received this.nodeId=%d on all ports, but tableSize %d < %d or throughAllPaths: %s\n",
                         this.nodeId, oldestInversion.nodeTableSize, answerTable.size(), oldestInversion.throughAllPaths);
                 forwardedInversion = new Message.InversionStatus(this.nodeId, answerTable.size(), true);
                 downstreamPorts.forEach(port -> {
@@ -152,6 +152,7 @@ public abstract class ActorNode<NODE extends ActorNode<NODE>> extends AbstractAc
     }
 
     protected Port createPort(ActorNode<?> remote) {
+        System.err.printf("PORT: Node[%d] created a port to Node[%d]\n", this.nodeId, remote.nodeId);
         Port port = new Port(this, remote);
         remote.notifyPortCreated(port);
         ports.add(port);
