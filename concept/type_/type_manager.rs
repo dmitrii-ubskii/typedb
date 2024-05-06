@@ -122,7 +122,7 @@ macro_rules! get_supertype_methods {
     )*) => {
         $(
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<Option<$type_<'static>>, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(cache.$cache_method(type_))
@@ -141,7 +141,7 @@ macro_rules! get_supertypes_methods {
         $(
             // WARN: supertypes currently do NOT include themselves
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<MaybeOwns<'_, Vec<$type_<'static>>>, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(MaybeOwns::Borrowed(cache.$cache_method(type_)))
@@ -160,7 +160,7 @@ macro_rules! get_subtypes_methods {
     )*) => {
         $(
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<MaybeOwns<'_, Vec<$type_<'static>>>, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(MaybeOwns::Borrowed(cache.$cache_method(type_)))
@@ -180,7 +180,7 @@ macro_rules! get_subtypes_transitive_methods {
         $(
             // WARN: supertypes currently do NOT include themselves
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<MaybeOwns<'_, Vec<$type_<'static>>>, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(MaybeOwns::Borrowed(cache.$cache_method(type_)))
@@ -199,7 +199,7 @@ macro_rules! get_type_is_root_methods {
     )*) => {
         $(
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<bool, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(cache.$cache_method(type_))
@@ -218,7 +218,7 @@ macro_rules! get_type_label_methods {
     )*) => {
         $(
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<MaybeOwns<'_, Label<'static>>, ConceptReadError> {
                 if let Some(cache) = &self.type_cache {
                     Ok(MaybeOwns::Borrowed(cache.$cache_method(type_)))
@@ -236,7 +236,7 @@ macro_rules! get_type_annotations {
     )*) => {
         $(
             pub(crate) fn $method_name(
-                &self, snapshot: &Snapshot, type_: $type_<'static>
+                &self, snapshot: &Snapshot, type_: $type_<'_s>
             ) -> Result<MaybeOwns<'_, HashSet<$annotation_type>>, ConceptReadError> {
                  if let Some(cache) = &self.type_cache {
                     Ok(MaybeOwns::Borrowed(cache.$cache_method(type_)))

@@ -35,8 +35,8 @@ pub struct TypeReader { }
 
 // TODO: The '_s is only here for the enforcement of pass-by-value of types. If we drop that, we can move it to the function signatures
 impl<'_s> TypeReader
-    where '_s : 'static {
-
+   // where '_s : 'static
+{
     pub(crate) fn get_labelled_type<'b, U: ReadableType<'_s, 'b>>(snapshot: &impl ReadableSnapshot, label: &Label<'_>) -> Result<Option<U::SelfRead>, ConceptReadError>
         where U:
     {

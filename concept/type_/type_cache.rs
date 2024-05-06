@@ -113,7 +113,9 @@ struct OwnsCache {
     annotations_declared: HashSet<OwnsAnnotation>,
 }
 
-impl TypeCache {
+impl<'_s> TypeCache
+// where '_s : 'static
+{
     // If creation becomes slow, We should restore pre-fetching of the schema
     //  with a single pass on disk (as it was in 1f339733feaf4542e47ff604462f107d2ade1f1a)
     pub fn new<D>(
@@ -330,7 +332,7 @@ impl TypeCache {
         self.attribute_types_index_label.get(label).cloned()
     }
 
-    pub(crate) fn get_entity_type_supertype(&self, entity_type: EntityType<'static>) -> Option<EntityType<'static>> {
+    pub(crate) fn get_entity_type_supertype(&self, entity_type: EntityType<'_s>) -> Option<EntityType<'static>> {
         Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex())
             .unwrap()
             .type_api_cache_
@@ -340,7 +342,7 @@ impl TypeCache {
 
     pub(crate) fn get_relation_type_supertype(
         &self,
-        relation_type: RelationType<'static>,
+        relation_type: RelationType<'_s>,
     ) -> Option<RelationType<'static>> {
         Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
@@ -349,13 +351,13 @@ impl TypeCache {
             .clone()
     }
 
-    pub(crate) fn get_role_type_supertype(&self, role_type: RoleType<'static>) -> Option<RoleType<'static>> {
+    pub(crate) fn get_role_type_supertype(&self, role_type: RoleType<'_s>) -> Option<RoleType<'static>> {
         Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().type_api_cache_.supertype.clone()
     }
 
     pub(crate) fn get_attribute_type_supertype(
         &self,
-        attribute_type: AttributeType<'static>,
+        attribute_type: AttributeType<'_s>,
     ) -> Option<AttributeType<'static>> {
         Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
@@ -370,7 +372,7 @@ impl TypeCache {
 
     pub(crate) fn get_relation_type_supertypes(
         &self,
-        relation_type: RelationType<'static>,
+        relation_type: RelationType<'_s>,
     ) -> &Vec<RelationType<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
@@ -378,13 +380,13 @@ impl TypeCache {
             .supertypes
     }
 
-    pub(crate) fn get_role_type_supertypes(&self, role_type: RoleType<'static>) -> &Vec<RoleType<'static>> {
+    pub(crate) fn get_role_type_supertypes(&self, role_type: RoleType<'_s>) -> &Vec<RoleType<'static>> {
         &Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().type_api_cache_.supertypes
     }
 
     pub(crate) fn get_attribute_type_supertypes(
         &self,
-        attribute_type: AttributeType<'static>,
+        attribute_type: AttributeType<'_s>,
     ) -> &Vec<AttributeType<'static>> {
         &Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
@@ -401,7 +403,7 @@ impl TypeCache {
 
     pub(crate) fn get_relation_type_subtypes(
         &self,
-        relation_type: RelationType<'static>,
+        relation_type: RelationType<'_s>,
     ) -> &Vec<RelationType<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
@@ -409,13 +411,13 @@ impl TypeCache {
             .subtypes_declared
     }
 
-    pub(crate) fn get_role_type_subtypes(&self, role_type: RoleType<'static>) -> &Vec<RoleType<'static>> {
+    pub(crate) fn get_role_type_subtypes(&self, role_type: RoleType<'_s>) -> &Vec<RoleType<'static>> {
         &Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().type_api_cache_.subtypes_declared
     }
 
     pub(crate) fn get_attribute_type_subtypes(
         &self,
-        attribute_type: AttributeType<'static>,
+        attribute_type: AttributeType<'_s>,
     ) -> &Vec<AttributeType<'static>> {
         &Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
@@ -432,7 +434,7 @@ impl TypeCache {
 
     pub(crate) fn get_relation_type_subtypes_transitive(
         &self,
-        relation_type: RelationType<'static>,
+        relation_type: RelationType<'_s>,
     ) -> &Vec<RelationType<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
@@ -440,7 +442,7 @@ impl TypeCache {
             .subtypes_transitive
     }
 
-    pub(crate) fn get_role_type_subtypes_transitive(&self, role_type: RoleType<'static>) -> &Vec<RoleType<'static>> {
+    pub(crate) fn get_role_type_subtypes_transitive(&self, role_type: RoleType<'_s>) -> &Vec<RoleType<'static>> {
         &Self::get_role_type_cache(&self.role_types, role_type.into_vertex())
             .unwrap()
             .type_api_cache_
@@ -449,7 +451,7 @@ impl TypeCache {
 
     pub(crate) fn get_attribute_type_subtypes_transitive(
         &self,
-        attribute_type: AttributeType<'static>,
+        attribute_type: AttributeType<'_s>,
     ) -> &Vec<AttributeType<'static>> {
         &Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
@@ -457,81 +459,81 @@ impl TypeCache {
             .subtypes_transitive
     }
 
-    pub(crate) fn get_entity_type_label(&self, entity_type: EntityType<'static>) -> &Label<'static> {
+    pub(crate) fn get_entity_type_label(&self, entity_type: EntityType<'_s>) -> &Label<'static> {
         &Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex()).unwrap().type_api_cache_.label
     }
 
-    pub(crate) fn get_relation_type_label(&self, relation_type: RelationType<'static>) -> &Label<'static> {
+    pub(crate) fn get_relation_type_label(&self, relation_type: RelationType<'_s>) -> &Label<'static> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
             .common_type_cache
             .label
     }
 
-    pub(crate) fn get_role_type_label(&self, role_type: RoleType<'static>) -> &Label<'static> {
+    pub(crate) fn get_role_type_label(&self, role_type: RoleType<'_s>) -> &Label<'static> {
         &Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().type_api_cache_.label
     }
 
-    pub(crate) fn get_attribute_type_label(&self, attribute_type: AttributeType<'static>) -> &Label<'static> {
+    pub(crate) fn get_attribute_type_label(&self, attribute_type: AttributeType<'_s>) -> &Label<'static> {
         &Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
             .type_api_cache_
             .label
     }
 
-    pub(crate) fn get_entity_type_is_root(&self, entity_type: EntityType<'static>) -> bool {
+    pub(crate) fn get_entity_type_is_root(&self, entity_type: EntityType<'_s>) -> bool {
         Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex()).unwrap().type_api_cache_.is_root
     }
 
-    pub(crate) fn get_relation_type_is_root(&self, relation_type: RelationType<'static>) -> bool {
+    pub(crate) fn get_relation_type_is_root(&self, relation_type: RelationType<'_s>) -> bool {
         Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
             .common_type_cache
             .is_root
     }
 
-    pub(crate) fn get_role_type_is_root(&self, role_type: RoleType<'static>) -> bool {
+    pub(crate) fn get_role_type_is_root(&self, role_type: RoleType<'_s>) -> bool {
         Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().type_api_cache_.is_root
     }
 
-    pub(crate) fn get_attribute_type_is_root(&self, attribute_type: AttributeType<'static>) -> bool {
+    pub(crate) fn get_attribute_type_is_root(&self, attribute_type: AttributeType<'_s>) -> bool {
         Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()
             .type_api_cache_
             .is_root
     }
 
-    pub(crate) fn get_role_type_ordering(&self, role_type: RoleType<'static>) -> Ordering {
+    pub(crate) fn get_role_type_ordering(&self, role_type: RoleType<'_s>) -> Ordering {
         Self::get_role_type_cache(&self.role_types, role_type.into_vertex()).unwrap().ordering
     }
 
-    pub(crate) fn get_entity_type_owns(&self, entity_type: EntityType<'static>) -> &HashSet<Owns<'static>> {
+    pub(crate) fn get_entity_type_owns(&self, entity_type: EntityType<'_s>) -> &HashSet<Owns<'static>> {
         &Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex()).unwrap().owns_declared
     }
 
-    pub(crate) fn get_relation_type_owns(&self, relation_type: RelationType<'static>) -> &HashSet<Owns<'static>> {
+    pub(crate) fn get_relation_type_owns(&self, relation_type: RelationType<'_s>) -> &HashSet<Owns<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex()).unwrap().owns_declared
     }
 
-    pub(crate) fn get_relation_type_relates(&self, relation_type: RelationType<'static>) -> &HashSet<Relates<'static>> {
+    pub(crate) fn get_relation_type_relates(&self, relation_type: RelationType<'_s>) -> &HashSet<Relates<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex()).unwrap().relates_declared
     }
 
-    pub(crate) fn get_entity_type_plays(&self, entity_type: EntityType<'static>) -> &HashSet<Plays<'static>> {
+    pub(crate) fn get_entity_type_plays(&self, entity_type: EntityType<'_s>) -> &HashSet<Plays<'static>> {
         &Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex()).unwrap().plays_declared
     }
 
-    pub(crate) fn get_relation_type_plays(&self, relation_type: RelationType<'static>) -> &HashSet<Plays<'static>> {
+    pub(crate) fn get_relation_type_plays(&self, relation_type: RelationType<'_s>) -> &HashSet<Plays<'static>> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex()).unwrap().plays_declared
     }
 
-    pub(crate) fn get_attribute_type_value_type(&self, attribute_type: AttributeType<'static>) -> Option<ValueType> {
+    pub(crate) fn get_attribute_type_value_type(&self, attribute_type: AttributeType<'_s>) -> Option<ValueType> {
         Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex()).unwrap().value_type
     }
 
     pub(crate) fn get_entity_type_annotations(
         &self,
-        entity_type: EntityType<'static>,
+        entity_type: EntityType<'_s>,
     ) -> &HashSet<EntityTypeAnnotation> {
         &Self::get_entity_type_cache(&self.entity_types, entity_type.into_vertex())
             .unwrap()
@@ -541,7 +543,7 @@ impl TypeCache {
 
     pub(crate) fn get_relation_type_annotations(
         &self,
-        relation_type: RelationType<'static>,
+        relation_type: RelationType<'_s>,
     ) -> &HashSet<RelationTypeAnnotation> {
         &Self::get_relation_type_cache(&self.relation_types, relation_type.into_vertex())
             .unwrap()
@@ -549,7 +551,7 @@ impl TypeCache {
             .annotations_declared
     }
 
-    pub(crate) fn get_role_type_annotations(&self, role_type: RoleType<'static>) -> &HashSet<RoleTypeAnnotation> {
+    pub(crate) fn get_role_type_annotations(&self, role_type: RoleType<'_s>) -> &HashSet<RoleTypeAnnotation> {
         &Self::get_role_type_cache(&self.role_types, role_type.into_vertex())
             .unwrap()
             .type_api_cache_
@@ -558,7 +560,7 @@ impl TypeCache {
 
     pub(crate) fn get_attribute_type_annotations(
         &self,
-        attribute_type: AttributeType<'static>,
+        attribute_type: AttributeType<'_s>,
     ) -> &HashSet<AttributeTypeAnnotation> {
         &Self::get_attribute_type_cache(&self.attribute_types, attribute_type.into_vertex())
             .unwrap()

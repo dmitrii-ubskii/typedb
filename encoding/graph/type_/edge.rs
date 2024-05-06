@@ -26,11 +26,11 @@ macro_rules! type_edge_constructors {
             edge
         }
 
-        pub fn $build_name(from: TypeVertex<'static>, to: TypeVertex<'static>) -> TypeEdge<'static> {
+        pub fn $build_name<'_s/*: 'static*/>(from: TypeVertex<'_s>, to: TypeVertex<'_s>) -> TypeEdge<'static> {
             TypeEdge::build(Prefix::$prefix, from, to)
         }
 
-        pub fn $build_prefix_from(from: TypeVertex<'static>) -> StorageKey<'static, { TypeEdge::LENGTH_PREFIX_FROM }> {
+        pub fn $build_prefix_from<'_s/*: 'static*/>(from: TypeVertex<'_s>) -> StorageKey<'static, { TypeEdge::LENGTH_PREFIX_FROM }> {
             TypeEdge::build_prefix_from(Prefix::$prefix, from)
         }
 
