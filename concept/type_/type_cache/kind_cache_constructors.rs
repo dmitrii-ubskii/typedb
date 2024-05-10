@@ -32,8 +32,9 @@ use crate::type_::{
     relation_type::RelationType,
     role_type::RoleType,
     type_cache::{
-        selection::HasCommonTypeCache, AttributeTypeCache, CommonTypeCache, EntityTypeCache, OwnerPlayerCache,
-        OwnsCache, RelationTypeCache, RoleTypeCache,
+        selection::HasCommonTypeCache,
+        kind_cache::{AttributeTypeCache, CommonTypeCache, EntityTypeCache, OwnerPlayerCache,
+        OwnsCache, RelationTypeCache, RoleTypeCache},
     },
     type_manager::{KindAPI, ReadableType, TypeManager},
     type_reader::TypeReader,
@@ -75,6 +76,7 @@ pub(super) fn create_entity_type_caches(snapshot: &impl ReadableSnapshot) -> Box
     }
     caches
 }
+
 pub(super) fn create_relation_type_cache(snapshot: &impl ReadableSnapshot) -> Box<[Option<RelationTypeCache>]> {
     let relations = snapshot
         .iterate_range(KeyRange::new_within(
