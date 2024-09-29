@@ -17,6 +17,7 @@ use crate::{
     },
     PatternDefinitionError,
 };
+use crate::program::modifier::Require;
 
 pub fn translate_select(
     context: &mut TranslationContext,

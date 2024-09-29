@@ -26,7 +26,8 @@ use ir::{
 };
 use storage::snapshot::ReadableSnapshot;
 use typeql::query::stage::{Modifier, Stage as TypeQLStage, Stage};
-
+use ir::program::modifier::Require;
+use ir::translation::modifiers::translate_require;
 use crate::error::QueryError;
 
 pub(super) struct TranslatedPipeline {
