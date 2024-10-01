@@ -168,9 +168,9 @@ fn compile_stage(
         }
         AnnotatedStage::Require(require) => {
             let mut required_positions = HashSet::with_capacity(require.variables.len());
-            for variable in &require.variables {
-                let pos = input_variables.get(variable).unwrap();
-                required_positions.insert(pos.clone());
+            for &variable in &require.variables {
+                let pos = input_variables[&variable];
+                required_positions.insert(pos);
             }
             Ok(CompiledStage::Require(RequireProgram {
                 required: required_positions,
