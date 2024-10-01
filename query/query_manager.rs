@@ -26,7 +26,7 @@ use ir::{
 };
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::query::SchemaQuery;
-
+use executor::pipeline::modifiers::RequireStageExecutor;
 use crate::{
     annotation::{infer_types_for_pipeline, AnnotatedPipeline},
     compilation::{compile_pipeline, CompiledPipeline, CompiledStage},

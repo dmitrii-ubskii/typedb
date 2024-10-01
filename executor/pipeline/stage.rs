@@ -28,6 +28,7 @@ use crate::{
     row::MaybeOwnedRow,
     ExecutionInterrupt,
 };
+use crate::pipeline::modifiers::{RequireStageExecutor, RequireStageIterator};
 
 #[derive(Debug)]
 pub struct ExecutionContext<Snapshot> {

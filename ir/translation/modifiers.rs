@@ -13,6 +13,7 @@ use crate::{
     translation::{literal::FromTypeQLLiteral, TranslationContext},
     RepresentationError,
 };
+use crate::program::modifier::Require;
 
 pub fn translate_select(
     context: &mut TranslationContext,
@@ -86,6 +87,25 @@ pub fn translate_require(
             None => Err(RepresentationError::OperatorStageVariableUnavailable {
                 variable_name: typeql_var.name().unwrap().to_owned(),
                 declaration: typeql::query::pipeline::stage::Stage::Operator(Operator::Require(typeql_require.clone())),
+            }),
+            Some(v) => Ok(v.clone()),
+        })
+        .collect::<Result<HashSet<_>, _>>()?;
+    let require = Require::new(required_variables);
+    Ok(require)
+}
+
+pub fn translate_require(
+    context: &mut TranslationContext,
+    typeql_require: &typeql::query::stage::modifier::Require,
+) -> Result<Require, PatternDefinitionError> {
+    let required_variables = typeql_require
+        .variables
+        .iter()
+        .map(|typeql_var| match context.visible_variables.get(typeql_var.name().unwrap()) {
+            None => Err(PatternDefinitionError::OperatorStageVariableUnavailable {
+                variable_name: typeql_var.name().unwrap().to_owned(),
+                declaration: typeql::query::pipeline::stage::Stage::Modifier(Modifier::Require(typeql_require.clone())),
             }),
             Some(v) => Ok(v.clone()),
         })

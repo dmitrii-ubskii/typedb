@@ -36,6 +36,7 @@ use ir::{
     },
     translation::pipeline::TranslatedStage,
 };
+use ir::program::modifier::Require;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::error::QueryError;
