@@ -10,14 +10,13 @@ use answer::variable::Variable;
 use typeql::{query::stage::Modifier, token::Order};
 
 use crate::{
-    program::modifier::{Limit, Offset, Select, Sort},
+    program::modifier::{Limit, Offset, Require, Select, Sort},
     translation::{
         literal::{translate_literal, FromTypeQLLiteral},
         TranslationContext,
     },
     PatternDefinitionError,
 };
-use crate::program::modifier::Require;
 
 pub fn translate_select(
     context: &mut TranslationContext,

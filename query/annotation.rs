@@ -30,12 +30,11 @@ use ir::{
     program::{
         block::{FunctionalBlock, ParameterRegistry},
         function::{Function, Reducer},
-        modifier::{Limit, Offset, Select, Sort},
+        modifier::{Limit, Offset, Require, Select, Sort},
         reduce::Reduce,
         VariableRegistry,
     },
 };
-use ir::program::modifier::Require;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{error::QueryError, translation::TranslatedStage};

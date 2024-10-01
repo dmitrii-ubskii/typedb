@@ -11,14 +11,14 @@ use ir::{
         block::{FunctionalBlock, ParameterRegistry},
         function::Function,
         function_signature::{FunctionID, FunctionSignatureIndex, HashMapFunctionSignatureIndex},
-        modifier::{Limit, Offset, Select, Sort},
+        modifier::{Limit, Offset, Require, Select, Sort},
         reduce::Reduce,
         VariableRegistry,
     },
     translation::{
         function::translate_function,
         match_::translate_match,
-        modifiers::{translate_limit, translate_offset, translate_select, translate_sort},
+        modifiers::{translate_limit, translate_offset, translate_require, translate_select, translate_sort},
         reduce::translate_reduce,
         writes::{translate_delete, translate_insert},
         TranslationContext,
@@ -26,8 +26,7 @@ use ir::{
 };
 use storage::snapshot::ReadableSnapshot;
 use typeql::query::stage::{Modifier, Stage as TypeQLStage, Stage};
-use ir::program::modifier::Require;
-use ir::translation::modifiers::translate_require;
+
 use crate::error::QueryError;
 
 pub(super) struct TranslatedPipeline {
