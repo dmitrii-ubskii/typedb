@@ -8,7 +8,7 @@ use std::{collections::HashMap, fmt, iter};
 
 use answer::{variable::Variable, Type};
 use concept::thing::statistics::Statistics;
-use ir::pattern::constraint::{Has, Isa, Kind, Label, Links, Owns, Plays, Relates, RoleName, Sub, SubKind, Value};
+use ir::pattern::constraint::{As, Has, Isa, Kind, Label, Links, Owns, Plays, Relates, RoleName, Sub, SubKind, Value};
 use itertools::Itertools;
 
 use crate::{
@@ -36,6 +36,7 @@ pub(crate) enum ConstraintVertex<'a> {
     Owns(OwnsPlanner<'a>),
     Relates(RelatesPlanner<'a>),
     Plays(PlaysPlanner<'a>),
+    As(AsPlanner<'a>),
 }
 
 impl ConstraintVertex<'_> {
@@ -53,6 +54,7 @@ impl ConstraintVertex<'_> {
             Self::Owns(inner) => inner.unbound_direction,
             Self::Relates(inner) => inner.unbound_direction,
             Self::Plays(inner) => inner.unbound_direction,
+            Self::As(inner) => inner.unbound_direction,
         }
     }
 
@@ -68,6 +70,7 @@ impl ConstraintVertex<'_> {
             Self::Owns(inner) => Box::new(inner.variables()),
             Self::Relates(inner) => Box::new(inner.variables()),
             Self::Plays(inner) => Box::new(inner.variables()),
+            Self::As(inner) => Box::new(inner.variables()),
         }
     }
 
@@ -92,6 +95,7 @@ impl Costed for ConstraintVertex<'_> {
             Self::Owns(inner) => inner.cost(inputs, graph),
             Self::Relates(inner) => inner.cost(inputs, graph),
             Self::Plays(inner) => inner.cost(inputs, graph),
+            Self::As(inner) => inner.cost(inputs, graph),
         }
     }
 }
@@ -641,6 +645,43 @@ impl<'a> PlaysPlanner<'a> {
 }
 
 impl Costed for PlaysPlanner<'_> {
+    fn cost(&self, _: &[VertexId], _: &Graph<'_>) -> ElementCost {
+        ElementCost::free_with_branching(1.0) // TODO branching
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct AsPlanner<'a> {
+    as_: &'a As<Variable>,
+    specialising: Input,
+    specialised: Input,
+    unbound_direction: Direction,
+}
+
+impl<'a> AsPlanner<'a> {
+    pub(crate) fn from_constraint(
+        as_: &'a As<Variable>,
+        variable_index: &HashMap<Variable, VariableVertexId>,
+        _type_annotations: &TypeAnnotations,
+    ) -> Self {
+        Self {
+            as_,
+            specialising: Input::from_vertex(as_.specialising(), variable_index),
+            specialised: Input::from_vertex(as_.specialised(), variable_index),
+            unbound_direction: Direction::Reverse,
+        }
+    }
+
+    fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
+        [self.specialising.as_variable(), self.specialised.as_variable()].into_iter().flatten()
+    }
+
+    pub(crate) fn as_(&self) -> &As<Variable> {
+        self.as_
+    }
+}
+
+impl Costed for AsPlanner<'_> {
     fn cost(&self, _: &[VertexId], _: &Graph<'_>) -> ElementCost {
         ElementCost::free_with_branching(1.0) // TODO branching
     }
