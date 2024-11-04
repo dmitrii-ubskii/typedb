@@ -36,17 +36,16 @@ use crate::{
                 LinksReverseInstruction,
             },
             type_::{
-                AsInstruction, AsReverseInstruction, OwnsInstruction, OwnsReverseInstruction, PlaysInstruction,
-                PlaysReverseInstruction, RelatesInstruction, RelatesReverseInstruction, SubInstruction,
-                SubReverseInstruction,
+                OwnsInstruction, OwnsReverseInstruction, PlaysInstruction, PlaysReverseInstruction, RelatesInstruction,
+                RelatesReverseInstruction, SubInstruction, SubReverseInstruction,
             },
             CheckInstruction, CheckVertex, ConstraintInstruction, Inputs, IsInstruction,
         },
         planner::{
             vertex::{
                 constraint::{
-                    AsPlanner, ConstraintVertex, HasPlanner, IsaPlanner, LinksPlanner, OwnsPlanner, PlaysPlanner,
-                    RelatesPlanner, SubPlanner, TypeListPlanner,
+                    ConstraintVertex, HasPlanner, IsaPlanner, LinksPlanner, OwnsPlanner, PlaysPlanner, RelatesPlanner,
+                    SubPlanner, TypeListPlanner,
                 },
                 variable::{InputPlanner, ThingPlanner, TypePlanner, ValuePlanner, VariableVertex},
                 ComparisonPlanner, Costed, Direction, DisjunctionPlanner, ElementCost, ExpressionPlanner,
@@ -348,7 +347,6 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Constraint::Owns(owns) => self.register_owns(owns),
                 Constraint::Relates(relates) => self.register_relates(relates),
                 Constraint::Plays(plays) => self.register_plays(plays),
-                Constraint::As(as_) => self.register_as(as_),
 
                 Constraint::Isa(isa) => self.register_isa(isa),
                 Constraint::Has(has) => self.register_has(has),
@@ -404,11 +402,6 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         let planner =
             PlaysPlanner::from_constraint(plays, &self.graph.variable_index, self.type_annotations, self.statistics);
         self.graph.push_constraint(ConstraintVertex::Plays(planner));
-    }
-
-    fn register_as(&mut self, as_: &'a As<Variable>) {
-        let planner = AsPlanner::from_constraint(as_, &self.graph.variable_index, self.type_annotations);
-        self.graph.push_constraint(ConstraintVertex::As(planner));
     }
 
     fn register_value(&mut self, value: &'a Value<Variable>) {
@@ -956,7 +949,9 @@ impl ConjunctionPlan<'_> {
                         Inputs::Single([rhs_var.unwrap()]),
                         self.type_annotations,
                     ))
-                } else if constraint.unbound_direction() == Direction::Canonical && Some(sort_variable) != rhs_var {
+                } else if constraint.unbound_direction() == Direction::Canonical && Some(sort_variable) != rhs_var
+                    || Some(sort_variable) == lhs_var
+                {
                     ConstraintInstruction::$fw($fwi::new(con, Inputs::None([]), self.type_annotations))
                 } else {
                     ConstraintInstruction::$bw($bwi::new(con, Inputs::None([]), self.type_annotations))
@@ -988,10 +983,6 @@ impl ConjunctionPlan<'_> {
             ConstraintVertex::Plays(planner) => {
                 let plays = planner.plays();
                 binary!(player plays role_type, Plays(PlaysInstruction), PlaysReverse(PlaysReverseInstruction))
-            }
-            ConstraintVertex::As(planner) => {
-                let as_ = planner.as_();
-                binary!(specialising as_ specialised, As(AsInstruction), AsReverse(AsReverseInstruction))
             }
 
             ConstraintVertex::Isa(planner) => {
@@ -1101,10 +1092,6 @@ impl ConjunctionPlan<'_> {
             ConstraintVertex::Plays(planner) => {
                 let plays = planner.plays();
                 binary!(player plays role_type, Plays(PlaysInstruction), PlaysReverse(PlaysReverseInstruction))
-            }
-            ConstraintVertex::As(planner) => {
-                let as_ = planner.as_();
-                binary!(specialising as_ specialised, As(AsInstruction), AsReverse(AsReverseInstruction))
             }
 
             ConstraintVertex::Isa(planner) => {
