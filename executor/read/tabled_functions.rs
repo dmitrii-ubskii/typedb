@@ -5,7 +5,7 @@
  */
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -18,7 +18,10 @@ use crate::{
     batch::FixedBatch,
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
-    read::{pattern_executor::PatternExecutor, step_executor::create_executors_for_function, SuspendPoint},
+    read::{
+        pattern_executor::PatternExecutor, step_executor::create_executors_for_function,
+        SuspendPointContext,
+    },
     row::MaybeOwnedRow,
 };
 
@@ -72,7 +75,7 @@ pub(crate) struct TabledFunctionState {
 }
 
 pub(crate) struct TabledFunctionPatternExecutorState {
-    pub(crate) suspend_points: Vec<SuspendPoint>,
+    pub(crate) suspend_points: SuspendPointContext,
     pub(crate) pattern_executor: PatternExecutor,
     pub(crate) parameters: Arc<ParameterRegistry>,
 }
@@ -89,7 +92,7 @@ impl TabledFunctionState {
             table: RwLock::new(AnswerTable { answers: Vec::new(), width: answer_width }),
             executor_state: Mutex::new(TabledFunctionPatternExecutorState {
                 pattern_executor,
-                suspend_points: Vec::new(),
+                suspend_points: SuspendPointContext::new(),
                 parameters,
             }),
         }

@@ -4,20 +4,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{collections::HashSet, sync::Arc};
+use std::{iter::Peekable, sync::Arc};
 
 use compiler::executable::{
     match_::planner::{function_plan::ExecutableFunctionRegistry, match_executable::MatchExecutable},
     pipeline::ExecutableStage,
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
-use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     read::{
         pattern_executor::{BranchIndex, ExecutorIndex, PatternExecutor},
         step_executor::create_executors_for_pipeline_stages,
+        tabled_call_executor::TabledCallExecutor,
         tabled_functions::TableIndex,
     },
     row::MaybeOwnedRow,
@@ -62,28 +62,25 @@ pub(super) fn create_executors_for_pipeline(
     Ok(PatternExecutor::new(executors))
 }
 
+#[derive(Debug)]
 pub(crate) enum SuspendPoint {
     TabledCall(TabledCallSuspension),
     Nested(NestedSuspension),
 }
 
 impl SuspendPoint {
-    fn new_tabled_call(
-        executor_index: ExecutorIndex,
-        next_table_row: TableIndex,
-        input_row: MaybeOwnedRow<'static>,
-    ) -> Self {
-        Self::TabledCall(TabledCallSuspension { executor_index, next_table_row, input_row })
-    }
-
-    fn new_nested(executor_index: ExecutorIndex, branch_index: BranchIndex, input_row: MaybeOwnedRow<'static>) -> Self {
-        Self::Nested(NestedSuspension { executor_index, branch_index, input_row })
+    fn depth(&self) -> usize {
+        match self {
+            SuspendPoint::TabledCall(tabled_call) => tabled_call.depth,
+            SuspendPoint::Nested(nested) => nested.depth,
+        }
     }
 }
 
 #[derive(Debug)]
 pub(super) struct TabledCallSuspension {
     pub(crate) executor_index: ExecutorIndex,
+    pub(crate) depth: usize,
     pub(crate) input_row: MaybeOwnedRow<'static>,
     pub(crate) next_table_row: TableIndex,
 }
@@ -91,6 +88,71 @@ pub(super) struct TabledCallSuspension {
 #[derive(Debug)]
 pub(super) struct NestedSuspension {
     pub(crate) executor_index: ExecutorIndex,
+    pub(crate) depth: usize,
     pub(crate) branch_index: BranchIndex,
     pub(crate) input_row: MaybeOwnedRow<'static>,
+}
+
+#[derive(Debug)]
+pub(super) struct SuspendPointContext {
+    at_depth: usize,
+    suspended_points: Vec<SuspendPoint>,
+    restore_from: Peekable<std::vec::IntoIter<SuspendPoint>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SuspendPointTrackerState(usize);
+
+impl SuspendPointContext {
+    pub(crate) fn new() -> Self {
+        Self::restore_from(Vec::new())
+    }
+
+    pub(crate) fn tmp__is_empty(&self) -> bool {
+        self.suspended_points.is_empty()
+    }
+
+    pub(crate) fn restore_from(restore_from: Vec<SuspendPoint>) -> Self {
+        SuspendPointContext {
+            at_depth: 0,
+            suspended_points: Vec::new(),
+            restore_from: restore_from.into_iter().peekable(),
+        }
+    }
+
+    fn record_nested_pattern_entry(&mut self) -> SuspendPointTrackerState {
+        self.at_depth += 1;
+        SuspendPointTrackerState(self.suspended_points.len())
+    }
+
+    fn record_nested_pattern_exit(&mut self) -> SuspendPointTrackerState {
+        self.at_depth -= 1;
+        SuspendPointTrackerState(self.suspended_points.len())
+    }
+
+    fn push_nested(
+        &mut self,
+        executor_index: ExecutorIndex,
+        branch_index: BranchIndex,
+        input_row: MaybeOwnedRow<'static>,
+    ) -> SuspendPoint {
+        SuspendPoint::Nested(NestedSuspension { depth: self.at_depth, executor_index, branch_index, input_row })
+    }
+
+    fn push_tabled_call(
+        &mut self,
+        executor_index: ExecutorIndex,
+        tabled_call_executor: &TabledCallExecutor,
+    ) -> SuspendPoint {
+        tabled_call_executor.create_suspend_point_for(executor_index, self.at_depth)
+    }
+
+    fn next_restore_point_from_current_depth(&mut self) -> Option<SuspendPoint> {
+        let has_next = if let Some(point) = self.restore_from.peek() { point.depth() == self.at_depth } else { false };
+        if has_next {
+            self.restore_from.next()
+        } else {
+            None
+        }
+    }
 }

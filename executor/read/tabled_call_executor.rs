@@ -82,9 +82,10 @@ impl TabledCallExecutor {
         output_batch
     }
 
-    pub(crate) fn create_suspend_point_for(&self, executor_index: ExecutorIndex) -> SuspendPoint {
+    pub(crate) fn create_suspend_point_for(&self, executor_index: ExecutorIndex, depth: usize) -> SuspendPoint {
         SuspendPoint::TabledCall(TabledCallSuspension {
             executor_index,
+            depth,
             input_row: self.active_executor.as_ref().unwrap().input.clone().into_owned(),
             next_table_row: self.active_executor.as_ref().unwrap().next_table_row,
         })

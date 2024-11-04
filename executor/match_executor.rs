@@ -18,7 +18,7 @@ use crate::{
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
     read::{
-        pattern_executor::PatternExecutor, tabled_functions::TabledFunctions, SuspendPoint,
+        pattern_executor::PatternExecutor, tabled_functions::TabledFunctions, SuspendPointContext,
         TODO_REMOVE_create_executors_for_match,
     },
     row::MaybeOwnedRow,
@@ -29,7 +29,7 @@ pub struct MatchExecutor {
     entry: PatternExecutor,
     input: Option<MaybeOwnedRow<'static>>,
     tabled_functions: TabledFunctions,
-    suspend_points: Vec<SuspendPoint>,
+    suspend_points: SuspendPointContext,
 }
 
 impl MatchExecutor {
@@ -49,7 +49,7 @@ impl MatchExecutor {
             )?,
             tabled_functions: TabledFunctions::new(function_registry),
             input: Some(input.into_owned()),
-            suspend_points: Vec::new(),
+            suspend_points: SuspendPointContext::new(),
         })
     }
 
@@ -73,8 +73,8 @@ impl MatchExecutor {
         }
         let batch =
             self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspend_points)?;
-        if batch.is_none() && !self.suspend_points.is_empty() {
-            self.suspend_points.clear(); // I had an infinite collection, so I don't want to risk it.
+        if batch.is_none() && !self.suspend_points.tmp__is_empty() {
+            self.suspend_points = SuspendPointContext::new(); // I had an infinite collection, so I don't want to risk it.
             Err(ReadExecutionError::UnimplementedCyclicFunctions {})
         } else {
             Ok(batch)

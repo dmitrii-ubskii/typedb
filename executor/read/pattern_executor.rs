@@ -27,7 +27,7 @@ use crate::{
         },
         tabled_call_executor::TabledCallResult,
         tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions},
-        SuspendPoint,
+        SuspendPointContext,
     },
     row::MaybeOwnedRow,
     ExecutionInterrupt,
@@ -60,9 +60,13 @@ impl PatternExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         interrupt: &mut ExecutionInterrupt,
         tabled_functions: &mut TabledFunctions,
-        suspend_points: &mut Vec<SuspendPoint>,
+        suspend_point_context: &mut SuspendPointContext,
     ) -> Result<Option<FixedBatch>, ReadExecutionError> {
-        self.batch_continue(context, interrupt, tabled_functions, suspend_points)
+        let state_before = suspend_point_context.record_nested_pattern_entry();
+        let result = self.batch_continue(context, interrupt, tabled_functions, suspend_point_context);
+        let state_after = suspend_point_context.record_nested_pattern_exit();
+        debug_assert!(state_after == state_before); // As long as compute_next_batch is only called for the entry.
+        result
     }
 
     pub(crate) fn prepare(&mut self, input_batch: FixedBatch) {
@@ -80,7 +84,7 @@ impl PatternExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         interrupt: &mut ExecutionInterrupt,
         tabled_functions: &mut TabledFunctions,
-        suspend_point_accumulator: &mut Vec<SuspendPoint>,
+        suspend_point_context: &mut SuspendPointContext,
     ) -> Result<Option<FixedBatch>, ReadExecutionError> {
         // debug_assert!(self.control_stack.len() > 0);
         while self.control_stack.last().is_some() {
@@ -115,7 +119,7 @@ impl PatternExecutor {
                     else {
                         unreachable!();
                     };
-                    let mut fresh_suspend_points = Vec::new();
+                    let mut fresh_suspend_points = SuspendPointContext::new();
                     match inner.batch_continue(context, interrupt, tabled_functions, &mut fresh_suspend_points)? {
                         None => {
                             self.push_next_instruction(context, index.next(), FixedBatch::from(input.as_reference()))?
@@ -124,13 +128,9 @@ impl PatternExecutor {
                             inner.reset();
                         } // fail
                     };
-                    if !fresh_suspend_points.is_empty() {
+                    if !fresh_suspend_points.tmp__is_empty() {
                         // TODO: This goes away because we can always retry here.
-                        suspend_point_accumulator.push(SuspendPoint::new_nested(
-                            index,
-                            BranchIndex(0),
-                            input.clone().into_owned(),
-                        ));
+                        suspend_point_context.push_nested(index, BranchIndex(0), input.clone().into_owned());
                     }
                 }
                 ControlInstruction::ExecuteDisjunction(ExecuteDisjunction { index, branch_index, input }) => {
@@ -139,11 +139,11 @@ impl PatternExecutor {
                         unreachable!();
                     };
                     let branch = &mut disjunction.branches[branch_index.0];
-                    let suspend_point_len_before = suspend_point_accumulator.len();
+                    let suspend_tracker_state_before = suspend_point_context.record_nested_pattern_entry();
                     let batch_opt =
-                        branch.batch_continue(&context, interrupt, tabled_functions, suspend_point_accumulator)?;
-                    if suspend_point_accumulator.len() != suspend_point_len_before {
-                        suspend_point_accumulator.push(SuspendPoint::new_nested(index, branch_index, input.clone()))
+                        branch.batch_continue(&context, interrupt, tabled_functions, suspend_point_context)?;
+                    if suspend_point_context.record_nested_pattern_exit() != suspend_tracker_state_before {
+                        suspend_point_context.push_nested(index, branch_index, input.clone());
                     }
                     if let Some(unmapped) = batch_opt {
                         let mapped = disjunction.map_output(unmapped);
@@ -164,15 +164,15 @@ impl PatternExecutor {
                     else {
                         unreachable!();
                     };
-                    let suspend_point_len_before = suspend_point_accumulator.len();
+                    let suspend_point_state_before = suspend_point_context.record_nested_pattern_entry();
                     let unmapped_opt = executor.inner.batch_continue(
                         &context.clone_with_replaced_parameters(parameters_override.clone()),
                         interrupt,
                         tabled_functions,
-                        suspend_point_accumulator,
+                        suspend_point_context,
                     )?;
-                    if suspend_point_accumulator.len() != suspend_point_len_before {
-                        suspend_point_accumulator.push(SuspendPoint::new_nested(index, BranchIndex(0), input.clone()))
+                    if suspend_point_context.record_nested_pattern_exit() != suspend_point_state_before {
+                        suspend_point_context.push_nested(index, BranchIndex(0), input.clone());
                     }
                     if let Some(unmapped) = unmapped_opt {
                         let mapped = executor.map_output(input.as_reference(), unmapped);
@@ -186,11 +186,11 @@ impl PatternExecutor {
                 }
                 ControlInstruction::ExecuteStreamModifier(ExecuteStreamModifier { index, mut mapper, input }) => {
                     let inner = &mut executors[index.0].unwrap_stream_modifier().get_inner();
-                    let suspend_point_len_before = suspend_point_accumulator.len();
+                    let suspend_point_len_before = suspend_point_context.record_nested_pattern_entry();
                     let unmapped =
-                        inner.batch_continue(&context, interrupt, tabled_functions, suspend_point_accumulator)?;
-                    if suspend_point_accumulator.len() != suspend_point_len_before {
-                        suspend_point_accumulator.push(SuspendPoint::new_nested(index, BranchIndex(0), input.clone()))
+                        inner.batch_continue(&context, interrupt, tabled_functions, suspend_point_context)?;
+                    if suspend_point_context.record_nested_pattern_exit() != suspend_point_len_before {
+                        suspend_point_context.push_nested(index, BranchIndex(0), input.clone());
                     }
                     let (must_retry, mapped) = mapper.map_output(unmapped).into_parts();
                     if must_retry {
@@ -207,12 +207,12 @@ impl PatternExecutor {
                     }
                 }
                 ControlInstruction::ExecuteTabledCall(TabledCall { index }) => {
-                    self.execute_tabled_call(context, interrupt, tabled_functions, suspend_point_accumulator, index)?;
+                    self.execute_tabled_call(context, interrupt, tabled_functions, suspend_point_context, index)?;
                 }
                 ControlInstruction::CollectingStage(CollectingStage { index }) => {
                     let (pattern, mut collector) = executors[index.0].unwrap_collecting_stage().to_parts_mut();
                     // Distinct isn't a collecting stage. We should use fresh suspend_point_accumulators here.
-                    match pattern.batch_continue(context, interrupt, tabled_functions, suspend_point_accumulator)? {
+                    match pattern.batch_continue(context, interrupt, tabled_functions, suspend_point_context)? {
                         Some(batch) => {
                             collector.accept(context, batch);
                             self.control_stack.push(ControlInstruction::CollectingStage(CollectingStage { index }))
@@ -373,7 +373,7 @@ impl PatternExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         interrupt: &mut ExecutionInterrupt,
         tabled_functions: &mut TabledFunctions,
-        suspend_point_accumulator: &mut Vec<SuspendPoint>,
+        suspend_point_context: &mut SuspendPointContext,
         index: ExecutorIndex,
     ) -> Result<(), ReadExecutionError> {
         let executor = self.executors[index.0].unwrap_tabled_call();
@@ -382,7 +382,7 @@ impl PatternExecutor {
         let found = match executor.try_read_next_batch(&function_state) {
             TabledCallResult::RetrievedFromTable(batch) => Some(batch),
             TabledCallResult::Suspend => {
-                suspend_point_accumulator.push(executor.create_suspend_point_for(index));
+                suspend_point_context.push_tabled_call(index, executor); // Clearly a dummy
                 None
             }
             TabledCallResult::MustExecutePattern(mut pattern_state_mutex_guard) => {
@@ -396,12 +396,13 @@ impl PatternExecutor {
                     tabled_functions,
                     suspend_points,
                 )?;
+                let tabled_call_state_before = suspend_points.record_nested_pattern_entry();
                 if let Some(batch) = batch_opt {
                     let deduplicated_batch = executor.add_batch_to_table(&function_state, batch);
                     Some(deduplicated_batch)
                 } else {
-                    if !suspend_points.is_empty() {
-                        suspend_point_accumulator.push(executor.create_suspend_point_for(index))
+                    if suspend_points.record_nested_pattern_exit() != tabled_call_state_before {
+                        suspend_point_context.push_tabled_call(index, executor);
                     }
                     None
                 }
