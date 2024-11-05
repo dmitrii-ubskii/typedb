@@ -79,6 +79,7 @@ impl MatchExecutor {
             while return_batch.is_none() && !self.suspend_points.is_empty() {
                 self.suspend_points.swap_suspend_and_restore_points();
                 self.entry.prepare_to_restore_from_suspend_point(1);
+                return_batch = self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspend_points)?;
             }
             Ok(return_batch)
         } else {

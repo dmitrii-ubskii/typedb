@@ -276,9 +276,9 @@ fn function_binary() {
     }
 }
 
-#[ignore] // TODO
+
 #[test]
-fn simple_tabled() {
+fn quadratic_reachability_in_tree() { // Doesn't actually need functions
     let custom_schema = r#"define
         attribute name value string;
         entity node, owns name @card(0..), plays edge:from, plays edge:to;
@@ -333,7 +333,63 @@ fn simple_tabled() {
     }
 }
 
-#[ignore] // TODO
+
+#[test]
+fn linear_reachability_in_tree() {
+    let custom_schema = r#"define
+        attribute name value string;
+        entity node, owns name @card(0..), plays edge:from, plays edge:to;
+        relation edge, relates from, relates to;
+    "#;
+    let context = setup_common(custom_schema);
+    let snapshot = context.storage.clone().open_snapshot_write();
+    let insert_query_str = r#"insert
+        $n1 isa node, has name "n1";
+        $n2 isa node, has name "n2";
+        $n3 isa node, has name "n3";
+
+        (from: $n1, to: $n2) isa edge;
+        (from: $n2, to: $n3) isa edge;
+    "#;
+    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
+    let insert_pipeline = context
+        .query_manager
+        .prepare_write_pipeline(
+            snapshot,
+            &context.type_manager,
+            context.thing_manager.clone(),
+            &context.function_manager,
+            &insert_query,
+        )
+        .unwrap();
+    let (mut iterator, ExecutionContext { snapshot, .. }) =
+        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+
+    assert_matches!(iterator.next(), Some(Ok(_)));
+    assert_matches!(iterator.next(), None);
+    let snapshot = Arc::into_inner(snapshot).unwrap();
+    snapshot.commit().unwrap();
+
+    {
+        // quadratic tabling reachability.
+        let query = r#"
+            with
+            fun reachable($from: node) -> { node }:
+            match
+                $return-me has name $name;
+                { $middle in reachable($from); (from: $middle, to: $indirect) isa edge; $indirect has name $name; } or
+                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
+            return { $return-me };
+
+            match
+                $from isa node, has name "n1";
+                $to in reachable($from);
+        "#;
+        let (rows, _) = run_read_query(&context, query).unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+}
+
 #[test]
 fn fibonacci() {
     let custom_schema = r#"define

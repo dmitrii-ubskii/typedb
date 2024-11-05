@@ -144,16 +144,18 @@ impl SuspendPointContext {
         executor_index: ExecutorIndex,
         branch_index: BranchIndex,
         input_row: MaybeOwnedRow<'static>,
-    ) -> SuspendPoint {
-        SuspendPoint::Nested(NestedSuspension { depth: self.at_depth, executor_index, branch_index, input_row })
+    ) {
+        self.suspended_points.push(
+            SuspendPoint::Nested(NestedSuspension { depth: self.at_depth, executor_index, branch_index, input_row })
+        )
     }
 
     fn push_tabled_call(
         &mut self,
         executor_index: ExecutorIndex,
         tabled_call_executor: &TabledCallExecutor,
-    ) -> SuspendPoint {
-        tabled_call_executor.create_suspend_point_for(executor_index, self.at_depth)
+    ) {
+        self.suspended_points.push(tabled_call_executor.create_suspend_point_for(executor_index, self.at_depth))
     }
 
     fn next_restore_point_from_current_depth(&mut self) -> Option<SuspendPoint> {
