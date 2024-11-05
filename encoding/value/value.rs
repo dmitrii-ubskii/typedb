@@ -13,7 +13,7 @@ use std::{
 };
 
 use bytes::byte_array::ByteArray;
-use chrono::{DateTime, NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 
 use crate::{
     value::{
@@ -213,7 +213,10 @@ impl<'a> Value<'a> {
                 debug_assert_eq!(value_type, &ValueType::Double);
                 Some(Value::Double(decimal.to_f64()))
             }
-            Value::Date(_) => todo!(),
+            Value::Date(date) => {
+                debug_assert_eq!(value_type, &ValueType::DateTime);
+                Some(Value::DateTime(date.and_time(NaiveTime::MIN)))
+            }
             _ => unreachable!(),
         }
     }
