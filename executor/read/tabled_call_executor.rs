@@ -61,6 +61,11 @@ impl TabledCallExecutor {
         self.active_executor = Some(TabledCallExecutorState { call_key, input, next_table_row: TableIndex(0) });
     }
 
+    pub(crate) fn restore_from_suspend_point(&mut self, input: MaybeOwnedRow<'static>, next_table_index: TableIndex) {
+        self.prepare(input);
+        self.active_executor.as_mut().unwrap().next_table_row = next_table_index;
+    }
+
     pub(crate) fn active_call_key(&self) -> Option<&CallKey> {
         self.active_executor.as_ref().map(|active| &active.call_key)
     }

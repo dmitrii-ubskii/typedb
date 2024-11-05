@@ -32,6 +32,8 @@ use crate::{
     row::MaybeOwnedRow,
     ExecutionInterrupt,
 };
+use crate::read::control_instruction::RestoreSuspendPoint;
+use crate::read::{NestedSuspension, SuspendPoint, TabledCallSuspension};
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct BranchIndex(pub usize);
@@ -75,6 +77,12 @@ impl PatternExecutor {
         self.control_stack.push(ControlInstruction::PatternStart(PatternStart { input_batch }));
     }
 
+    pub(crate) fn prepare_to_restore_from_suspend_point(&mut self, depth: usize) {
+        debug_assert!(self.control_stack.is_empty());
+        self.reset();
+        self.control_stack.push(ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }));
+    }
+
     pub(super) fn reset(&mut self) {
         self.control_stack.clear();
     }
@@ -97,6 +105,38 @@ impl PatternExecutor {
             match control_stack.pop().unwrap() {
                 ControlInstruction::PatternStart(PatternStart { input_batch }) => {
                     self.push_next_instruction(context, ExecutorIndex(0), input_batch)?;
+                }
+                ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }) => {
+                    debug_assert!(depth == suspend_point_context.current_depth()); // Smell. The depth in the step is redundant
+                    if let Some(point) = suspend_point_context.next_restore_point_from_current_depth() {
+                        control_stack.push(ControlInstruction::RestoreSuspendPoint( RestoreSuspendPoint { depth }) );
+                        match point {
+                            SuspendPoint::TabledCall(suspended_call) => {
+                                let TabledCallSuspension { executor_index, next_table_row, input_row, .. } = suspended_call;
+                                let executor = executors[executor_index.0].unwrap_tabled_call();
+                                executor.restore_from_suspend_point(input_row, next_table_row);
+                                control_stack.push(ControlInstruction::ExecuteTabledCall(TabledCall { index: executor_index }))
+                            }
+                            SuspendPoint::Nested(suspended_nested) => {
+                                let NestedSuspension { executor_index, input_row, branch_index, depth } = suspended_nested;
+                                match executors[executor_index.0].unwrap_nested() {
+                                    NestedPatternExecutor::Negation(_) => unreachable!("Stratification must have been violated"),
+                                    NestedPatternExecutor::Disjunction(disjunction) => {
+                                        disjunction.branches[branch_index.0].prepare_to_restore_from_suspend_point(depth);
+                                        control_stack.push(ControlInstruction::ExecuteDisjunction(ExecuteDisjunction {
+                                            index: executor_index, branch_index, input: input_row.into_owned(),
+                                        }))
+                                    }
+                                    NestedPatternExecutor::InlinedFunction(inlined) => {
+                                        inlined.inner.prepare_to_restore_from_suspend_point(depth);
+                                        control_stack.push(ControlInstruction::ExecuteInlinedFunction(ExecuteInlinedFunction {
+                                            index: executor_index, input: input_row.into_owned(), parameters_override: inlined.parameter_registry.clone()
+                                        }))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 ControlInstruction::ExecuteImmediate(ExecuteImmediate { index }) => {
                     let executor = executors[index.0].unwrap_immediate();
@@ -128,8 +168,8 @@ impl PatternExecutor {
                             inner.reset();
                         } // fail
                     };
-                    if !fresh_suspend_points.tmp__is_empty() {
-                        // TODO: This goes away because we can always retry here.
+                    if !fresh_suspend_points.is_empty() {
+                        // TODO: This goes away because either (1) we can always retry here; or (2) We retry at the cyclic call itself and this is unreachable.
                         suspend_point_context.push_nested(index, BranchIndex(0), input.clone().into_owned());
                     }
                 }
@@ -396,12 +436,13 @@ impl PatternExecutor {
                     tabled_functions,
                     suspend_points,
                 )?;
-                let tabled_call_state_before = suspend_points.record_nested_pattern_entry();
+                let suspension_state_before = suspend_points.record_nested_pattern_entry();
                 if let Some(batch) = batch_opt {
                     let deduplicated_batch = executor.add_batch_to_table(&function_state, batch);
+                    suspend_point_context.add_to_table_size(deduplicated_batch.len() as usize);
                     Some(deduplicated_batch)
                 } else {
-                    if suspend_points.record_nested_pattern_exit() != tabled_call_state_before {
+                    if suspend_points.record_nested_pattern_exit() != suspension_state_before {
                         suspend_point_context.push_tabled_call(index, executor);
                     }
                     None

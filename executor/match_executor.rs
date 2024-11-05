@@ -73,9 +73,14 @@ impl MatchExecutor {
         }
         let batch =
             self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspend_points)?;
-        if batch.is_none() && !self.suspend_points.tmp__is_empty() {
-            self.suspend_points = SuspendPointContext::new(); // I had an infinite collection, so I don't want to risk it.
-            Err(ReadExecutionError::UnimplementedCyclicFunctions {})
+        if batch.is_none() && !self.suspend_points.is_empty() {
+            let mut return_batch = batch;
+            // TODO: This will loop forever if there's a negation which reaches a cycle.
+            while return_batch.is_none() && !self.suspend_points.is_empty() {
+                self.suspend_points.swap_suspend_and_restore_points();
+                self.entry.prepare_to_restore_from_suspend_point(1);
+            }
+            Ok(return_batch)
         } else {
             Ok(batch)
         }
