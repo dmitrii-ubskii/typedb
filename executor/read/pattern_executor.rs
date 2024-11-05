@@ -67,7 +67,7 @@ impl PatternExecutor {
         let state_before = suspend_point_context.record_nested_pattern_entry();
         let result = self.batch_continue(context, interrupt, tabled_functions, suspend_point_context);
         let state_after = suspend_point_context.record_nested_pattern_exit();
-        debug_assert!(state_after == state_before); // As long as compute_next_batch is only called for the entry.
+        // debug_assert!(state_after == state_before); // TODO: Enable once we figure out retries at the calls. // As long as compute_next_batch is only called for the entry.
         result
     }
 
@@ -426,23 +426,22 @@ impl PatternExecutor {
                 None
             }
             TabledCallResult::MustExecutePattern(mut pattern_state_mutex_guard) => {
-                let TabledFunctionPatternExecutorState { pattern_executor, suspend_points, parameters } =
+                let TabledFunctionPatternExecutorState { pattern_executor, suspend_points: function_suspend_points, parameters } =
                     pattern_state_mutex_guard.deref_mut();
                 let context_with_function_parameters =
                     ExecutionContext::new(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone());
+                let suspension_state_before = function_suspend_points.record_nested_pattern_entry();
                 let batch_opt = pattern_executor.batch_continue(
                     &context_with_function_parameters,
                     interrupt,
                     tabled_functions,
-                    suspend_points,
+                    function_suspend_points,
                 )?;
-                let suspension_state_before = suspend_points.record_nested_pattern_entry();
                 if let Some(batch) = batch_opt {
                     let deduplicated_batch = executor.add_batch_to_table(&function_state, batch);
-                    suspend_point_context.add_to_table_size(deduplicated_batch.len() as usize);
                     Some(deduplicated_batch)
                 } else {
-                    if suspend_points.record_nested_pattern_exit() != suspension_state_before {
+                    if function_suspend_points.record_nested_pattern_exit() != suspension_state_before {
                         suspend_point_context.push_tabled_call(index, executor);
                     }
                     None

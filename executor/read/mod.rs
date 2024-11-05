@@ -98,8 +98,6 @@ pub(super) struct SuspendPointContext {
     at_depth: usize,
     suspended_points: Vec<SuspendPoint>,
     restore_from: Peekable<std::vec::IntoIter<SuspendPoint>>,
-
-    table_size: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -107,7 +105,7 @@ struct SuspendPointTrackerState(usize);
 
 impl SuspendPointContext {
     pub(crate) fn new() -> Self {
-        Self { at_depth: 0, suspended_points: Vec::new(), restore_from: Vec::new().into_iter().peekable(), table_size: 0 }
+        Self { at_depth: 0, suspended_points: Vec::new(), restore_from: Vec::new().into_iter().peekable() }
     }
 
     pub(crate) fn swap_suspend_and_restore_points(&mut self) {
@@ -123,10 +121,6 @@ impl SuspendPointContext {
 
     pub(crate) fn current_depth(&self) -> usize {
         self.at_depth
-    }
-
-    pub(crate) fn add_to_table_size(&mut self, added_batch_size: usize) {
-        self.table_size += added_batch_size;
     }
 
     fn record_nested_pattern_entry(&mut self) -> SuspendPointTrackerState {

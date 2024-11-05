@@ -66,6 +66,10 @@ impl TabledFunctions {
         }
         Ok(self.state.get(call_key).unwrap().clone())
     }
+
+    pub(crate) fn total_table_size(&self) -> usize {
+        self.state.values().map(|state| state.table.read().unwrap().answers.len()).sum()
+    }
 }
 
 pub(crate) struct TabledFunctionState {
