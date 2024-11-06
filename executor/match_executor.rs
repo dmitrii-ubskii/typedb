@@ -79,9 +79,20 @@ impl MatchExecutor {
         if batch.is_none() && !self.suspend_points.is_empty() {
             let mut return_batch = batch;
             // TODO: This will loop forever if there's a negation which reaches a cycle.
+            // TODO: We do it all at once here, but we should probably be doing it in pattern_executor::execute_tabled_call when the function returns None.
             while return_batch.is_none() && !self.suspend_points.is_empty() {
                 self.last_seen_table_size = self.tabled_functions.total_table_size(); // TODO: Improve;
                 println!("Restoring suspend points @ table_size =  {}", self.last_seen_table_size);
+                for function_state in self.tabled_functions.iterate_states() {
+                    let mut guard = function_state.executor_state.try_lock().unwrap();
+                    debug_assert!(guard.pattern_executor.has_empty_control_stack());
+                    guard.pattern_executor.reset();
+                    if !guard.suspend_points.is_empty() {
+                        guard.suspend_points.swap_suspend_and_restore_points();
+                        guard.pattern_executor.prepare_to_restore_from_suspend_point(1);
+                    }
+                }
+                // And on the entry
                 self.suspend_points.swap_suspend_and_restore_points();
                 self.entry.prepare_to_restore_from_suspend_point(1);
 
@@ -91,8 +102,7 @@ impl MatchExecutor {
                     &mut self.tabled_functions,
                     &mut self.suspend_points,
                 )?;
-                let total_table_size_after = self.tabled_functions.total_table_size();
-                if return_batch.is_none() && self.last_seen_table_size == total_table_size_after {
+                if return_batch.is_none() && self.last_seen_table_size == self.tabled_functions.total_table_size() {
                     println!("Table size unchanged at {}", self.last_seen_table_size);
                     return Ok(None);
                 } // else retry or break depending on whether return_batch.is_some()

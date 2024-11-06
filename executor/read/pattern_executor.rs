@@ -55,6 +55,10 @@ impl PatternExecutor {
         PatternExecutor { executors, control_stack: Vec::new() }
     }
 
+    pub(crate) fn has_empty_control_stack(&self) -> bool {
+        self.control_stack.is_empty()
+    }
+
     pub(crate) fn compute_next_batch(
         &mut self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
@@ -81,7 +85,7 @@ impl PatternExecutor {
         self.control_stack.push(ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }));
     }
 
-    pub(super) fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.control_stack.clear();
     }
 
@@ -123,30 +127,37 @@ impl PatternExecutor {
                             SuspendPoint::Nested(suspended_nested) => {
                                 let NestedSuspension { executor_index, input_row, branch_index, depth } =
                                     suspended_nested;
-                                match executors[executor_index.0].unwrap_nested() {
-                                    NestedPatternExecutor::Negation(_) => {
-                                        unreachable!("Stratification must have been violated")
-                                    }
-                                    NestedPatternExecutor::Disjunction(disjunction) => {
-                                        disjunction.branches[branch_index.0]
-                                            .prepare_to_restore_from_suspend_point(depth);
-                                        control_stack.push(ControlInstruction::ExecuteDisjunction(ExecuteDisjunction {
-                                            index: executor_index,
-                                            branch_index,
-                                            input: input_row.into_owned(),
-                                        }))
-                                    }
-                                    NestedPatternExecutor::InlinedFunction(inlined) => {
-                                        inlined.inner.prepare_to_restore_from_suspend_point(depth);
-                                        control_stack.push(ControlInstruction::ExecuteInlinedFunction(
-                                            ExecuteInlinedFunction {
+                                if let StepExecutors::Nested(nested) = &mut executors[executor_index.0] {
+                                    match nested {
+                                        NestedPatternExecutor::Negation(_) => {
+                                            unreachable!("Stratification must have been violated")
+                                        }
+                                        NestedPatternExecutor::Disjunction(disjunction) => {
+                                            disjunction.branches[branch_index.0]
+                                                .prepare_to_restore_from_suspend_point(depth);
+                                            control_stack.push(ControlInstruction::ExecuteDisjunction(ExecuteDisjunction {
                                                 index: executor_index,
+                                                branch_index,
                                                 input: input_row.into_owned(),
-                                                parameters_override: inlined.parameter_registry.clone(),
-                                            },
-                                        ))
+                                            }))
+                                        }
+                                        NestedPatternExecutor::InlinedFunction(inlined) => {
+                                            inlined.inner.prepare_to_restore_from_suspend_point(depth);
+                                            control_stack.push(ControlInstruction::ExecuteInlinedFunction(
+                                                ExecuteInlinedFunction {
+                                                    index: executor_index,
+                                                    input: input_row.into_owned(),
+                                                    parameters_override: inlined.parameter_registry.clone(),
+                                                },
+                                            ))
+                                        }
                                     }
-                                }
+                                } else if let StepExecutors::StreamModifier(StreamModifierExecutor::Distinct { inner, output_width }) = &mut executors[executor_index.0] {
+                                    inner.prepare_to_restore_from_suspend_point(depth);
+                                    control_stack.push(ControlInstruction::ExecuteStreamModifier(
+                                        ExecuteStreamModifier { index: executor_index, mapper: StreamModifierResultMapper::Distinct(DistinctMapper::new(*output_width)), input: input_row.into_owned() }
+                                    ))
+                                } else { todo!("Any other modifier should be illegal") }
                             }
                         }
                     }
@@ -182,8 +193,7 @@ impl PatternExecutor {
                         } // fail
                     };
                     if !fresh_suspend_points.is_empty() {
-                        // TODO: This goes away because either (1) we can always retry here; or (2) We retry at the cyclic call itself and this is unreachable.
-                        suspend_point_context.push_nested(index, BranchIndex(0), input.clone().into_owned());
+                        todo!("A negated pattern encountered a cycle (lasso). Retries aren't done at the right place yet. - The results may be unsound.")
                     }
                 }
                 ControlInstruction::ExecuteDisjunction(ExecuteDisjunction { index, branch_index, input }) => {
@@ -449,18 +459,23 @@ impl PatternExecutor {
                 } = pattern_state_mutex_guard.deref_mut();
                 let context_with_function_parameters =
                     ExecutionContext::new(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone());
-                let suspension_state_before = function_suspend_points.record_nested_pattern_entry();
+                let _ignore_suspension_state_before = function_suspend_points.record_nested_pattern_entry();
                 let batch_opt = pattern_executor.batch_continue(
                     &context_with_function_parameters,
                     interrupt,
                     tabled_functions,
                     function_suspend_points,
                 )?;
+                let suspension_state_after = function_suspend_points.record_nested_pattern_exit();
                 if let Some(batch) = batch_opt {
                     let deduplicated_batch = executor.add_batch_to_table(&function_state, batch);
                     Some(deduplicated_batch)
                 } else {
-                    if function_suspend_points.record_nested_pattern_exit() != suspension_state_before {
+                    if suspension_state_after.has_suspend_points() {
+                        // function_suspend_points.swap_suspend_and_restore_points();
+                        // pattern_executor.reset();
+                        // pattern_executor.prepare_to_restore_from_suspend_point(1);
+                        // TODO: Consider retrying here. For now, just record a suspend point for ourselves.
                         suspend_point_context.push_tabled_call(index, executor);
                     }
                     None
@@ -471,8 +486,6 @@ impl PatternExecutor {
             self.control_stack.push(ControlInstruction::ExecuteTabledCall(TabledCall { index: index.clone() }));
             let mapped = executor.map_output(batch);
             self.push_next_instruction(context, index.next(), mapped)?;
-        } else {
-            // TODO: This looks like the place to consider a retry?
         }
         Ok(())
     }

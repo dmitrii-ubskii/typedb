@@ -41,29 +41,54 @@ const COMMON_SCHEMA: &str = r#"
         relation membership relates member, relates group;
     "#;
 
+// const REACHABILITY_DATA: &str = r#"
+// insert
+//         # Chain
+//         $c1 isa node, has name "c1";
+//         $c2 isa node, has name "c2";
+//         $c3 isa node, has name "c3";
+//
+//         (from: $c1, to: $c2) isa edge;
+//         (from: $c2, to: $c3) isa edge;
+//
+//         # Tree
+//         $t1 isa node, has name "t1";
+//         $t2 isa node, has name "t2";
+//         $t3 isa node, has name "t3";
+//         $t4 isa node, has name "t4";
+//         $t5 isa node, has name "t5";
+//         $t6 isa node, has name "t6";
+//         $t7 isa node, has name "t7";
+//
+//         (from: $t1, to: $t2) isa edge; (from: $t1, to: $t3) isa edge;
+//         (from: $t2, to: $t4) isa edge; (from: $t2, to: $t5) isa edge;
+//         (from: $t3, to: $t6) isa edge; (from: $t3, to: $t7) isa edge;
+//
+//         # Figure of 8? or of an ant.
+//         #    (e1)->-.  .-(e3)->-.  .->-(e5)->-.
+//         #           (e2)        (e4)          (e6)
+//         #    (e9)-<-'  '-<-(e8)-'  '-<-(e7)-<-'
+//
+//         $e1 isa node, has name "e1";
+//         $e2 isa node, has name "e2";
+//         $e3 isa node, has name "e3";
+//         $e4 isa node, has name "e4";
+//         $e5 isa node, has name "e5";
+//         $e6 isa node, has name "e6";
+//         $e7 isa node, has name "e7";
+//         $e8 isa node, has name "e8";
+//         $e9 isa node, has name "e9";
+//
+//         (from: $e1, to: $e2) isa edge; (from: $e2, to: $e3) isa edge;
+//         (from: $e3, to: $e4) isa edge; (from: $e4, to: $e5) isa edge;
+//
+//         (from: $e5, to: $e6) isa edge; (from: $e6, to: $e7) isa edge;
+//
+//         (from: $e7, to: $e4) isa edge; (from: $e4, to: $e8) isa edge;
+//         (from: $e8, to: $e2) isa edge; (from: $e2, to: $e9) isa edge;
+// "#;
 const REACHABILITY_DATA: &str = r#"
 insert
-        # Chain
-        $c1 isa node, has name "c1";
-        $c2 isa node, has name "c2";
-        $c3 isa node, has name "c3";
-
-        (from: $c1, to: $c2) isa edge;
-        (from: $c2, to: $c3) isa edge;
-
-        # Tree
-        $t1 isa node, has name "t1";
-        $t2 isa node, has name "t2";
-        $t3 isa node, has name "t3";
-        $t4 isa node, has name "t4";
-        $t5 isa node, has name "t5";
-        $t6 isa node, has name "t6";
-        $t7 isa node, has name "t7";
-
-        (from: $t1, to: $t2) isa edge; (from: $t1, to: $t3) isa edge;
-        (from: $t2, to: $t4) isa edge; (from: $t2, to: $t5) isa edge;
-        (from: $t3, to: $t6) isa edge; (from: $t3, to: $t7) isa edge;
-
         # Figure of 8? or of an ant.
         #    (e1)->-.  .-(e3)->-.  .->-(e5)->-.
         #           (e2)        (e4)          (e6)

@@ -97,22 +97,27 @@ pub(super) struct NestedSuspension {
 pub(super) struct SuspendPointContext {
     at_depth: usize,
     suspended_points: Vec<SuspendPoint>,
-    restore_from: Peekable<std::vec::IntoIter<SuspendPoint>>,
+    restore_from: Vec<SuspendPoint>, //Peekable<std::vec::IntoIter<SuspendPoint>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 struct SuspendPointTrackerState(usize);
 
+impl SuspendPointTrackerState {
+    pub(crate) fn has_suspend_points(&self) -> bool {
+        self.0 > 0
+    }
+}
+
 impl SuspendPointContext {
     pub(crate) fn new() -> Self {
-        Self { at_depth: 0, suspended_points: Vec::new(), restore_from: Vec::new().into_iter().peekable() }
+        Self { at_depth: 0, suspended_points: Vec::new(), restore_from: Vec::new() }
     }
 
     pub(crate) fn swap_suspend_and_restore_points(&mut self) {
-        debug_assert!(self.restore_from.peek().is_none());
-        let mut tmp = Vec::new();
-        std::mem::swap(&mut tmp, &mut self.suspended_points);
-        self.restore_from = tmp.into_iter().peekable();
+        debug_assert!(self.restore_from.is_empty());
+        self.restore_from.clear();
+        std::mem::swap(&mut self.restore_from, &mut self.suspended_points);
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -152,9 +157,9 @@ impl SuspendPointContext {
     }
 
     fn next_restore_point_from_current_depth(&mut self) -> Option<SuspendPoint> {
-        let has_next = if let Some(point) = self.restore_from.peek() { point.depth() == self.at_depth } else { false };
+        let has_next = if let Some(point) = self.restore_from.last() { point.depth() == self.at_depth } else { false };
         if has_next {
-            self.restore_from.next()
+            self.restore_from.pop()
         } else {
             None
         }

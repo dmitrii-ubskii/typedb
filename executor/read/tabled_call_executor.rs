@@ -53,18 +53,21 @@ impl TabledCallExecutor {
     }
 
     pub(crate) fn prepare(&mut self, input: MaybeOwnedRow<'static>) {
+        self.prepare_impl(input, TableIndex(0))
+    }
+
+    pub(crate) fn restore_from_suspend_point(&mut self, input: MaybeOwnedRow<'static>, next_table_index: TableIndex) {
+        self.prepare_impl(input, next_table_index);
+    }
+    pub fn prepare_impl(&mut self, input: MaybeOwnedRow<'static>, next_table_row: TableIndex) {
         let arguments = MaybeOwnedRow::new_owned(
             self.argument_positions.iter().map(|pos| input.get(pos.clone()).to_owned()).collect(),
             input.multiplicity(),
         );
         let call_key = CallKey { function_id: self.function_id.clone(), arguments };
-        self.active_executor = Some(TabledCallExecutorState { call_key, input, next_table_row: TableIndex(0) });
+        self.active_executor = Some(TabledCallExecutorState { call_key, input, next_table_row });
     }
 
-    pub(crate) fn restore_from_suspend_point(&mut self, input: MaybeOwnedRow<'static>, next_table_index: TableIndex) {
-        self.prepare(input);
-        self.active_executor.as_mut().unwrap().next_table_row = next_table_index;
-    }
 
     pub(crate) fn active_call_key(&self) -> Option<&CallKey> {
         self.active_executor.as_ref().map(|active| &active.call_key)

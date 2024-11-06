@@ -64,6 +64,10 @@ impl TabledFunctions {
         Ok(self.state.get(call_key).unwrap().clone())
     }
 
+    pub(crate) fn iterate_states(&self) -> impl Iterator<Item=Arc<TabledFunctionState>> + '_ {
+        self.state.values().cloned()
+    }
+
     pub(crate) fn total_table_size(&self) -> usize {
         self.state.values().map(|state| state.table.read().unwrap().answers.len()).sum()
     }
@@ -119,6 +123,7 @@ pub(crate) struct AnswerTable {
     // TODO: use a better data-structure. XSB has an "answer-trie" though a LinkedHashSet might do.
     answers: Vec<MaybeOwnedRow<'static>>,
     width: u32,
+    // TODO: We need to be able to record the fact that a table is DONE
 }
 
 impl AnswerTable {
