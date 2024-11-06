@@ -314,6 +314,9 @@ impl PatternExecutor {
         next_executor_index: ExecutorIndex,
         batch: FixedBatch,
     ) -> Result<(), ReadExecutionError> {
+        if batch.is_empty() {
+            return Ok(());
+        }
         if next_executor_index.0 >= self.executors.len() {
             self.control_stack.push(ControlInstruction::Yield(Yield { batch }));
         } else {

@@ -76,8 +76,9 @@ impl MatchExecutor {
         if batch.is_none() && !self.suspend_points.is_empty() {
             let mut return_batch = batch;
             // TODO: This will loop forever if there's a negation which reaches a cycle.
-            let mut total_table_size_before = self.tabled_functions.total_table_size(); // TODO: Improve;
             while return_batch.is_none() && !self.suspend_points.is_empty() {
+                let mut total_table_size_before = self.tabled_functions.total_table_size(); // TODO: Improve;
+                println!("Restoring suspend points @ table_size =  {}", total_table_size_before);
                 self.suspend_points.swap_suspend_and_restore_points();
                 self.entry.prepare_to_restore_from_suspend_point(1);
 
@@ -89,10 +90,9 @@ impl MatchExecutor {
                 )?;
                 let total_table_size_after = self.tabled_functions.total_table_size();
                 if return_batch.is_none() && total_table_size_before == total_table_size_after {
+                    println!("Table size unchanged at {}", total_table_size_before);
                     return Ok(None);
-                } else {
-                    total_table_size_before = total_table_size_after;
-                }
+                } // else retry or break depending on whether return_batch.is_some()
             }
             Ok(return_batch)
         } else {

@@ -5,6 +5,7 @@
  */
 
 use std::{collections::HashMap, sync::Arc};
+use std::mem::replace;
 
 use compiler::VariablePosition;
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
@@ -62,6 +63,29 @@ insert
         (from: $t1, to: $t2) isa edge; (from: $t1, to: $t3) isa edge;
         (from: $t2, to: $t4) isa edge; (from: $t2, to: $t5) isa edge;
         (from: $t3, to: $t6) isa edge; (from: $t3, to: $t7) isa edge;
+
+        # Figure of 8? or of an ant.
+        #    (e1)->-.  .-(e3)->-.  .->-(e5)->-.
+        #           (e2)        (e4)          (e6)
+        #    (e9)-<-'  '-<-(e8)-'  '-<-(e7)-<-'
+
+        $e1 isa node, has name "e1";
+        $e2 isa node, has name "e2";
+        $e3 isa node, has name "e3";
+        $e4 isa node, has name "e4";
+        $e5 isa node, has name "e5";
+        $e6 isa node, has name "e6";
+        $e7 isa node, has name "e7";
+        $e8 isa node, has name "e8";
+        $e9 isa node, has name "e9";
+
+        (from: $e1, to: $e2) isa edge; (from: $e2, to: $e3) isa edge;
+        (from: $e3, to: $e4) isa edge; (from: $e4, to: $e5) isa edge;
+
+        (from: $e5, to: $e6) isa edge; (from: $e6, to: $e7) isa edge;
+
+        (from: $e7, to: $e4) isa edge; (from: $e4, to: $e8) isa edge;
+        (from: $e8, to: $e2) isa edge; (from: $e2, to: $e9) isa edge;
 "#;
 
 fn setup_common(schema: &str) -> Context {
@@ -305,40 +329,56 @@ fn quadratic_reachability_in_tree() {
 
     let (rows, _positions) = run_write_query(&context, REACHABILITY_DATA).unwrap();
     assert_eq!(1, rows.len());
+    let query_template = r#"
+            with
+            fun reachable($from: node) -> { node }:
+            match
+                $return-me has name $name;
+                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
+                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
+            return { $return-me };
 
+            match
+                $from isa node, has name "<<NODE_NAME>>";
+                $to in reachable($from);
+        "#;
+        let placeholder_start_node = "<<NODE_NAME>>";
     {
         // Chain
-        let query = r#"
-            with
-            fun reachable($from: node) -> { node }:
-            match
-                $return-me has name $name;
-                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
-                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
-            return { $return-me };
-
-            match
-                $from isa node, has name "c1";
-                $to in reachable($from);
-        "#;
-        let (rows, _) = run_read_query(&context, query).unwrap();
+        let query = query_template.replace(placeholder_start_node, "c1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
         assert_eq!(rows.len(), 2);
 
-        let query = r#"
-            with
-            fun reachable($from: node) -> { node }:
-            match
-                $return-me has name $name;
-                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
-                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
-            return { $return-me };
-
-            match
-                $from isa node, has name "c2";
-                $to in reachable($from);
-        "#;
-        let (rows, _) = run_read_query(&context, query).unwrap();
+        let query = query_template.replace(placeholder_start_node, "c2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+    {
+        // tree
+        let query = query_template.replace(placeholder_start_node, "t1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(6, rows.len());
+
+        let query = query_template.replace(placeholder_start_node, "t2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(2, rows.len());
+    }
+
+    {
+        // ant
+        let query = query_template.replace(placeholder_start_node, "e1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(8, rows.len()); // all except e1
+
+        let query = query_template.replace(placeholder_start_node, "e9");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(0, rows.len()); // none
+
+
+        let query = query_template.replace(placeholder_start_node, "e2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(8, rows.len()); // all except e1. e2 should be reachable from itself
     }
 }
 
@@ -353,9 +393,8 @@ fn linear_reachability_in_tree() {
     let (rows, _positions) = run_write_query(&context, REACHABILITY_DATA).unwrap();
     assert_eq!(1, rows.len());
 
-    {
-        // Chain
-        let query = r#"
+    let placeholder_start_node = "<<NODE_NAME>>";
+    let query_template = r#"
             with
             fun reachable($from: node) -> { node }:
             match
@@ -365,27 +404,47 @@ fn linear_reachability_in_tree() {
             return { $return-me };
 
             match
-                $from isa node, has name "c1";
+                $from isa node, has name "<<NODE_NAME>>";
                 $to in reachable($from);
         "#;
-        let (rows, _) = run_read_query(&context, query).unwrap();
+
+    {
+        // Chain
+        let query = query_template.replace(placeholder_start_node, "c1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
         assert_eq!(rows.len(), 2);
 
-        let query = r#"
-            with
-            fun reachable($from: node) -> { node }:
-            match
-                $return-me has name $name;
-                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
-                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
-            return { $return-me };
-
-            match
-                $from isa node, has name "c2";
-                $to in reachable($from);
-        "#;
-        let (rows, _) = run_read_query(&context, query).unwrap();
+        let query = query_template.replace(placeholder_start_node, "c2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
         assert_eq!(rows.len(), 1);
+    }
+
+
+    {
+        // tree
+        let query = query_template.replace(placeholder_start_node, "t1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(6, rows.len());
+
+        let query = query_template.replace(placeholder_start_node, "t2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(2, rows.len());
+    }
+
+    {
+        // ant
+        let query = query_template.replace(placeholder_start_node, "e1");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(8, rows.len()); // all except e1
+
+        let query = query_template.replace(placeholder_start_node, "e9");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(0, rows.len()); // none
+
+
+        let query = query_template.replace(placeholder_start_node, "e2");
+        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        assert_eq!(8, rows.len()); // all except e1. e2 should be reachable from itself
     }
 }
 
