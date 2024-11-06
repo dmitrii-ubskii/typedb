@@ -69,6 +69,7 @@ pub(crate) fn compile_function(
     )?;
 
     let returns = compile_return_operation(&executable_stages, return_)?;
+    eprintln!("Created function with is_tabled={:?}", is_tabled);
     Ok(ExecutableFunction {
         executable_stages,
         argument_positions,

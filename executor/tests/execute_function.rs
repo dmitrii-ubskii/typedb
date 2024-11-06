@@ -39,6 +39,31 @@ const COMMON_SCHEMA: &str = r#"
         entity organisation plays membership:group;
         relation membership relates member, relates group;
     "#;
+
+const REACHABILITY_DATA: &str = r#"
+insert
+        # Chain
+        $c1 isa node, has name "c1";
+        $c2 isa node, has name "c2";
+        $c3 isa node, has name "c3";
+
+        (from: $c1, to: $c2) isa edge;
+        (from: $c2, to: $c3) isa edge;
+
+        # Tree
+        $t1 isa node, has name "t1";
+        $t2 isa node, has name "t2";
+        $t3 isa node, has name "t3";
+        $t4 isa node, has name "t4";
+        $t5 isa node, has name "t5";
+        $t6 isa node, has name "t6";
+        $t7 isa node, has name "t7";
+
+        (from: $t1, to: $t2) isa edge; (from: $t1, to: $t3) isa edge;
+        (from: $t2, to: $t4) isa edge; (from: $t2, to: $t5) isa edge;
+        (from: $t3, to: $t6) isa edge; (from: $t3, to: $t7) isa edge;
+"#;
+
 fn setup_common(schema: &str) -> Context {
     let (_tmp_dir, mut storage) = create_core_storage();
     setup_concept_storage(&mut storage);
@@ -278,7 +303,7 @@ fn function_binary() {
 
 
 #[test]
-fn quadratic_reachability_in_tree() { // Doesn't actually need functions
+fn quadratic_reachability_in_tree() {
     let custom_schema = r#"define
         attribute name value string;
         entity node, owns name @card(0..), plays edge:from, plays edge:to;
@@ -286,15 +311,7 @@ fn quadratic_reachability_in_tree() { // Doesn't actually need functions
     "#;
     let context = setup_common(custom_schema);
     let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query_str = r#"insert
-        $n1 isa node, has name "n1";
-        $n2 isa node, has name "n2";
-        $n3 isa node, has name "n3";
-
-        (from: $n1, to: $n2) isa edge;
-        (from: $n2, to: $n3) isa edge;
-    "#;
-    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
+    let insert_query = typeql::parse_query(REACHABILITY_DATA).unwrap().into_pipeline();
     let insert_pipeline = context
         .query_manager
         .prepare_write_pipeline(
@@ -314,7 +331,7 @@ fn quadratic_reachability_in_tree() { // Doesn't actually need functions
     snapshot.commit().unwrap();
 
     {
-        // quadratic tabling reachability.
+        // Chain
         let query = r#"
             with
             fun reachable($from: node) -> { node }:
@@ -325,11 +342,27 @@ fn quadratic_reachability_in_tree() { // Doesn't actually need functions
             return { $return-me };
 
             match
-                $from isa node, has name "n1";
+                $from isa node, has name "c1";
                 $to in reachable($from);
         "#;
         let (rows, _) = run_read_query(&context, query).unwrap();
         assert_eq!(rows.len(), 2);
+
+        let query = r#"
+            with
+            fun reachable($from: node) -> { node }:
+            match
+                $return-me has name $name;
+                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
+                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
+            return { $return-me };
+
+            match
+                $from isa node, has name "c2";
+                $to in reachable($from);
+        "#;
+        let (rows, _) = run_read_query(&context, query).unwrap();
+        assert_eq!(rows.len(), 1);
     }
 }
 
@@ -343,15 +376,7 @@ fn linear_reachability_in_tree() {
     "#;
     let context = setup_common(custom_schema);
     let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query_str = r#"insert
-        $n1 isa node, has name "n1";
-        $n2 isa node, has name "n2";
-        $n3 isa node, has name "n3";
-
-        (from: $n1, to: $n2) isa edge;
-        (from: $n2, to: $n3) isa edge;
-    "#;
-    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
+    let insert_query = typeql::parse_query(REACHABILITY_DATA).unwrap().into_pipeline();
     let insert_pipeline = context
         .query_manager
         .prepare_write_pipeline(
@@ -371,7 +396,7 @@ fn linear_reachability_in_tree() {
     snapshot.commit().unwrap();
 
     {
-        // quadratic tabling reachability.
+        // Chain
         let query = r#"
             with
             fun reachable($from: node) -> { node }:
@@ -382,12 +407,30 @@ fn linear_reachability_in_tree() {
             return { $return-me };
 
             match
-                $from isa node, has name "n1";
+                $from isa node, has name "c1";
                 $to in reachable($from);
         "#;
         let (rows, _) = run_read_query(&context, query).unwrap();
         assert_eq!(rows.len(), 2);
+
+        let query = r#"
+            with
+            fun reachable($from: node) -> { node }:
+            match
+                $return-me has name $name;
+                { (from: $from, to: $middle) isa edge; $indirect in reachable($middle); $indirect has name $name; } or
+                { (from: $from, to: $direct) isa edge; $direct has name $name; }; # Do we have is yet?
+            return { $return-me };
+
+            match
+                $from isa node, has name "c2";
+                $to in reachable($from);
+        "#;
+        let (rows, _) = run_read_query(&context, query).unwrap();
+        assert_eq!(rows.len(), 1);
     }
+
+
 }
 
 #[test]

@@ -420,7 +420,9 @@ impl PatternExecutor {
         let call_key = executor.active_call_key().unwrap();
         let function_state = tabled_functions.get_or_create_function_state(&context, call_key)?;
         let found = match executor.try_read_next_batch(&function_state) {
-            TabledCallResult::RetrievedFromTable(batch) => Some(batch),
+            TabledCallResult::RetrievedFromTable(batch) => {
+                Some(batch)
+            },
             TabledCallResult::Suspend => {
                 suspend_point_context.push_tabled_call(index, executor); // Clearly a dummy
                 None
