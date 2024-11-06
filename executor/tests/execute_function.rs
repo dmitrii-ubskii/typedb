@@ -18,7 +18,7 @@ use function::function_manager::FunctionManager;
 use lending_iterator::LendingIterator;
 use query::query_manager::QueryManager;
 use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
-use test_utils::{assert_matches, TempDir};
+use test_utils::TempDir;
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
 
@@ -107,31 +107,40 @@ fn run_read_query(
     result.map(move |rows| (rows, rows_positions))
 }
 
-#[test]
-fn function_compiles() {
-    let context = setup_common(COMMON_SCHEMA);
+fn run_write_query(
+    context: &Context,
+    query: &str,
+) -> Result<(Vec<MaybeOwnedRow<'static>>, HashMap<String, VariablePosition>), PipelineExecutionError> {
     let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query_str = r#"insert
-        $p1 isa person, has name "Alice", has age 1, has age 5;
-        $p2 isa person, has name "Bob", has age 2;"#;
-    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
-    let insert_pipeline = context
+    let query_as_pipeline = typeql::parse_query(query).unwrap().into_pipeline();
+    let pipeline = context
         .query_manager
         .prepare_write_pipeline(
             snapshot,
             &context.type_manager,
             context.thing_manager.clone(),
             &context.function_manager,
-            &insert_query,
+            &query_as_pipeline,
         )
         .unwrap();
+    let rows_positions = pipeline.rows_positions().unwrap().clone();
     let (mut iterator, ExecutionContext { snapshot, .. }) =
-        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
-
-    assert_matches!(iterator.next(), Some(Ok(_)));
-    assert_matches!(iterator.next(), None);
+        pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
     let snapshot = Arc::into_inner(snapshot).unwrap();
+    let result: Result<Vec<MaybeOwnedRow<'static>>, PipelineExecutionError> =
+        iterator.map_static(|row| row.map(|row| row.into_owned()).map_err(|err| err.clone())).collect();
     snapshot.commit().unwrap();
+    result.map(move |rows| (rows, rows_positions))
+}
+
+#[test]
+fn function_compiles() {
+    let context = setup_common(COMMON_SCHEMA);
+    let insert_query_str = r#"insert
+        $p1 isa person, has name "Alice", has age 1, has age 5;
+        $p2 isa person, has name "Bob", has age 2;"#;
+    let (rows, _positions) = run_write_query(&context, insert_query_str).unwrap();
+    assert_eq!(1, rows.len());
 
     {
         let query = r#"
@@ -256,30 +265,14 @@ fn function_compiles() {
 #[test]
 fn function_binary() {
     let context = setup_common(COMMON_SCHEMA);
-    let snapshot = context.storage.clone().open_snapshot_write();
     let insert_query_str = r#"insert
         $p1 isa person, has name "Alice", has age 1, has age 5;
         $p2 isa person, has name "Bob", has age 2;
         $p3 isa person, has name "Chris", has age 5;
         "#;
-    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
-    let insert_pipeline = context
-        .query_manager
-        .prepare_write_pipeline(
-            snapshot,
-            &context.type_manager,
-            context.thing_manager.clone(),
-            &context.function_manager,
-            &insert_query,
-        )
-        .unwrap();
-    let (mut iterator, ExecutionContext { snapshot, .. }) =
-        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
 
-    assert_matches!(iterator.next(), Some(Ok(_)));
-    assert_matches!(iterator.next(), None);
-    let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    let (rows, _positions) = run_write_query(&context, insert_query_str).unwrap();
+    assert_eq!(1, rows.len());
 
     {
         let query = r#"
@@ -301,7 +294,6 @@ fn function_binary() {
     }
 }
 
-
 #[test]
 fn quadratic_reachability_in_tree() {
     let custom_schema = r#"define
@@ -310,25 +302,9 @@ fn quadratic_reachability_in_tree() {
         relation edge, relates from, relates to;
     "#;
     let context = setup_common(custom_schema);
-    let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query = typeql::parse_query(REACHABILITY_DATA).unwrap().into_pipeline();
-    let insert_pipeline = context
-        .query_manager
-        .prepare_write_pipeline(
-            snapshot,
-            &context.type_manager,
-            context.thing_manager.clone(),
-            &context.function_manager,
-            &insert_query,
-        )
-        .unwrap();
-    let (mut iterator, ExecutionContext { snapshot, .. }) =
-        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
 
-    assert_matches!(iterator.next(), Some(Ok(_)));
-    assert_matches!(iterator.next(), None);
-    let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    let (rows, _positions) = run_write_query(&context, REACHABILITY_DATA).unwrap();
+    assert_eq!(1, rows.len());
 
     {
         // Chain
@@ -366,7 +342,6 @@ fn quadratic_reachability_in_tree() {
     }
 }
 
-
 #[test]
 fn linear_reachability_in_tree() {
     let custom_schema = r#"define
@@ -375,25 +350,8 @@ fn linear_reachability_in_tree() {
         relation edge, relates from, relates to;
     "#;
     let context = setup_common(custom_schema);
-    let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query = typeql::parse_query(REACHABILITY_DATA).unwrap().into_pipeline();
-    let insert_pipeline = context
-        .query_manager
-        .prepare_write_pipeline(
-            snapshot,
-            &context.type_manager,
-            context.thing_manager.clone(),
-            &context.function_manager,
-            &insert_query,
-        )
-        .unwrap();
-    let (mut iterator, ExecutionContext { snapshot, .. }) =
-        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
-
-    assert_matches!(iterator.next(), Some(Ok(_)));
-    assert_matches!(iterator.next(), None);
-    let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    let (rows, _positions) = run_write_query(&context, REACHABILITY_DATA).unwrap();
+    assert_eq!(1, rows.len());
 
     {
         // Chain
@@ -429,8 +387,6 @@ fn linear_reachability_in_tree() {
         let (rows, _) = run_read_query(&context, query).unwrap();
         assert_eq!(rows.len(), 1);
     }
-
-
 }
 
 #[test]
@@ -439,8 +395,7 @@ fn fibonacci() {
         attribute number @independent, value long;
     "#;
     let context = setup_common(custom_schema);
-    let snapshot = context.storage.clone().open_snapshot_write();
-    let insert_query_str = r#"insert
+    let insert_query = r#"insert
         $n1   1 isa number;
         $n2   2 isa number;
         $n3   3 isa number;
@@ -457,24 +412,8 @@ fn fibonacci() {
         $n14 14 isa number;
         $n15 15 isa number;
     "#;
-    let insert_query = typeql::parse_query(insert_query_str).unwrap().into_pipeline();
-    let insert_pipeline = context
-        .query_manager
-        .prepare_write_pipeline(
-            snapshot,
-            &context.type_manager,
-            context.thing_manager.clone(),
-            &context.function_manager,
-            &insert_query,
-        )
-        .unwrap();
-    let (mut iterator, ExecutionContext { snapshot, .. }) =
-        insert_pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
-
-    assert_matches!(iterator.next(), Some(Ok(_)));
-    assert_matches!(iterator.next(), None);
-    let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    let (rows, _positions) = run_write_query(&context, insert_query).unwrap();
+    assert_eq!(1, rows.len());
 
     {
         let query = r#"

@@ -644,8 +644,11 @@ impl ConjunctionPlan<'_> {
         input_variables: &Vec<Variable>,
         variable_registry: &VariableRegistry,
     ) -> MatchExecutableBuilder {
-        let mut match_builder =
-            MatchExecutableBuilder::new(already_assigned_positions, selected_variables.clone().into_iter().collect(), input_variables);
+        let mut match_builder = MatchExecutableBuilder::new(
+            already_assigned_positions,
+            selected_variables.clone().into_iter().collect(),
+            input_variables,
+        );
 
         for &index in &self.ordering {
             match index {
@@ -1166,7 +1169,8 @@ impl<'a> DisjunctionPlan<'a> {
         let disjunction_inputs = assigned_positions.keys().copied().collect();
         let mut assigned_positions = assigned_positions.clone();
         for branch in &self.branches {
-            let lowered_branch = branch.lower(selected_variables.clone(), &assigned_positions, &disjunction_inputs, variable_registry);
+            let lowered_branch =
+                branch.lower(selected_variables.clone(), &assigned_positions, &disjunction_inputs, variable_registry);
             assigned_positions = lowered_branch.position_mapping().clone();
             branches.push(lowered_branch);
         }

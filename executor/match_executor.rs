@@ -81,9 +81,14 @@ impl MatchExecutor {
                 self.suspend_points.swap_suspend_and_restore_points();
                 self.entry.prepare_to_restore_from_suspend_point(1);
 
-                return_batch = self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspend_points)?;
+                return_batch = self.entry.compute_next_batch(
+                    context,
+                    interrupt,
+                    &mut self.tabled_functions,
+                    &mut self.suspend_points,
+                )?;
                 let total_table_size_after = self.tabled_functions.total_table_size();
-                if return_batch.is_none() && total_table_size_before == total_table_size_after  {
+                if return_batch.is_none() && total_table_size_before == total_table_size_after {
                     return Ok(None);
                 } else {
                     total_table_size_before = total_table_size_after;

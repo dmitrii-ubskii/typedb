@@ -18,7 +18,7 @@ use crate::{
         control_instruction::{
             CollectingStage, ControlInstruction, ExecuteDisjunction, ExecuteImmediate, ExecuteInlinedFunction,
             ExecuteNegation, ExecuteStreamModifier, MapRowBatchToRowForNested, PatternStart, ReshapeForReturn,
-            StreamCollected, TabledCall, Yield,
+            RestoreSuspendPoint, StreamCollected, TabledCall, Yield,
         },
         nested_pattern_executor::{Disjunction, InlinedFunction, Negation, NestedPatternExecutor},
         step_executor::StepExecutors,
@@ -27,13 +27,11 @@ use crate::{
         },
         tabled_call_executor::TabledCallResult,
         tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions},
-        SuspendPointContext,
+        NestedSuspension, SuspendPoint, SuspendPointContext, TabledCallSuspension,
     },
     row::MaybeOwnedRow,
     ExecutionInterrupt,
 };
-use crate::read::control_instruction::RestoreSuspendPoint;
-use crate::read::{NestedSuspension, SuspendPoint, TabledCallSuspension};
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct BranchIndex(pub usize);
@@ -112,29 +110,41 @@ impl PatternExecutor {
                 ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }) => {
                     debug_assert!(depth == suspend_point_context.current_depth()); // Smell. The depth in the step is redundant
                     if let Some(point) = suspend_point_context.next_restore_point_from_current_depth() {
-                        control_stack.push(ControlInstruction::RestoreSuspendPoint( RestoreSuspendPoint { depth }) );
+                        control_stack.push(ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }));
                         match point {
                             SuspendPoint::TabledCall(suspended_call) => {
-                                let TabledCallSuspension { executor_index, next_table_row, input_row, .. } = suspended_call;
+                                let TabledCallSuspension { executor_index, next_table_row, input_row, .. } =
+                                    suspended_call;
                                 let executor = executors[executor_index.0].unwrap_tabled_call();
                                 executor.restore_from_suspend_point(input_row, next_table_row);
-                                control_stack.push(ControlInstruction::ExecuteTabledCall(TabledCall { index: executor_index }))
+                                control_stack
+                                    .push(ControlInstruction::ExecuteTabledCall(TabledCall { index: executor_index }))
                             }
                             SuspendPoint::Nested(suspended_nested) => {
-                                let NestedSuspension { executor_index, input_row, branch_index, depth } = suspended_nested;
+                                let NestedSuspension { executor_index, input_row, branch_index, depth } =
+                                    suspended_nested;
                                 match executors[executor_index.0].unwrap_nested() {
-                                    NestedPatternExecutor::Negation(_) => unreachable!("Stratification must have been violated"),
+                                    NestedPatternExecutor::Negation(_) => {
+                                        unreachable!("Stratification must have been violated")
+                                    }
                                     NestedPatternExecutor::Disjunction(disjunction) => {
-                                        disjunction.branches[branch_index.0].prepare_to_restore_from_suspend_point(depth);
+                                        disjunction.branches[branch_index.0]
+                                            .prepare_to_restore_from_suspend_point(depth);
                                         control_stack.push(ControlInstruction::ExecuteDisjunction(ExecuteDisjunction {
-                                            index: executor_index, branch_index, input: input_row.into_owned(),
+                                            index: executor_index,
+                                            branch_index,
+                                            input: input_row.into_owned(),
                                         }))
                                     }
                                     NestedPatternExecutor::InlinedFunction(inlined) => {
                                         inlined.inner.prepare_to_restore_from_suspend_point(depth);
-                                        control_stack.push(ControlInstruction::ExecuteInlinedFunction(ExecuteInlinedFunction {
-                                            index: executor_index, input: input_row.into_owned(), parameters_override: inlined.parameter_registry.clone()
-                                        }))
+                                        control_stack.push(ControlInstruction::ExecuteInlinedFunction(
+                                            ExecuteInlinedFunction {
+                                                index: executor_index,
+                                                input: input_row.into_owned(),
+                                                parameters_override: inlined.parameter_registry.clone(),
+                                            },
+                                        ))
                                     }
                                 }
                             }
@@ -423,16 +433,17 @@ impl PatternExecutor {
         let call_key = executor.active_call_key().unwrap();
         let function_state = tabled_functions.get_or_create_function_state(&context, call_key)?;
         let found = match executor.try_read_next_batch(&function_state) {
-            TabledCallResult::RetrievedFromTable(batch) => {
-                Some(batch)
-            },
+            TabledCallResult::RetrievedFromTable(batch) => Some(batch),
             TabledCallResult::Suspend => {
                 suspend_point_context.push_tabled_call(index, executor); // Clearly a dummy
                 None
             }
             TabledCallResult::MustExecutePattern(mut pattern_state_mutex_guard) => {
-                let TabledFunctionPatternExecutorState { pattern_executor, suspend_points: function_suspend_points, parameters } =
-                    pattern_state_mutex_guard.deref_mut();
+                let TabledFunctionPatternExecutorState {
+                    pattern_executor,
+                    suspend_points: function_suspend_points,
+                    parameters,
+                } = pattern_state_mutex_guard.deref_mut();
                 let context_with_function_parameters =
                     ExecutionContext::new(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone());
                 let suspension_state_before = function_suspend_points.record_nested_pattern_entry();

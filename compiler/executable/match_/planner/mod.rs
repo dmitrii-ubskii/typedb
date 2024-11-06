@@ -58,7 +58,13 @@ pub fn compile(
         &variable_registry,
         expressions,
         statistics,
-    ).lower(variable_registry.variable_names().keys().copied(), &assigned_identities, &input_variables.keys().copied().collect(), &variable_registry)
+    )
+    .lower(
+        variable_registry.variable_names().keys().copied(),
+        &assigned_identities,
+        &input_variables.keys().copied().collect(),
+        &variable_registry,
+    )
     .finish(variable_registry)
 }
 
@@ -251,7 +257,11 @@ struct MatchExecutableBuilder {
 }
 
 impl MatchExecutableBuilder {
-    fn new(assigned_positions: &HashMap<Variable, ExecutorVariable>, selected_variables: Vec<Variable>, input_variables: &Vec<Variable>) -> Self {
+    fn new(
+        assigned_positions: &HashMap<Variable, ExecutorVariable>,
+        selected_variables: Vec<Variable>,
+        input_variables: &Vec<Variable>,
+    ) -> Self {
         let index = assigned_positions.clone();
         let current_outputs = input_variables.clone();
         let reverse_index = index.iter().map(|(&var, &pos)| (pos, var)).collect();

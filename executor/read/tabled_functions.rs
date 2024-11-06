@@ -18,10 +18,7 @@ use crate::{
     batch::FixedBatch,
     error::ReadExecutionError,
     pipeline::stage::ExecutionContext,
-    read::{
-        pattern_executor::PatternExecutor, step_executor::create_executors_for_function,
-        SuspendPointContext,
-    },
+    read::{pattern_executor::PatternExecutor, step_executor::create_executors_for_function, SuspendPointContext},
     row::MaybeOwnedRow,
 };
 
