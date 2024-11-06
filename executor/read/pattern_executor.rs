@@ -94,6 +94,9 @@ impl PatternExecutor {
         tabled_functions: &mut TabledFunctions,
         suspend_point_context: &mut SuspendPointContext,
     ) -> Result<Option<FixedBatch>, ReadExecutionError> {
+        // TODO: In debug mode, this function has a frame of ~60k, causing an overflow at ~10 frames
+        //  In release mode, the frame is ~10x smaller, allowing ~100 frames.
+        //  We could switch to iteration & handle the stack ourselves: StackFrame { pattern_executor, return_address }
         // debug_assert!(self.control_stack.len() > 0);
         while self.control_stack.last().is_some() {
             let Self { control_stack, executors } = self;
