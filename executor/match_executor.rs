@@ -30,6 +30,7 @@ pub struct MatchExecutor {
     input: Option<MaybeOwnedRow<'static>>,
     tabled_functions: TabledFunctions,
     suspend_points: SuspendPointContext,
+    last_seen_table_size: usize,
 }
 
 impl MatchExecutor {
@@ -50,6 +51,7 @@ impl MatchExecutor {
             tabled_functions: TabledFunctions::new(function_registry),
             input: Some(input.into_owned()),
             suspend_points: SuspendPointContext::new(),
+            last_seen_table_size: 0,
         })
     }
 
@@ -70,6 +72,7 @@ impl MatchExecutor {
     ) -> Result<Option<FixedBatch>, ReadExecutionError> {
         if let Some(input) = self.input.take() {
             self.entry.prepare(FixedBatch::from(input.into_owned()));
+            self.last_seen_table_size = 0;
         }
         let batch =
             self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspend_points)?;
@@ -77,8 +80,8 @@ impl MatchExecutor {
             let mut return_batch = batch;
             // TODO: This will loop forever if there's a negation which reaches a cycle.
             while return_batch.is_none() && !self.suspend_points.is_empty() {
-                let mut total_table_size_before = self.tabled_functions.total_table_size(); // TODO: Improve;
-                println!("Restoring suspend points @ table_size =  {}", total_table_size_before);
+                self.last_seen_table_size = self.tabled_functions.total_table_size(); // TODO: Improve;
+                println!("Restoring suspend points @ table_size =  {}", self.last_seen_table_size);
                 self.suspend_points.swap_suspend_and_restore_points();
                 self.entry.prepare_to_restore_from_suspend_point(1);
 
@@ -89,8 +92,8 @@ impl MatchExecutor {
                     &mut self.suspend_points,
                 )?;
                 let total_table_size_after = self.tabled_functions.total_table_size();
-                if return_batch.is_none() && total_table_size_before == total_table_size_after {
-                    println!("Table size unchanged at {}", total_table_size_before);
+                if return_batch.is_none() && self.last_seen_table_size == total_table_size_after {
+                    println!("Table size unchanged at {}", self.last_seen_table_size);
                     return Ok(None);
                 } // else retry or break depending on whether return_batch.is_some()
             }

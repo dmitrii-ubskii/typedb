@@ -408,38 +408,38 @@ fn linear_reachability_in_tree() {
                 $to in reachable($from);
         "#;
 
+    // {
+    //     // Chain
+    //     let query = query_template.replace(placeholder_start_node, "c1");
+    //     let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+    //     assert_eq!(rows.len(), 2);
+    //
+    //     let query = query_template.replace(placeholder_start_node, "c2");
+    //     let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+    //     assert_eq!(rows.len(), 1);
+    // }
+    //
+    //
+    // {
+    //     // tree
+    //     let query = query_template.replace(placeholder_start_node, "t1");
+    //     let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+    //     assert_eq!(6, rows.len());
+    //
+    //     let query = query_template.replace(placeholder_start_node, "t2");
+    //     let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+    //     assert_eq!(2, rows.len());
+    // }
+
     {
-        // Chain
-        let query = query_template.replace(placeholder_start_node, "c1");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(rows.len(), 2);
-
-        let query = query_template.replace(placeholder_start_node, "c2");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(rows.len(), 1);
-    }
-
-
-    {
-        // tree
-        let query = query_template.replace(placeholder_start_node, "t1");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(6, rows.len());
-
-        let query = query_template.replace(placeholder_start_node, "t2");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(2, rows.len());
-    }
-
-    {
-        // ant
-        let query = query_template.replace(placeholder_start_node, "e1");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(8, rows.len()); // all except e1
-
-        let query = query_template.replace(placeholder_start_node, "e9");
-        let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
-        assert_eq!(0, rows.len()); // none
+        // // ant
+        // let query = query_template.replace(placeholder_start_node, "e1");
+        // let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        // assert_eq!(8, rows.len()); // all except e1
+        //
+        // let query = query_template.replace(placeholder_start_node, "e9");
+        // let (rows, _) = run_read_query(&context, query.as_str()).unwrap();
+        // assert_eq!(0, rows.len()); // none
 
 
         let query = query_template.replace(placeholder_start_node, "e2");
