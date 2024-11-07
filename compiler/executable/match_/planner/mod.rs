@@ -19,6 +19,7 @@ use crate::{
     executable::match_::{
         instructions::{CheckInstruction, ConstraintInstruction},
         planner::{
+            function_plan::ExecutableFunctionRegistry,
             match_executable::{
                 AssignmentStep, CheckStep, DisjunctionStep, ExecutionStep, FunctionCallStep, IntersectionStep,
                 MatchExecutable, NegationStep,
@@ -256,13 +257,9 @@ struct MatchExecutableBuilder {
 }
 
 impl MatchExecutableBuilder {
-    fn new(
-        assigned_positions: &HashMap<Variable, ExecutorVariable>,
-        selected_variables: Vec<Variable>,
-        input_variables: &Vec<Variable>,
-    ) -> Self {
+    fn new(assigned_positions: &HashMap<Variable, ExecutorVariable>, selected_variables: Vec<Variable>) -> Self {
         let index = assigned_positions.clone();
-        let current_outputs = input_variables.clone();
+        let current_outputs = index.keys().copied().collect();
         let reverse_index = index.iter().map(|(&var, &pos)| (pos, var)).collect();
         let next_position = assigned_positions
             .values()
@@ -315,11 +312,17 @@ impl MatchExecutableBuilder {
     }
 
     fn push_check(&mut self, variables: &[Variable], check: CheckInstruction<ExecutorVariable>) {
-        // if it is a comparison or IID (TODO) we can inline the check into previous instructions
-        if self.inline_as_optimisation(variables, &check) {
-            return;
+        if let Some(intersection) = self.current.as_mut().and_then(|b| b.builder.as_intersection_mut()) {
+            for instruction in intersection.instructions.iter_mut().rev() {
+                let mut is_producer = false;
+                instruction.new_variables_foreach(|var| is_producer |= variables.contains(&self.reverse_index[&var]));
+                if is_producer {
+                    instruction.add_check(check);
+                    self.current.as_mut().unwrap().selected_variables = self.current_outputs.clone();
+                    return;
+                }
+            }
         }
-
         // all variables are inputs
         if self.current.as_ref().is_some_and(|builder| !builder.builder.is_check()) {
             self.finish_one();
@@ -332,43 +335,6 @@ impl MatchExecutableBuilder {
         }
         let current = self.current.as_mut().unwrap().builder.as_check_mut().unwrap();
         current.instructions.push(check);
-    }
-
-    /// inject the check as an optimisation into previously built steps
-    fn inline_as_optimisation(&mut self, variables: &[Variable], check: &CheckInstruction<ExecutorVariable>) -> bool {
-        if !matches!(check, &CheckInstruction::Comparison { .. }) {
-            // TODO: inject IID check as well
-            return false;
-        }
-
-        let mut inlined = false;
-        let mut added_to_current = false;
-        let steps_count = self.steps.len();
-        for (i, step) in self.steps.iter_mut().chain(self.current.as_mut().map(|box_| box_.as_mut())).enumerate() {
-            // TODO: we may be able to inject into non-intersection steps as well? For now, we know intersection steps are always sorted
-            if let StepInstructionsBuilder::Intersection(intersection) = &mut step.builder {
-                let mut is_added = false;
-                for instruction in intersection.instructions.iter_mut() {
-                    // if any check variable is produced and all other variables are available
-                    let any_produced = variables.iter().any(|var| instruction.is_new_variable(self.index[var]));
-                    let all_available = variables.iter().all(|var| {
-                        instruction.is_new_variable(self.index[var]) || instruction.is_input_variable(self.index[var])
-                    });
-                    if any_produced && all_available {
-                        instruction.add_check(check.clone());
-                        is_added = true;
-                    }
-                }
-                inlined |= is_added;
-                if is_added && i == steps_count {
-                    added_to_current = true;
-                }
-            }
-        }
-        if added_to_current {
-            self.current.as_mut().unwrap().selected_variables = self.current_outputs.clone();
-        }
-        inlined
     }
 
     fn push_step(&mut self, variable_positions: &HashMap<Variable, ExecutorVariable>, mut step: StepBuilder) {
