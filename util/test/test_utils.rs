@@ -52,6 +52,8 @@ pub fn create_tmp_dir() -> TempDir {
     TempDir(dir)
 }
 
+pub fn use_existing_dir(dir: PathBuf) -> TempDir { TempDir(dir) }
+
 #[macro_export]
 macro_rules! assert_matches {
     ($expression:expr, $pattern:pat $(if $guard:expr)? $(, $message:literal $(, $arg:expr)*)? $(,)?) => {
