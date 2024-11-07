@@ -89,12 +89,12 @@ impl MatchExecutor {
                     guard.pattern_executor.reset();
                     if !guard.suspend_points.is_empty() {
                         guard.suspend_points.swap_suspend_and_restore_points();
-                        guard.pattern_executor.prepare_to_restore_from_suspend_point(1);
+                        guard.pattern_executor.prepare_to_restore_from_suspend_point(0);
                     }
                 }
                 // And on the entry
                 self.suspend_points.swap_suspend_and_restore_points();
-                self.entry.prepare_to_restore_from_suspend_point(1);
+                self.entry.prepare_to_restore_from_suspend_point(0);
 
                 return_batch = self.entry.compute_next_batch(
                     context,

@@ -82,7 +82,7 @@ impl PatternExecutor {
     pub(crate) fn prepare_to_restore_from_suspend_point(&mut self, depth: usize) {
         debug_assert!(self.control_stack.is_empty());
         self.reset();
-        self.control_stack.push(ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth }));
+        self.control_stack.push(ControlInstruction::RestoreSuspendPoint(RestoreSuspendPoint { depth: depth + 1 }));
     }
 
     pub(crate) fn reset(&mut self) {
