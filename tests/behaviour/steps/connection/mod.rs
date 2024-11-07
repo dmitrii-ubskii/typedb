@@ -12,7 +12,7 @@ use std::{
 
 use macro_rules_attribute::apply;
 use server::{parameters::config::Config, typedb};
-use test_utils::{create_tmp_dir, TempDir};
+use test_utils::{create_tmp_dir, use_existing_dir, TempDir};
 
 use crate::{generic_step, Context};
 
@@ -25,7 +25,8 @@ static TYPEDB: OnceLock<(TempDir, Arc<Mutex<typedb::Server>>)> = OnceLock::new()
 #[step("typedb starts")]
 pub async fn typedb_starts(context: &mut Context) {
     let (_, server) = TYPEDB.get_or_init(|| {
-        let server_dir = create_tmp_dir();
+        // let server_dir = create_tmp_dir();
+        let server_dir = use_existing_dir("/Users/cxdorn/Git/typedb/data".into());
         let config = Config::new_with_data_directory(server_dir.as_ref());
         let server = typedb::Server::open(config).unwrap();
         (server_dir, Arc::new(Mutex::new(server)))
