@@ -37,12 +37,13 @@ use crate::annotation::expression::{
     },
     ExpressionCompileError,
 };
+use crate::annotation::expression::instructions::load_cast::{CastLeftDecimalToDouble, CastRightDecimalToDouble};
 
 pub struct ExpressionCompilationContext<'this> {
     expression_tree: &'this ExpressionTree<Variable>,
     variable_value_categories: &'this HashMap<Variable, ExpressionValueType>,
     parameters: &'this ParameterRegistry,
-    type_stack: Vec<ExpressionValueType>,
+    pub type_stack: Vec<ExpressionValueType>,
 
     instructions: Vec<ExpressionOpCode>,
     variable_stack: Vec<Variable>,
