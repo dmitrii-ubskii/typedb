@@ -36,6 +36,7 @@ impl<PreviousStage> MatchStageExecutor<PreviousStage> {
         previous: PreviousStage,
         function_registry: Arc<ExecutableFunctionRegistry>,
     ) -> Self {
+        // DEBUG: dbg![&executable];
         Self { executable, previous, function_registry }
     }
 }

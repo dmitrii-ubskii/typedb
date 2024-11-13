@@ -35,9 +35,10 @@ impl<'a> Row<'a> {
     }
 
     pub(crate) fn set(&mut self, position: VariablePosition, value: VariableValue<'static>) {
-        if *self.get(position) == VariableValue::Empty || *self.get(position) == value {
-            println!("hi");
-        }
+        // DEBUG:
+        // if *self.get(position) != VariableValue::Empty && *self.get(position) != value {
+        //     println!("hi");
+        // }
         debug_assert!(
             *self.get(position) == VariableValue::Empty || *self.get(position) == value,
             "{} != {} at {}",

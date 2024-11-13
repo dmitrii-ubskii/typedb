@@ -20,6 +20,7 @@ pub(crate) fn encode_row(
     thing_manager: &ThingManager,
 ) -> Result<typedb_protocol::ConceptRow, Box<ConceptReadError>> {
     // TODO: multiplicity?
+    // DEBUG: println!("{row:?}");
     let mut encoded_row = Vec::with_capacity(columns.len());
     for (_, position) in columns {
         let variable_value = row.get(*position);
