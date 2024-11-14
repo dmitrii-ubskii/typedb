@@ -23,9 +23,6 @@ use compiler::annotation::expression::{
         ExpressionEvaluationError,
     },
 };
-use compiler::annotation::expression::instructions::load_cast::CastUnaryDecimalToDouble;
-use compiler::annotation::expression::instructions::load_cast::CastLeftDecimalToDouble;
-use compiler::annotation::expression::instructions::load_cast::CastRightDecimalToDouble;
 use encoding::value::value::{NativeValueConvertible, Value};
 use ir::{pattern::ParameterID, pipeline::ParameterRegistry};
 use storage::snapshot::ReadableSnapshot;
