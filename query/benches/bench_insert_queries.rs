@@ -148,7 +148,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let (_tmp_dir, mut storage) = create_core_storage();
     setup_database(&mut storage);
-    let (type_manager, thing_manager) = load_managers(storage.clone(), Some(storage.read_watermark()));
+    let (type_manager, thing_manager) = load_managers(storage.clone(), Some(storage.snapshot_watermark()));
 
     group.bench_function("insert_queries", |b| {
         b.iter(|| {

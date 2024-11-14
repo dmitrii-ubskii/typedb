@@ -141,7 +141,7 @@ fn multi_threaded_inserts() {
 
     let (_tmp_dir, mut storage) = create_core_storage();
     setup_database(&mut storage);
-    let (type_manager, thing_manager) = load_managers(storage.clone(), Some(storage.read_watermark()));
+    let (type_manager, thing_manager) = load_managers(storage.clone(), Some(storage.snapshot_watermark()));
     const NUM_THREADS: usize = 32;
     const INTERNAL_ITERS: usize = 1000;
     let start_signal_rw_lock = Arc::new(RwLock::new(()));
