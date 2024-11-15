@@ -76,6 +76,14 @@ impl PatternExecutor {
     pub(crate) fn prepare(&mut self, input_batch: FixedBatch) {
         debug_assert!(self.control_stack.is_empty());
         self.reset();
+        for executor in &mut self.executors {
+            match executor {
+                StepExecutors::Nested(inner) => inner.reset(),
+                StepExecutors::StreamModifier(inner) => inner.reset(),
+                StepExecutors::CollectingStage(inner) => inner.reset(),
+                StepExecutors::TabledCall(_) | StepExecutors::ReshapeForReturn(_) | StepExecutors::Immediate(_) => {}
+            }
+        }
         self.control_stack.push(ControlInstruction::PatternStart(PatternStart { input_batch }));
     }
 
