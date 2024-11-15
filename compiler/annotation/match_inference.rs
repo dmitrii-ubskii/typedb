@@ -104,7 +104,7 @@ pub fn infer_types(
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
     previous_stage_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<TypeAnnotation>>>,
-    schema_functions: &IndexedAnnotatedFunctions,
+    schema_functions: Option<&IndexedAnnotatedFunctions>,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeAnnotations, TypeInferenceError> {
     let graph = compute_type_inference_graph(
@@ -140,7 +140,7 @@ pub(crate) fn compute_type_inference_graph<'graph>(
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
     previous_stage_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<TypeAnnotation>>>,
-    schema_functions: &IndexedAnnotatedFunctions,
+    schema_functions: Option<&IndexedAnnotatedFunctions>,
     local_function_cache: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
     let mut graph =

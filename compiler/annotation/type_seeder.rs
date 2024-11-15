@@ -46,7 +46,7 @@ use crate::annotation::{
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
     type_manager: &'this TypeManager,
-    schema_functions: &'this IndexedAnnotatedFunctions,
+    schema_functions: Option<&'this IndexedAnnotatedFunctions>,
     local_functions: Option<&'this AnnotatedUnindexedFunctions>,
     variable_registry: &'this VariableRegistry,
 }
@@ -55,7 +55,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     pub(crate) fn new(
         snapshot: &'this Snapshot,
         type_manager: &'this TypeManager,
-        schema_functions: &'this IndexedAnnotatedFunctions,
+        schema_functions: Option<&'this IndexedAnnotatedFunctions>,
         local_functions: Option<&'this AnnotatedUnindexedFunctions>,
         variable_registry: &'this VariableRegistry,
     ) -> Self {
@@ -65,8 +65,11 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     fn get_annotated_function(&self, function_id: FunctionID) -> Option<&AnnotatedFunction> {
         match function_id {
             FunctionID::Schema(definition_key) => {
-                debug_assert!(self.schema_functions.get_function(definition_key.clone()).is_some());
-                self.schema_functions.get_function(definition_key.clone())
+                debug_assert!(
+                    self.schema_functions.is_none()
+                        || self.schema_functions.unwrap().get_function(definition_key.clone()).is_some()
+                );
+                self.schema_functions?.get_function(definition_key.clone())
             }
             FunctionID::Preamble(index) => {
                 debug_assert!(
@@ -1620,7 +1623,7 @@ pub mod tests {
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
-            &empty_function_cache,
+            Some(&empty_function_cache),
             None,
             &translation_context.variable_registry,
         );
@@ -1675,7 +1678,7 @@ pub mod tests {
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
-            &empty_function_cache,
+            Some(&empty_function_cache),
             None,
             &translation_context.variable_registry,
         );
@@ -1750,7 +1753,7 @@ pub mod tests {
             let seeder = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,
-                &empty_function_cache,
+                Some(&empty_function_cache),
                 None,
                 &translation_context.variable_registry,
             );

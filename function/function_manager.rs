@@ -7,7 +7,7 @@
 use std::{iter::zip, sync::Arc};
 
 use bytes::{byte_array::ByteArray, Bytes};
-use compiler::annotation::function::{annotate_functions, IndexedAnnotatedFunctions};
+use compiler::annotation::function::{annotate_functions, annotate_stored_functions, IndexedAnnotatedFunctions};
 use concept::type_::type_manager::TypeManager;
 use encoding::{
     graph::{
@@ -15,7 +15,7 @@ use encoding::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator,
             function::FunctionDefinition,
         },
-        type_::index::{NameToFunctionDefinitionIndex, NameToStructDefinitionIndex},
+        type_::index::NameToFunctionDefinitionIndex,
     },
     AsBytes, Keyable,
 };
@@ -75,9 +75,9 @@ impl FunctionManager {
         // Prepare ir
         let function_index =
             HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
-        let translated = Self::translate_functions(snapshot, &functions, &function_index)?;
+        let mut translated = Self::translate_functions(snapshot, &functions, &function_index)?;
         // Run type-inference
-        annotate_functions(translated, snapshot, type_manager, &IndexedAnnotatedFunctions::empty())
+        annotate_stored_functions(&mut translated, snapshot, type_manager)
             .map_err(|source| FunctionError::AllFunctionsTypeCheckFailure { typedb_source: source })?;
         Ok(())
     }
@@ -94,7 +94,7 @@ impl FunctionManager {
                 .create_function(snapshot)
                 .map_err(|source| FunctionError::CreateFunctionEncoding { source })?;
             let function = SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition))?;
-            let index_key = NameToStructDefinitionIndex::build(function.name().as_str()).into_storage_key();
+            let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let existing = snapshot.get::<BUFFER_VALUE_INLINE>(index_key.as_reference()).map_err(|source| {
                 FunctionError::FunctionRetrieval { source: FunctionReadError::FunctionRetrieval { source } }
             })?;
@@ -127,10 +127,13 @@ impl FunctionManager {
         snapshot: &impl ReadableSnapshot,
         functions: &[SchemaFunction],
         function_index: &impl FunctionSignatureIndex,
-    ) -> Result<Vec<ir::pipeline::function::Function>, FunctionError> {
+    ) -> Result<Vec<(DefinitionKey<'static>, ir::pipeline::function::Function)>, FunctionError> {
         functions
             .iter()
-            .map(|function| translate_typeql_function(snapshot, function_index, &function.parsed))
+            .map(|function| {
+                translate_typeql_function(snapshot, function_index, &function.parsed)
+                    .map(|translated| (function.function_id.clone().into_owned(), translated))
+            })
             .try_collect()
             .map_err(|err| FunctionError::FunctionTranslation { typedb_source: err })
     }

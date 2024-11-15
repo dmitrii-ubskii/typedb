@@ -461,7 +461,7 @@ fn add_typeql_iterable_binding(
 
 // Helpers
 pub(super) fn add_function_call_binding_user(
-    function_index: &impl FunctionSignatureIndex,
+    function_index: &(impl FunctionSignatureIndex + std::fmt::Debug),
     constraints: &mut ConstraintsBuilder<'_, '_>,
     assigned: Vec<Variable>,
     function_name: &str,

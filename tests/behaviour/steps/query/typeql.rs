@@ -196,6 +196,7 @@ async fn typeql_schema_query(context: &mut Context, may_error: params::TypeQLMay
             Arc::get_mut(&mut tx.snapshot).unwrap(),
             &tx.type_manager,
             &tx.thing_manager,
+            &tx.function_manager,
             typeql_schema,
         );
         may_error.check_logic(result);
@@ -449,4 +450,23 @@ async fn answer_contains_document(context: &mut Context, contains_or_doesnt: par
             &format!("\nConcept documents: {:?}\nGiven document: {:?}", documents, expected_document),
         );
     });
+}
+
+
+#[apply(generic_step)]
+#[step(expr = r"verify answer set is equivalent for query")]
+async fn verify_answer_set(context: &mut Context, step: &Step) {
+    if true {
+        eprintln!("TODO: Implement step: verify answer set is equivalent for query");
+        return;
+    }
+    let query = typeql::parse_query(step.docstring.as_ref().unwrap().as_str()).unwrap();
+    let verify_answers = execute_read_query(context, query).unwrap();
+    let num_verify_answers = verify_answers.len();
+    let num_answers = context.answers.len();
+    assert_eq!(
+        num_verify_answers, num_answers,
+        "expected the number of identifier entries to match the number of answers, found {num_verify_answers} entries and {num_answers} answers",
+    );
+    assert_eq!(&context.answers, &verify_answers);
 }

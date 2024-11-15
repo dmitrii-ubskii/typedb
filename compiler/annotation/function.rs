@@ -168,19 +168,48 @@ impl AnnotatedFunctions for AnnotatedUnindexedFunctions {
     }
 }
 
+pub fn annotate_stored_functions<'a>(
+    functions: &mut Vec<(DefinitionKey<'static>, Function)>,
+    snapshot: &impl ReadableSnapshot,
+    type_manager: &TypeManager,
+) -> Result<IndexedAnnotatedFunctions, Box<FunctionAnnotationError>> {
+    let preliminary_annotated_functions = functions
+        .iter_mut()
+        .map(|(function_id, function)| {
+            annotate_named_function(function, snapshot, type_manager, None, None)
+                .map(|annotated| (function_id.clone(), annotated))
+        })
+        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+    let preliminary_annotations = IndexedAnnotatedFunctions::new(preliminary_annotated_functions);
+    // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
+    let annotated_functions = functions
+        .iter_mut()
+        .map(|(function_id, function)| {
+            annotate_named_function(function, snapshot, type_manager, Some(&preliminary_annotations), None)
+                .map(|annotated| (function_id.clone(), annotated))
+        })
+        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+
+    // TODO: ^Optimise. There's no reason to do all of type inference again. We can re-use the graphs, and restart at the source of any SCC.
+    // TODO: We don't propagate annotations until convergence, so we don't always detect unsatisfiable queries
+    // Further, In a chain of three functions where the first two bodies have no function calls
+    // but rely on the third function to infer annotations, the annotations will not reach the first function.
+    Ok(IndexedAnnotatedFunctions::new(annotated_functions))
+}
+
 pub fn annotate_functions(
     mut functions: Vec<Function>,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     indexed_annotated_functions: &IndexedAnnotatedFunctions,
 ) -> Result<AnnotatedUnindexedFunctions, Box<FunctionAnnotationError>> {
-    // In the preliminary annotations, functions are annotated based only on the variable categories of the called function.
     let preliminary_annotated_functions = functions
         .iter_mut()
-        .map(|function| annotate_named_function(function, snapshot, type_manager, indexed_annotated_functions, None))
+        .map(|function| {
+            annotate_named_function(function, snapshot, type_manager, Some(indexed_annotated_functions), None)
+        })
         .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
     let preliminary_annotations = AnnotatedUnindexedFunctions::new(preliminary_annotated_functions);
-
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
@@ -189,7 +218,7 @@ pub fn annotate_functions(
                 function,
                 snapshot,
                 type_manager,
-                indexed_annotated_functions,
+                Some(indexed_annotated_functions),
                 Some(&preliminary_annotations),
             )
         })
@@ -206,7 +235,7 @@ pub(crate) fn annotate_anonymous_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: &IndexedAnnotatedFunctions,
+    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
     local_functions: Option<&AnnotatedUnindexedFunctions>,
     caller_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     caller_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
@@ -240,7 +269,7 @@ pub(super) fn annotate_named_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: &IndexedAnnotatedFunctions,
+    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
     local_functions: Option<&AnnotatedUnindexedFunctions>,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
     let Function { arguments, argument_labels, .. } = function;
@@ -272,7 +301,7 @@ fn annotate_function_impl(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: &IndexedAnnotatedFunctions,
+    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
     local_functions: Option<&AnnotatedUnindexedFunctions>,
     argument_concept_variable_types: BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     argument_value_variable_types: BTreeMap<Variable, ExpressionValueType>,

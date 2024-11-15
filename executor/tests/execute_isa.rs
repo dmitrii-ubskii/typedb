@@ -105,7 +105,7 @@ fn traverse_isa_unbounded_sorted_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -191,7 +191,7 @@ fn traverse_isa_unbounded_sorted_type() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -282,7 +282,7 @@ fn traverse_isa_bounded_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -385,7 +385,7 @@ fn traverse_isa_reverse_unbounded_sorted_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -471,7 +471,7 @@ fn traverse_isa_reverse_unbounded_sorted_type() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -562,7 +562,7 @@ fn traverse_isa_reverse_bounded_type_exact() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -668,7 +668,7 @@ fn traverse_isa_reverse_bounded_type_subtype() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -771,7 +771,7 @@ fn traverse_isa_reverse_fixed_type_exact() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -860,7 +860,7 @@ fn traverse_isa_reverse_fixed_type_subtype() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();

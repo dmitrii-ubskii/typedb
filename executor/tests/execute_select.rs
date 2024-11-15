@@ -183,7 +183,7 @@ fn anonymous_vars_not_enumerated_or_counted() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            annotated_schema_functions,
+            Some(annotated_schema_functions),
             Some(annotated_preamble_functions),
         )
         .unwrap()
@@ -285,7 +285,7 @@ fn unselected_named_vars_counted() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            annotated_schema_functions,
+            Some(annotated_schema_functions),
             Some(annotated_preamble_functions),
         )
         .unwrap()
@@ -399,7 +399,7 @@ fn cartesian_named_counted_checked() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            annotated_schema_functions,
+            Some(annotated_schema_functions),
             Some(annotated_preamble_functions),
         )
         .unwrap()

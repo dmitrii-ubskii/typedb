@@ -298,7 +298,7 @@ pub mod tests {
                 &entry_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -313,9 +313,14 @@ pub mod tests {
             // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
             let (entry, entry_context, mut f_ir) = with_local_cache;
 
-            let f_annotations =
-                annotate_named_function(&mut f_ir, &snapshot, &type_manager, &IndexedAnnotatedFunctions::empty(), None)
-                    .unwrap();
+            let f_annotations = annotate_named_function(
+                &mut f_ir,
+                &snapshot,
+                &type_manager,
+                Some(&IndexedAnnotatedFunctions::empty()),
+                None,
+            )
+            .unwrap();
             let f_var_animal =
                 var_from_registry(&f_ir.translation_context().variable_registry, "called_animal").unwrap();
             let f_var_animal_type =
@@ -346,7 +351,7 @@ pub mod tests {
                 variable_registry,
                 &type_manager,
                 previous_stage_variable_annotations,
-                annotated_schema_functions,
+                Some(annotated_schema_functions),
                 Some(&local_cache),
             )
             .unwrap();
@@ -364,7 +369,7 @@ pub mod tests {
         //         &mut f_ir,
         //         &snapshot,
         //         &type_manager,
-        //         &IndexedAnnotatedFunctions::empty(),
+        //         Some(&IndexedAnnotatedFunctions::empty()),
         //         None,
         //         None,
         //         None,
@@ -472,7 +477,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -545,7 +550,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -613,7 +618,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap_err();
@@ -650,7 +655,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -741,7 +746,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            &IndexedAnnotatedFunctions::empty(),
+            Some(&IndexedAnnotatedFunctions::empty()),
             None,
         )
         .unwrap();
@@ -853,7 +858,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            &IndexedAnnotatedFunctions::empty(),
+            Some(&IndexedAnnotatedFunctions::empty()),
             None,
         )
         .unwrap();
@@ -942,7 +947,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            &IndexedAnnotatedFunctions::empty(),
+            Some(&IndexedAnnotatedFunctions::empty()),
             None,
         )
         .unwrap();
@@ -1056,7 +1061,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -1126,7 +1131,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -1192,7 +1197,7 @@ pub mod tests {
             let mut graph = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
                 &translation_context.variable_registry,
             )
@@ -1249,7 +1254,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -1328,7 +1333,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -1394,7 +1399,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();
@@ -1455,7 +1460,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap_err();
@@ -1486,7 +1491,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                &IndexedAnnotatedFunctions::empty(),
+                Some(&IndexedAnnotatedFunctions::empty()),
                 None,
             )
             .unwrap();

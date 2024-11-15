@@ -171,7 +171,7 @@ fn execute_insert<Snapshot: WritableSnapshot + 'static>(
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -251,7 +251,7 @@ fn execute_delete<Snapshot: WritableSnapshot + 'static>(
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            annotated_schema_functions,
+            Some(annotated_schema_functions),
             Some(annotated_preamble_functions),
         )
         .unwrap()
