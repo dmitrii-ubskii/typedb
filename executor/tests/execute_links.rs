@@ -231,7 +231,7 @@ fn traverse_links_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -352,7 +352,7 @@ fn traverse_links_unbounded_sorted_to() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -463,7 +463,7 @@ fn traverse_links_bounded_relation() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -587,7 +587,7 @@ fn traverse_links_bounded_relation_player() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -719,7 +719,7 @@ fn traverse_links_reverse_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -827,7 +827,7 @@ fn traverse_links_reverse_unbounded_sorted_to() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -935,7 +935,7 @@ fn traverse_links_reverse_bounded_player() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -1059,7 +1059,7 @@ fn traverse_links_reverse_bounded_player_relation() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();

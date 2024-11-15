@@ -21,6 +21,7 @@ use concept::{
     thing::{statistics::Statistics, thing_manager::ThingManager},
     type_::type_manager::TypeManager,
 };
+use encoding::graph::definition::definition_key_generator::DefinitionKeyGenerator;
 use executor::{
     match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile, row::MaybeOwnedRow,
     ExecutionInterrupt,
@@ -48,9 +49,10 @@ fn setup(
     data: &str,
 ) -> Statistics {
     let query_manager = QueryManager::new(None);
+    let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
     let mut snapshot = storage.clone().open_snapshot_schema();
     let define = typeql::parse_query(schema).unwrap().into_schema();
-    query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, define).unwrap();
+    query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, &function_manager, define).unwrap();
     snapshot.commit().unwrap();
 
     let snapshot = storage.clone().open_snapshot_write();
@@ -110,7 +112,7 @@ fn test_has_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -196,7 +198,7 @@ fn test_expression_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -292,7 +294,7 @@ fn test_links_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -384,7 +386,7 @@ fn test_links_intersection() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -467,7 +469,7 @@ fn test_negation_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -571,7 +573,7 @@ fn test_forall_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -661,7 +663,7 @@ fn test_named_var_select() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -751,7 +753,7 @@ fn test_disjunction_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();
@@ -845,7 +847,7 @@ fn test_disjunction_planning_nested_negations() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &IndexedAnnotatedFunctions::empty(),
+        Some(&IndexedAnnotatedFunctions::empty()),
         Some(&AnnotatedUnindexedFunctions::empty()),
     )
     .unwrap();

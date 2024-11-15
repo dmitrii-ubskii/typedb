@@ -160,7 +160,7 @@ fn traverse_has_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -261,7 +261,7 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -380,7 +380,7 @@ fn traverse_has_unbounded_sorted_from_intersect() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -477,7 +477,7 @@ fn traverse_has_unbounded_sorted_to_merged() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();
@@ -589,7 +589,7 @@ fn traverse_has_reverse_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
+        Some(annotated_schema_functions),
         Some(annotated_preamble_functions),
     )
     .unwrap();

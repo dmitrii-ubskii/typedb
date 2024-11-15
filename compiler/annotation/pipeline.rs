@@ -138,7 +138,7 @@ pub(crate) fn annotate_stages_and_fetch(
     let (annotated_stages, running_variable_annotations, running_value_variable_types) = annotate_pipeline_stages(
         snapshot,
         type_manager,
-        schema_function_annotations,
+        Some(schema_function_annotations),
         variable_registry,
         parameters,
         annotated_preamble,
@@ -169,7 +169,7 @@ pub(crate) fn annotate_stages_and_fetch(
 pub(crate) fn annotate_pipeline_stages(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: &IndexedAnnotatedFunctions,
+    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
     annotated_preamble: Option<&AnnotatedUnindexedFunctions>,
@@ -222,7 +222,7 @@ fn annotate_stage(
     parameters: &ParameterRegistry,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: &IndexedAnnotatedFunctions,
+    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
     preamble_function_annotations: Option<&AnnotatedUnindexedFunctions>,
     running_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
     stage: TranslatedStage,
@@ -261,16 +261,14 @@ fn annotate_stage(
         }
 
         TranslatedStage::Insert { block } => {
-            let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-            let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
             let insert_annotations = infer_types(
                 snapshot,
                 &block,
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                annotated_schema_functions,
-                Some(annotated_preamble_functions),
+                None,
+                None,
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             block.conjunction().constraints().iter().for_each(|constraint| match constraint {
@@ -301,16 +299,14 @@ fn annotate_stage(
         }
 
         TranslatedStage::Delete { block, deleted_variables } => {
-            let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-            let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
             let delete_annotations = infer_types(
                 snapshot,
                 &block,
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                annotated_schema_functions,
-                Some(annotated_preamble_functions),
+                None,
+                None,
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             deleted_variables.iter().for_each(|v| {

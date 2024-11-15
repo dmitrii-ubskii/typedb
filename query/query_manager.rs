@@ -41,11 +41,14 @@ impl QueryManager {
         snapshot: &mut impl WritableSnapshot,
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
+        function_manager: &FunctionManager,
         query: SchemaQuery,
     ) -> Result<(), QueryError> {
         match query {
-            SchemaQuery::Define(define) => define::execute(snapshot, type_manager, thing_manager, define)
-                .map_err(|err| QueryError::Define { typedb_source: err }),
+            SchemaQuery::Define(define) => {
+                define::execute(snapshot, type_manager, thing_manager, function_manager, define)
+                    .map_err(|err| QueryError::Define { typedb_source: err })
+            }
             SchemaQuery::Redefine(redefine) => redefine::execute(snapshot, type_manager, thing_manager, redefine)
                 .map_err(|err| QueryError::Redefine { typedb_source: err }),
             SchemaQuery::Undefine(undefine) => undefine::execute(snapshot, type_manager, thing_manager, undefine)
