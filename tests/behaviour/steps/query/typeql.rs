@@ -458,7 +458,6 @@ async fn answer_contains_document(context: &mut Context, contains_or_doesnt: par
     });
 }
 
-
 #[apply(generic_step)]
 #[step(expr = r"verify answer set is equivalent for query")]
 async fn verify_answer_set(context: &mut Context, step: &Step) {
