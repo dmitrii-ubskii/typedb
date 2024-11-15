@@ -21,7 +21,11 @@ use crate::{
         function_signature::{FunctionID, FunctionSignature, FunctionSignatureIndex},
         FunctionRepresentationError, ParameterRegistry,
     },
-    translation::{pipeline::translate_pipeline_stages, reduce::build_reducer, TranslationContext},
+    translation::{
+        pipeline::{translate_pipeline_stages, TranslatedStage},
+        reduce::build_reducer,
+        TranslationContext,
+    },
 };
 
 pub fn translate_typeql_function(
@@ -83,6 +87,22 @@ pub(crate) fn translate_function_block(
                 declaration: function_block.clone(),
                 typedb_source: err,
             })?;
+
+    let mut illegal_stages = stages.iter().filter(|stage| {
+        match stage {
+            TranslatedStage::Insert { .. } | TranslatedStage::Delete { .. } => true,
+            TranslatedStage::Require(_) => false, // Is require allowed
+            TranslatedStage::Match { .. }
+            | TranslatedStage::Select(_)
+            | TranslatedStage::Sort(_)
+            | TranslatedStage::Offset(_)
+            | TranslatedStage::Limit(_)
+            | TranslatedStage::Reduce(_) => false,
+        }
+    });
+    if illegal_stages.next().is_some() {
+        return Err(FunctionRepresentationError::IllegalStages { declaration: function_block.clone() });
+    }
 
     if fetch.is_some() {
         return Err(FunctionRepresentationError::IllegalFetch { declaration: function_block.clone() });
