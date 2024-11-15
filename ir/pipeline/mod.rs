@@ -90,6 +90,11 @@ typedb_error!(
             "Fetch clauses cannot be used inside of functions or function blocks that terminate in a 'return' statement.\nSource:\n{declaration}",
             declaration: FunctionBlock
         ),
+        IllegalStages(
+            7,
+            "Functions may not contain write stages.\nSource:\n{declaration}",
+            declaration: FunctionBlock
+        ),
     }
 );
 
