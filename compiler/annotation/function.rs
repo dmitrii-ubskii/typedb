@@ -253,6 +253,7 @@ pub(crate) fn annotate_anonymous_function(
             todo!("Throw error")
         }
     }
+    // TODO: Return statements as well.
 
     annotate_function_impl(
         function,

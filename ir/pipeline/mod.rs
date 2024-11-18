@@ -11,7 +11,7 @@ use encoding::value::value::Value;
 use error::typedb_error;
 use itertools::Itertools;
 use storage::snapshot::{iterator::SnapshotIteratorError, SnapshotGetError};
-use typeql::schema::definable::function::{Function, FunctionBlock, ReturnReduction, ReturnSingle, ReturnStream};
+use typeql::schema::definable::function::{Function, FunctionBlock, ReturnReduction, ReturnSingle, ReturnStatement, ReturnStream, Signature};
 
 use crate::{
     pattern::{
@@ -94,6 +94,12 @@ typedb_error!(
             7,
             "Functions may not contain write stages.\nSource:\n{declaration}",
             declaration: FunctionBlock
+        ),
+        InconsistentReturn(
+            8,
+            "The return in the body of the function did not match that in the signature. \nSignature: {signature}\nDefinition: {return_}",
+            signature: Signature,
+            return_: ReturnStatement
         ),
     }
 );
