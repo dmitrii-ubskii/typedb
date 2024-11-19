@@ -50,14 +50,14 @@ impl VariableCategory {
             (Self::Thing, Self::Thing) => Some(Self::Thing),
             (Self::Thing, Self::Object) | (Self::Object, Self::Thing) => Some(Self::Object),
             (Self::Thing, Self::Attribute) | (Self::Attribute, Self::Thing) => Some(Self::Attribute),
-            (Self::Thing, Self::Value) | (Self::Value, Self::Thing) => Some(Self::Attribute),
+            // (Self::Thing, Self::Value) | (Self::Value, Self::Thing) => Some(Self::Attribute),
             (_, Self::Thing) | (Self::Thing, _) => None,
 
             (Self::Object, Self::Object) => Some(Self::Object),
             (_, Self::Object) | (Self::Object, _) => None,
 
             (Self::Attribute, Self::Attribute) => Some(Self::Attribute),
-            (Self::Value, Self::Attribute) | (Self::Attribute, Self::Value) => Some(Self::Attribute),
+            // (Self::Value, Self::Attribute) | (Self::Attribute, Self::Value) => Some(Self::Attribute),
             (_, Self::Attribute) | (Self::Attribute, _) => None,
 
             (Self::Value, Self::Value) => Some(Self::Value),
