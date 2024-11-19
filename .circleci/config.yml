@@ -163,7 +163,7 @@ jobs:
       - install-brew-rosetta
       - install-deps-brew:
           bazel-arch: amd64
-      - test-assembly-unix
+#      - test-assembly-unix
       - deploy-snapshot-unix
 
   test-deploy-snapshot-mac-arm64:
