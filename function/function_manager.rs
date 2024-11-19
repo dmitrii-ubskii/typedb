@@ -110,7 +110,6 @@ impl FunctionManager {
         let function_index = ReadThroughFunctionSignatureIndex::new(snapshot, self, buffered);
         // Translate to ensure the function calls are valid references. Type-inference is done at commit-time.
         Self::translate_functions(snapshot, &functions, &function_index)?;
-
         for (function, definition) in zip(functions.iter(), definitions.iter()) {
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let definition_key = &function.function_id;

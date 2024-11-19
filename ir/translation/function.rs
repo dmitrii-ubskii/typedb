@@ -33,13 +33,7 @@ pub fn translate_typeql_function(
     function_index: &impl FunctionSignatureIndex,
     function: &typeql::Function,
 ) -> Result<Function, FunctionRepresentationError> {
-    translate_function_from(
-        snapshot,
-        function_index,
-        &function.signature,
-        &function.block,
-        Some(function),
-    )
+    translate_function_from(snapshot, function_index, &function.signature, &function.block, Some(function))
 }
 
 pub fn translate_function_from(
@@ -50,7 +44,8 @@ pub fn translate_function_from(
     declaration: Option<&typeql::Function>,
 ) -> Result<Function, FunctionRepresentationError> {
     let argument_labels = signature.args.iter().map(|arg| arg.type_.clone()).collect();
-    let arg_names_and_categories = signature.args
+    let arg_names_and_categories = signature
+        .args
         .iter()
         .map(|arg| (arg.var.name().unwrap().to_owned(), type_any_to_category_and_optionality(&arg.type_).0))
         .collect::<Vec<_>>();
@@ -75,15 +70,23 @@ pub fn translate_function_from(
         (Output::Single(declared_vars), ReturnOperation::Single(_, defined_vars)) => {
             defined_vars.len() == declared_vars.types.len()
         }
-        _ => false
+        _ => false,
     };
     if !returns_consistent {
         return Err(FunctionRepresentationError::InconsistentReturn {
             signature: signature.clone(),
-            return_: block.return_stmt.clone()
-        })
+            return_: block.return_stmt.clone(),
+        });
     }
-    Ok(Function::new(signature.ident.as_str(), context, value_parameters, arguments, Some(argument_labels), Some(signature.output.clone()), body))
+    Ok(Function::new(
+        signature.ident.as_str(),
+        context,
+        value_parameters,
+        arguments,
+        Some(argument_labels),
+        Some(signature.output.clone()),
+        body,
+    ))
 }
 
 pub(crate) fn translate_function_block(

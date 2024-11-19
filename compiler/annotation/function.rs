@@ -18,16 +18,20 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
 };
 use ir::{
+    pattern::Vertex,
     pipeline::{
         function::{Function, FunctionBody, ReturnOperation},
         ParameterRegistry, VariableRegistry,
     },
     translation::tokens::translate_value_type,
 };
-use itertools::Either;
+use itertools::{Either, Itertools};
 use storage::snapshot::ReadableSnapshot;
-use typeql::{schema::definable::function::SingleSelector, type_::NamedType, TypeRef, TypeRefAny};
-use typeql::schema::definable::function::Output;
+use typeql::{
+    schema::definable::function::{Output, SingleSelector},
+    type_::NamedType,
+    TypeRef, TypeRefAny,
+};
 
 use crate::{
     annotation::{
@@ -53,6 +57,23 @@ pub struct AnnotatedFunction {
     pub return_: AnnotatedFunctionReturn,
 }
 
+impl AnnotatedFunction {
+    pub(crate) fn argument_annotations(&self) -> impl Iterator<Item = Option<&Arc<BTreeSet<Type>>>> {
+        let first_match_annotations = self
+            .stages
+            .iter()
+            .filter_map(|stage| {
+                if let AnnotatedStage::Match { block_annotations, .. } = stage {
+                    Some(block_annotations)
+                } else {
+                    None
+                }
+            })
+            .next()
+            .unwrap();
+        self.arguments.iter().map(|var| first_match_annotations.vertex_annotations_of(&Vertex::Variable(var.clone())))
+    }
+}
 #[derive(Debug, Clone)]
 pub enum AnnotatedFunctionReturn {
     Stream { variables: Vec<Variable>, annotations: Vec<FunctionParameterAnnotation> },
@@ -286,7 +307,6 @@ pub(super) fn annotate_named_function(
             }
         }
     }
-    eprintln!("arg_annotations: {argument_value_variable_types:?} {argument_concept_variable_types:?}");
     annotate_function_impl(
         function,
         snapshot,
@@ -355,14 +375,15 @@ fn validate_return_against_signature(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     annotated: &AnnotatedFunctionReturn,
-    signature: &Vec<TypeRefAny>
+    signature: &Vec<TypeRefAny>,
 ) -> Result<(), Box<FunctionAnnotationError>> {
-    let declared_types = signature.iter().enumerate().map(|(i, label)| {
-        get_return_annotations_from_labels(snapshot, type_manager, label, i)
-    }).collect::<Result<Vec<_>, Box<FunctionAnnotationError>>>()?;
-    let inferred_types : Vec<FunctionParameterAnnotation> = match annotated {
-        AnnotatedFunctionReturn::Stream { annotations, .. } |
-        AnnotatedFunctionReturn::Single { annotations, .. } => {
+    let declared_types = signature
+        .iter()
+        .enumerate()
+        .map(|(i, label)| get_return_annotations_from_labels(snapshot, type_manager, label, i))
+        .collect::<Result<Vec<_>, Box<FunctionAnnotationError>>>()?;
+    let inferred_types: Vec<FunctionParameterAnnotation> = match annotated {
+        AnnotatedFunctionReturn::Stream { annotations, .. } | AnnotatedFunctionReturn::Single { annotations, .. } => {
             annotations.iter().cloned().collect()
         }
         AnnotatedFunctionReturn::ReduceCheck { .. } => vec![],
@@ -380,12 +401,12 @@ fn validate_return_against_signature(
             (FunctionParameterAnnotation::Value(declared_value), Either::Right(inferred_value)) => {
                 ExpressionValueType::Single(declared_value) == inferred_value // TODO
             }
-            _ => false
+            _ => false,
         };
         if matches {
             Ok(())
         } else {
-            Err(Box::new(FunctionAnnotationError::SignatureReturnMismatch { }))
+            Err(Box::new(FunctionAnnotationError::SignatureReturnMismatch {}))
         }
     })
 }
@@ -471,9 +492,9 @@ fn get_return_annotations_from_labels(
                 type_manager,
                 &Label::build(label.ident.as_str()),
             )
-                .map_err(|source| {
-                    Box::new(FunctionAnnotationError::CouldNotResolveReturnType { index: return_index, source })
-                })?;
+            .map_err(|source| {
+                Box::new(FunctionAnnotationError::CouldNotResolveReturnType { index: return_index, source })
+            })?;
             Ok(Either::Left(Arc::new(types)))
         }
         NamedType::BuiltinValueType(value_type) => {
@@ -484,7 +505,6 @@ fn get_return_annotations_from_labels(
         NamedType::Role(_) => unreachable!("A function return label was wrongly parsed as role-type."),
     }
 }
-
 
 fn annotate_return(
     snapshot: &impl ReadableSnapshot,
