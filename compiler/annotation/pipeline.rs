@@ -9,6 +9,7 @@ use std::{
     iter,
     sync::Arc,
 };
+use std::iter::zip;
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
@@ -25,6 +26,8 @@ use ir::{
     },
     translation::pipeline::TranslatedStage,
 };
+use ir::pattern::conjunction::Conjunction;
+use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -42,6 +45,8 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
+use crate::annotation::expression::ExpressionCompileError;
+use crate::annotation::function::{AnnotatedFunctions, FunctionParameterAnnotation};
 
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedUnindexedFunctions,
@@ -244,6 +249,11 @@ fn annotate_stage(
                     running_variable_annotations.insert(var, types.clone());
                 }
             });
+
+            collect_value_types_of_function_call_assignments(
+                block.conjunction(), schema_function_annotations, preamble_function_annotations, running_value_variable_assigned_types
+            );
+
             let compiled_expressions = compile_expressions(
                 snapshot,
                 type_manager,
@@ -501,4 +511,32 @@ pub fn resolve_reduce_instruction_by_value_type(
             })
         }
     }
+}
+
+fn collect_value_types_of_function_call_assignments(
+    conjunction: &Conjunction,
+    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
+    preamble_function_annotations: Option<&AnnotatedUnindexedFunctions>,
+    value_type_annotations: &mut BTreeMap<Variable, ExpressionValueType>
+) {
+    conjunction.constraints().iter().filter_map(|constraint| {
+        match constraint {
+            Constraint::FunctionCallBinding(binding) => Some(binding),
+            _ => None,
+        }
+    }).for_each(|binding| {
+        let return_ = match binding.function_call().function_id() {
+            FunctionID::Schema(id) => &schema_function_annotations.unwrap().get_function(id).unwrap().return_,
+            FunctionID::Preamble(id) => &preamble_function_annotations.unwrap().get_function(id).unwrap().return_,
+        };
+        zip(binding.assigned(), return_.annotations().iter()).for_each(|(var, annotation)| {
+            match &annotation {
+                FunctionParameterAnnotation::Value(value_type) => {
+                    debug_assert!(!value_type_annotations.contains_key(&var.as_variable().unwrap()));
+                    value_type_annotations.insert(var.as_variable().unwrap(), ExpressionValueType::Single(value_type.clone()));
+                },
+                FunctionParameterAnnotation::Concept(_) => {}
+            }
+        })
+    });
 }
