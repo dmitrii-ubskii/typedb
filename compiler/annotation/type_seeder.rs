@@ -96,12 +96,13 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
         // Advanced TODO: Copying upstream binary constraints as schema constraints.
         self.seed_types(&mut graph, context, &VertexAnnotations::default())?;
 
-        debug_assert!(conjunction
-            .constraints()
-            .iter()
-            .flat_map(|constraint| constraint.vertices())
-            .unique()
-            .all(|vertex| graph.vertices.contains_key(vertex)));
+        debug_assert!(conjunction.constraints().iter().flat_map(|constraint| constraint.vertices()).unique().all(
+            |vertex| {
+                graph.vertices.contains_key(vertex)
+                    || self.variable_registry.get_variable_category(vertex.as_variable().unwrap()).unwrap()
+                        == VariableCategory::Value
+            }
+        ));
 
         Ok(graph)
     }
@@ -117,7 +118,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
         }
 
         // Seed vertices in root & disjunctions
-        self.seed_vertex_annotations_from_type_and_function_return(graph)?;
+        self.seed_vertex_annotations_from_type_and_called_function_signatures(graph)?;
 
         let mut some_vertex_was_directly_annotated = true;
         while some_vertex_was_directly_annotated {
@@ -218,7 +219,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     }
 
     // Phase 1: Collect all type & function return annotations
-    fn seed_vertex_annotations_from_type_and_function_return(
+    fn seed_vertex_annotations_from_type_and_called_function_signatures(
         &self,
         graph: &mut TypeInferenceGraph<'_>,
     ) -> Result<(), TypeInferenceError> {
@@ -245,7 +246,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
             }
         }
         for nested_graph in graph.nested_disjunctions.iter_mut().flat_map(|nested| &mut nested.disjunction) {
-            self.seed_vertex_annotations_from_type_and_function_return(nested_graph)?;
+            self.seed_vertex_annotations_from_type_and_called_function_signatures(nested_graph)?;
         }
         Ok(())
     }
@@ -304,7 +305,9 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     ) -> Result<bool, Box<ConceptReadError>> {
         let unannotated_var = self.local_variables(context, graph.conjunction.scope_id()).find(|&var| {
             let vertex = Vertex::Variable(var);
-            !graph.vertices.contains_key(&vertex)
+            self.variable_registry.get_variable_category(var).unwrap_or(VariableCategory::Value)
+                != VariableCategory::Value
+                && !graph.vertices.contains_key(&vertex)
         });
         if let Some(var) = unannotated_var {
             let annotations = self.get_unbounded_type_annotations(
@@ -746,7 +749,19 @@ impl UnaryConstraint for FunctionCallBinding<Variable> {
                     graph_vertices.add_or_intersect(assigned_variable, Cow::Borrowed(types));
                 }
             }
-            //TODO: add annotations from function input arguments
+            let args_by_position: Vec<Variable> = self
+                .function_call()
+                .call_id_mapping()
+                .iter()
+                .map(|(var, index)| (index, var))
+                .sorted()
+                .map(|(_, var)| var.clone())
+                .collect();
+            for (arg_var, arg_annotations) in zip(args_by_position, annotated_function.argument_annotations()) {
+                if let Some(types) = arg_annotations {
+                    graph_vertices.add_or_intersect(&Vertex::Variable(arg_var.clone()), Cow::Borrowed(&*types));
+                }
+            }
         }
         Ok(())
     }

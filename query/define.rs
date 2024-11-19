@@ -131,10 +131,13 @@ fn process_function_definitions(
     function_manager: &FunctionManager,
     definables: &[Definable],
 ) -> Result<(), DefineError> {
-    let functions = filter_variants!(Definable::Function: definables).map(|fun| fun.unparsed.clone()).collect();
-    function_manager
-        .define_functions(snapshot, functions)
-        .map_err(|typedb_source| DefineError::FunctionDefinition { typedb_source })?;
+    let functions =
+        filter_variants!(Definable::Function: definables).map(|fun| fun.unparsed.clone()).collect::<Vec<_>>();
+    if !functions.is_empty() {
+        function_manager
+            .define_functions(snapshot, functions)
+            .map_err(|typedb_source| DefineError::FunctionDefinition { typedb_source })?;
+    }
     Ok(())
 }
 

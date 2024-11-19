@@ -30,7 +30,6 @@ impl<FunctionIDType: FunctionIDAPI> Function<FunctionIDType> {
 
 impl<FunctionIDType: FunctionIDAPI> Function<FunctionIDType> {
     pub(crate) fn build(function_id: FunctionIDType, definition: FunctionDefinition) -> Result<Self, FunctionError> {
-        eprintln!("{}", definition.as_str());
         let parsed = typeql::parse_definition_function(definition.as_str().as_str())
             .map_err(|source| FunctionError::CommittedFunctionParseError { typedb_source: source })?;
         Ok(Self { function_id, parsed, compiled: None })

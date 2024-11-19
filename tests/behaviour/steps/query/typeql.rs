@@ -461,11 +461,27 @@ async fn verify_answer_set(context: &mut Context, step: &Step) {
     }
     let query = typeql::parse_query(step.docstring.as_ref().unwrap().as_str()).unwrap();
     let verify_answers = execute_read_query(context, query).unwrap();
-    let num_verify_answers = verify_answers.len();
-    let num_answers = context.answers.len();
-    assert_eq!(
-        num_verify_answers, num_answers,
-        "expected the number of identifier entries to match the number of answers, found {num_verify_answers} entries and {num_answers} answers",
-    );
-    assert_eq!(&context.answers, &verify_answers);
+    match (&context.query_answer.as_ref().unwrap(), verify_answers) {
+        (QueryAnswer::ConceptRows(actual), QueryAnswer::ConceptRows(expected)) => {
+            assert_eq!(
+                expected.len(), actual.len(),
+                "expected the number of identifier entries to match the number of answers, found {} entries and {} answers",
+                expected.len(), actual.len()
+            );
+            assert!(expected.iter().all(|answer| actual.contains(answer)));
+        }
+        (
+            QueryAnswer::ConceptDocuments(actual_tree, actual_params),
+            QueryAnswer::ConceptDocuments(expected_tree, expected_params),
+        ) => {
+            todo!()
+        }
+        (QueryAnswer::ConceptDocuments(_, _), QueryAnswer::ConceptRows(_)) => {
+            assert!(false, "Expected Rows found documents")
+        }
+        (QueryAnswer::ConceptRows(_), QueryAnswer::ConceptDocuments(_, _)) => {
+            assert!(false, "Expected documents, found rows")
+        }
+    }
+    let num_answers = context.query_answer.as_ref().unwrap().as_rows().len();
 }
