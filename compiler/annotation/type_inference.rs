@@ -77,6 +77,8 @@ pub mod tests {
         translation::{pipeline::TranslatedStage, TranslationContext},
     };
     use itertools::Itertools;
+    use typeql::{TypeRef, TypeRefAny};
+    use typeql::type_::NamedType;
     use test_utils::assert_matches;
 
     use crate::annotation::{

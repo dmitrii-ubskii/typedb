@@ -78,6 +78,17 @@ typedb_error!(
             "Error analysing return reduction.",
             ( typedb_source : Box<AnnotationError> )
         ),
+        CouldNotResolveReturnType(
+            6, // TODO: Move to 2?
+            "An error occurred when trying to resolve the type at return index: {index}.",
+            index: usize,
+            source: TypeInferenceError
+        ),
+        SignatureReturnMismatch(
+            7,
+            "The types inferred for the return statement did not those declared in the signature."
+            // TODO: More information
+        ),
     }
 );
 
