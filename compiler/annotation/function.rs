@@ -27,6 +27,7 @@ use ir::{
 use itertools::Either;
 use storage::snapshot::ReadableSnapshot;
 use typeql::{schema::definable::function::SingleSelector, type_::NamedType, TypeRef, TypeRefAny};
+use typeql::schema::definable::function::Output;
 
 use crate::{
     annotation::{
@@ -250,11 +251,9 @@ pub(crate) fn annotate_anonymous_function(
         } else if let Some(value_annotation) = caller_value_type_annotations.get(var) {
             argument_value_variable_types.insert(*var, value_annotation.clone());
         } else {
-            todo!("Throw error")
+            unreachable!("The type annotations for the argument in the function call should be known by now")
         }
     }
-    // TODO: Return statements as well.
-
     annotate_function_impl(
         function,
         snapshot,
@@ -287,6 +286,7 @@ pub(super) fn annotate_named_function(
             }
         }
     }
+    eprintln!("arg_annotations: {argument_value_variable_types:?} {argument_concept_variable_types:?}");
     annotate_function_impl(
         function,
         snapshot,
@@ -334,12 +334,59 @@ fn annotate_function_impl(
         &running_variable_types,
         &running_value_types,
     )?;
+    if let Some(output) = function.output.as_ref() {
+        let return_labels = match output {
+            Output::Stream(stream) => &stream.types,
+            Output::Single(single) => &single.types,
+        };
+        validate_return_against_signature(snapshot, type_manager, &return_, return_labels)?;
+    }
+
     Ok(AnnotatedFunction {
         variable_registry: context.variable_registry.clone(),
         parameter_registry: parameters.clone(),
         arguments: arguments.clone(),
         stages,
         return_,
+    })
+}
+
+fn validate_return_against_signature(
+    snapshot: &impl ReadableSnapshot,
+    type_manager: &TypeManager,
+    annotated: &AnnotatedFunctionReturn,
+    signature: &Vec<TypeRefAny>
+) -> Result<(), Box<FunctionAnnotationError>> {
+    let declared_types = signature.iter().enumerate().map(|(i, label)| {
+        get_return_annotations_from_labels(snapshot, type_manager, label, i)
+    }).collect::<Result<Vec<_>, Box<FunctionAnnotationError>>>()?;
+    let inferred_types : Vec<FunctionParameterAnnotation> = match annotated {
+        AnnotatedFunctionReturn::Stream { annotations, .. } |
+        AnnotatedFunctionReturn::Single { annotations, .. } => {
+            annotations.iter().cloned().collect()
+        }
+        AnnotatedFunctionReturn::ReduceCheck { .. } => vec![],
+        AnnotatedFunctionReturn::ReduceReducer { instructions } => {
+            debug_assert!(instructions.len() == signature.len());
+            instructions.iter().map(|reducer| FunctionParameterAnnotation::Value(reducer.output_type())).collect()
+        }
+    };
+    debug_assert!(inferred_types.len() == declared_types.len());
+    zip(inferred_types, declared_types).enumerate().try_for_each(|(i, (inferred, declared))| {
+        let matches = match (inferred, declared) {
+            (FunctionParameterAnnotation::Concept(declared_types), Either::Left(inferred_types)) => {
+                inferred_types.iter().all(|type_| declared_types.contains(type_))
+            }
+            (FunctionParameterAnnotation::Value(declared_value), Either::Right(inferred_value)) => {
+                ExpressionValueType::Single(declared_value) == inferred_value // TODO
+            }
+            _ => false
+        };
+        if matches {
+            Ok(())
+        } else {
+            Err(Box::new(FunctionAnnotationError::SignatureReturnMismatch { }))
+        }
     })
 }
 
@@ -402,6 +449,42 @@ fn get_argument_annotations_from_labels(
         NamedType::Role(_) => unreachable!("A function argument label was wrongly parsed as role-type."),
     }
 }
+
+fn get_return_annotations_from_labels(
+    snapshot: &impl ReadableSnapshot,
+    type_manager: &TypeManager,
+    typeql_label: &TypeRefAny,
+    return_index: usize,
+) -> Result<Either<Arc<BTreeSet<Type>>, ExpressionValueType>, Box<FunctionAnnotationError>> {
+    let TypeRef::Named(inner_type) = (match typeql_label {
+        TypeRefAny::Type(inner) => inner,
+        TypeRefAny::Optional(typeql::type_::Optional { inner: _inner, .. }) => todo!(),
+        TypeRefAny::List(typeql::type_::List { inner: _inner, .. }) => todo!(),
+    }) else {
+        unreachable!("Function return labels cannot be variable.");
+    };
+    match inner_type {
+        NamedType::Label(label) => {
+            // TODO: could be a struct value type in the future!
+            let types = type_seeder::get_type_annotation_and_subtypes_from_label(
+                snapshot,
+                type_manager,
+                &Label::build(label.ident.as_str()),
+            )
+                .map_err(|source| {
+                    Box::new(FunctionAnnotationError::CouldNotResolveReturnType { index: return_index, source })
+                })?;
+            Ok(Either::Left(Arc::new(types)))
+        }
+        NamedType::BuiltinValueType(value_type) => {
+            // TODO: This may be list
+            let value = ExpressionValueType::Single(translate_value_type(&value_type.token));
+            Ok(Either::Right(value))
+        }
+        NamedType::Role(_) => unreachable!("A function return label was wrongly parsed as role-type."),
+    }
+}
+
 
 fn annotate_return(
     snapshot: &impl ReadableSnapshot,

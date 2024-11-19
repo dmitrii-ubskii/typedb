@@ -97,7 +97,7 @@ typedb_error!(
         ),
         InconsistentReturn(
             8,
-            "The return in the body of the function did not match that in the signature. \nSignature: {signature}\nDefinition: {return_}",
+            "The return statement in the body of the function did not match that in the signature. \nSignature: {signature}\nDefinition: {return_}",
             signature: Signature,
             return_: ReturnStatement
         ),
