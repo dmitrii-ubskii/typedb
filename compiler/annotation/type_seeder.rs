@@ -99,8 +99,8 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
         debug_assert!(conjunction.constraints().iter().flat_map(|constraint| constraint.vertices()).unique().all(
             |vertex| {
                 graph.vertices.contains_key(vertex)
-                    || self.variable_registry.get_variable_category(vertex.as_variable().unwrap()).unwrap()
-                        == VariableCategory::Value
+                    || vertex.as_parameter().is_some()
+                    || self.variable_registry.get_variable_category(vertex.as_variable().unwrap()).unwrap() == VariableCategory::Value
             }
         ));
 
