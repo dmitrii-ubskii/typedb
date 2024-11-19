@@ -42,6 +42,18 @@ rust_test(
 )
 
 rust_test(
+    name = "test_usage",
+    srcs = ["usage.rs"],
+    deps = [
+        "//tests/behaviour/steps:steps",
+
+        "@crates//:tokio",
+    ],
+    data = ["@typedb_behaviour//query/functions:usage.feature"],
+    crate_features = ["bazel"],
+)
+
+rust_test(
     name = "test_signature",
     srcs = ["signature.rs"],
     deps = [
