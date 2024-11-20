@@ -7,27 +7,26 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     iter,
+    iter::zip,
     sync::Arc,
 };
-use std::iter::zip;
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
 use encoding::value::value_type::{ValueType, ValueTypeCategory};
 use ir::{
-    pattern::constraint::Constraint,
+    pattern::{conjunction::Conjunction, constraint::Constraint},
     pipeline::{
         block::Block,
         fetch::FetchObject,
         function::Function,
+        function_signature::FunctionID,
         modifier::{Limit, Offset, Require, Select, Sort},
         reduce::{AssignedReduction, Reduce, Reducer},
         ParameterRegistry, VariableRegistry,
     },
     translation::pipeline::TranslatedStage,
 };
-use ir::pattern::conjunction::Conjunction;
-use ir::pipeline::function_signature::FunctionID;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -35,9 +34,13 @@ use crate::{
         expression::{
             block_compiler::compile_expressions,
             compiled_expression::{ExecutableExpression, ExpressionValueType},
+            ExpressionCompileError,
         },
         fetch::{annotate_fetch, AnnotatedFetch},
-        function::{annotate_functions, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        function::{
+            annotate_functions, AnnotatedFunctions, AnnotatedUnindexedFunctions, FunctionParameterAnnotation,
+            IndexedAnnotatedFunctions,
+        },
         match_inference::infer_types,
         type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
         type_inference::resolve_value_types,
@@ -45,8 +48,6 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
-use crate::annotation::expression::ExpressionCompileError;
-use crate::annotation::function::{AnnotatedFunctions, FunctionParameterAnnotation};
 
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedUnindexedFunctions,
@@ -251,7 +252,10 @@ fn annotate_stage(
             });
 
             collect_value_types_of_function_call_assignments(
-                block.conjunction(), schema_function_annotations, preamble_function_annotations, running_value_variable_assigned_types
+                block.conjunction(),
+                schema_function_annotations,
+                preamble_function_annotations,
+                running_value_variable_assigned_types,
             );
 
             let compiled_expressions = compile_expressions(
@@ -517,26 +521,27 @@ fn collect_value_types_of_function_call_assignments(
     conjunction: &Conjunction,
     schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
     preamble_function_annotations: Option<&AnnotatedUnindexedFunctions>,
-    value_type_annotations: &mut BTreeMap<Variable, ExpressionValueType>
+    value_type_annotations: &mut BTreeMap<Variable, ExpressionValueType>,
 ) {
-    conjunction.constraints().iter().filter_map(|constraint| {
-        match constraint {
+    conjunction
+        .constraints()
+        .iter()
+        .filter_map(|constraint| match constraint {
             Constraint::FunctionCallBinding(binding) => Some(binding),
             _ => None,
-        }
-    }).for_each(|binding| {
-        let return_ = match binding.function_call().function_id() {
-            FunctionID::Schema(id) => &schema_function_annotations.unwrap().get_function(id).unwrap().return_,
-            FunctionID::Preamble(id) => &preamble_function_annotations.unwrap().get_function(id).unwrap().return_,
-        };
-        zip(binding.assigned(), return_.annotations().iter()).for_each(|(var, annotation)| {
-            match &annotation {
+        })
+        .for_each(|binding| {
+            let return_ = match binding.function_call().function_id() {
+                FunctionID::Schema(id) => &schema_function_annotations.unwrap().get_function(id).unwrap().return_,
+                FunctionID::Preamble(id) => &preamble_function_annotations.unwrap().get_function(id).unwrap().return_,
+            };
+            zip(binding.assigned(), return_.annotations().iter()).for_each(|(var, annotation)| match &annotation {
                 FunctionParameterAnnotation::Value(value_type) => {
                     debug_assert!(!value_type_annotations.contains_key(&var.as_variable().unwrap()));
-                    value_type_annotations.insert(var.as_variable().unwrap(), ExpressionValueType::Single(value_type.clone()));
-                },
+                    value_type_annotations
+                        .insert(var.as_variable().unwrap(), ExpressionValueType::Single(value_type.clone()));
+                }
                 FunctionParameterAnnotation::Concept(_) => {}
-            }
-        })
-    });
+            })
+        });
 }

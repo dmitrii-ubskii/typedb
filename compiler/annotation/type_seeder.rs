@@ -100,7 +100,8 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
             |vertex| {
                 graph.vertices.contains_key(vertex)
                     || vertex.as_parameter().is_some()
-                    || self.variable_registry.get_variable_category(vertex.as_variable().unwrap()).unwrap() == VariableCategory::Value
+                    || self.variable_registry.get_variable_category(vertex.as_variable().unwrap()).unwrap()
+                        == VariableCategory::Value
             }
         ));
 
