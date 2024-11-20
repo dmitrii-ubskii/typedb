@@ -222,7 +222,7 @@ public class TransactionService implements StreamObserver<TransactionProto.Trans
     }
 
     protected void rollback(UUID requestID) {
-        transaction.rollback();
+//        transaction.rollback();
         respond(ResponseBuilder.Transaction.rollback(requestID));
     }
 
