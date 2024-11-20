@@ -4,10 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{iter::zip, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::zip,
+    sync::Arc,
+};
 
 use bytes::{byte_array::ByteArray, Bytes};
-use compiler::annotation::function::{annotate_functions, annotate_stored_functions, IndexedAnnotatedFunctions};
+use compiler::annotation::function::{annotate_stored_functions, IndexedAnnotatedFunctions};
 use concept::type_::type_manager::TypeManager;
 use encoding::{
     graph::{
@@ -20,11 +24,17 @@ use encoding::{
     AsBytes, Keyable,
 };
 use ir::{
+    pattern::{conjunction::Conjunction, constraint::Constraint, nested_pattern::NestedPattern},
     pipeline::{
-        function_signature::{FunctionID, FunctionSignature, FunctionSignatureIndex, HashMapFunctionSignatureIndex},
+        function_signature::{
+            FunctionID, FunctionIDAPI, FunctionSignature, FunctionSignatureIndex, HashMapFunctionSignatureIndex,
+        },
         FunctionReadError,
     },
-    translation::function::{build_signature, translate_typeql_function},
+    translation::{
+        function::{build_signature, translate_typeql_function},
+        pipeline::TranslatedStage,
+    },
 };
 use itertools::Itertools;
 use primitive::maybe_owns::MaybeOwns;
@@ -76,7 +86,9 @@ impl FunctionManager {
         let function_index =
             HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
         let mut translated = Self::translate_functions(snapshot, &functions, &function_index)?;
+
         // Run type-inference
+        validate_no_cycles(&translated)?;
         annotate_stored_functions(&mut translated, snapshot, type_manager)
             .map_err(|source| FunctionError::AllFunctionsTypeCheckFailure { typedb_source: source })?;
         Ok(())
@@ -126,7 +138,7 @@ impl FunctionManager {
         snapshot: &impl ReadableSnapshot,
         functions: &[SchemaFunction],
         function_index: &impl FunctionSignatureIndex,
-    ) -> Result<Vec<(DefinitionKey<'static>, ir::pipeline::function::Function)>, FunctionError> {
+    ) -> Result<HashMap<DefinitionKey<'static>, ir::pipeline::function::Function>, FunctionError> {
         functions
             .iter()
             .map(|function| {
@@ -205,6 +217,132 @@ impl FunctionReader {
                 Err(FunctionReadError::FunctionNotFound { function_id: FunctionID::Schema(definition_key.clone()) }),
                 |bytes| Ok(SchemaFunction::build(definition_key, FunctionDefinition::new(Bytes::Array(bytes))).unwrap()),
             )
+    }
+}
+
+pub(crate) fn validate_no_cycles<ID: FunctionIDAPI>(
+    functions: &HashMap<ID, ir::pipeline::function::Function>,
+) -> Result<(), FunctionError> {
+    let mut active = HashMap::new();
+    let mut complete = HashSet::new();
+    for id in functions.keys() {
+        debug_assert!(active.is_empty());
+        if !complete.contains(id) {
+            validate_no_cycles_impl(id.clone(), functions, &mut active, &mut complete, 0)?;
+            debug_assert!(complete.contains(id));
+        }
+    }
+    Ok(())
+}
+
+fn validate_no_cycles_impl<ID: FunctionIDAPI>(
+    id: ID,
+    functions: &HashMap<ID, ir::pipeline::function::Function>,
+    active: &mut HashMap<ID, usize>,
+    complete: &mut HashSet<ID>,
+    current_stratum: usize,
+) -> Result<(), FunctionError> {
+    if complete.contains(&id) {
+        return Ok(());
+    }
+    if let Some(stratum) = active.get(&id) {
+        if *stratum < current_stratum {
+            return Err(FunctionError::StratificationViolation {});
+        }
+    }
+
+    active.insert(id.clone(), current_stratum);
+    let function = functions.get(&id).unwrap();
+    for called_id in negated_function_calls(&function) {
+        validate_no_cycles_impl(called_id, functions, active, complete, current_stratum + 1)?;
+    }
+
+    let this_stage_has_operator = function.function_body.stages.iter().any(|stage| match stage {
+        TranslatedStage::Sort(_)
+        | TranslatedStage::Offset(_)
+        | TranslatedStage::Limit(_)
+        | TranslatedStage::Reduce(_) => true,
+        _ => false,
+    });
+    let unnegated_stratum = if this_stage_has_operator { current_stratum + 1 } else { current_stratum };
+    for called_id in unnegated_function_calls(function) {
+        validate_no_cycles_impl(called_id, functions, active, complete, unnegated_stratum)?;
+    }
+    active.remove(&id);
+
+    complete.insert(id);
+    Ok(())
+}
+
+fn negated_function_calls<ID: FunctionIDAPI>(function: &ir::pipeline::function::Function) -> impl Iterator<Item = ID> {
+    let mut calls = Vec::new();
+    for stage in &function.function_body.stages {
+        match stage {
+            TranslatedStage::Match { block, .. } => {
+                collect_negated_function_calls(block.conjunction(), &mut calls, false)
+            }
+            _ => {}
+        }
+    }
+    calls.into_iter()
+}
+
+fn collect_negated_function_calls<ID: FunctionIDAPI>(conjunction: &Conjunction, calls: &mut Vec<ID>, is_negated: bool) {
+    if is_negated {
+        conjunction.constraints().iter().for_each(|constraint| match constraint {
+            Constraint::FunctionCallBinding(binding) => {
+                let id = binding.function_call().function_id();
+                if let Ok(unwrapped_id) = id.try_into() {
+                    calls.push(unwrapped_id)
+                }
+            }
+            _ => {}
+        })
+    }
+
+    for pattern in conjunction.nested_patterns() {
+        match pattern {
+            NestedPattern::Negation(inner) => collect_negated_function_calls(inner.conjunction(), calls, true),
+            NestedPattern::Disjunction(inner) => inner.conjunctions().iter().for_each(|branch| {
+                collect_negated_function_calls(branch, calls, is_negated);
+            }),
+            NestedPattern::Optional(inner) => collect_negated_function_calls(inner.conjunction(), calls, is_negated),
+        }
+    }
+}
+
+fn unnegated_function_calls<ID: FunctionIDAPI>(
+    function: &ir::pipeline::function::Function,
+) -> impl Iterator<Item = ID> {
+    let mut calls = Vec::new();
+    for stage in &function.function_body.stages {
+        match stage {
+            TranslatedStage::Match { block, .. } => collect_unnegated_function_calls(block.conjunction(), &mut calls),
+            _ => {}
+        }
+    }
+    calls.into_iter()
+}
+
+fn collect_unnegated_function_calls<ID: FunctionIDAPI>(conjunction: &Conjunction, calls: &mut Vec<ID>) {
+    conjunction.constraints().iter().for_each(|constraint| match constraint {
+        Constraint::FunctionCallBinding(binding) => {
+            let id = binding.function_call().function_id();
+            if let Ok(unwrapped_id) = id.try_into() {
+                calls.push(unwrapped_id)
+            }
+        }
+        _ => {}
+    });
+
+    for pattern in conjunction.nested_patterns() {
+        match pattern {
+            NestedPattern::Negation(_) => {}
+            NestedPattern::Disjunction(inner) => inner.conjunctions().iter().for_each(|branch| {
+                collect_unnegated_function_calls(branch, calls);
+            }),
+            NestedPattern::Optional(inner) => collect_unnegated_function_calls(inner.conjunction(), calls),
+        }
     }
 }
 

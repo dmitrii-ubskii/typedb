@@ -191,7 +191,7 @@ impl AnnotatedFunctions for AnnotatedUnindexedFunctions {
 }
 
 pub fn annotate_stored_functions<'a>(
-    functions: &mut Vec<(DefinitionKey<'static>, Function)>,
+    functions: &mut HashMap<DefinitionKey<'static>, Function>,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
 ) -> Result<IndexedAnnotatedFunctions, Box<FunctionAnnotationError>> {
