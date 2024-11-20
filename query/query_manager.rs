@@ -15,7 +15,10 @@ use executor::pipeline::{
     pipeline::Pipeline,
     stage::{ReadPipelineStage, WritePipelineStage},
 };
-use function::function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex};
+use function::{
+    function_manager::{validate_no_cycles, FunctionManager, ReadThroughFunctionSignatureIndex},
+    FunctionError,
+};
 use ir::{
     pipeline::function_signature::{FunctionID, HashMapFunctionSignatureIndex},
     translation::pipeline::{translate_pipeline, TranslatedPipeline},
@@ -75,6 +78,12 @@ impl QueryManager {
         let arced_premable = Arc::new(translated_preamble);
         let arced_stages = Arc::new(translated_stages);
         let arced_fetch = Arc::new(translated_fetch);
+        match validate_no_cycles(
+            &arced_premable.iter().enumerate().map(|(i, translated)| (i, translated)).collect(),
+        ) {
+            Ok(_) => {}
+            Err(typedb_source) => return Err(QueryError::FunctionRetrieval { typedb_source }),
+        } // TODO: ^It's not really a retrieval error is it?
 
         let executable_pipeline = match self
             .cache
@@ -173,6 +182,13 @@ impl QueryManager {
                 executable_pipeline
             }
             None => {
+                match validate_no_cycles(
+                    &arced_premable.iter().enumerate().map(|(i, translated)| (i, translated)).collect(),
+                ) {
+                    Ok(_) => {}
+                    Err(typedb_source) => return Err((snapshot, QueryError::FunctionRetrieval { typedb_source })),
+                } // TODO: ^It's not really a retrieval error is it?
+
                 // 2: Annotate
                 let annotated_schema_functions = match function_manager.get_annotated_functions(&snapshot, type_manager)
                 {

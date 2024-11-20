@@ -88,7 +88,8 @@ impl FunctionManager {
         let mut translated = Self::translate_functions(snapshot, &functions, &function_index)?;
 
         // Run type-inference
-        validate_no_cycles(&translated)?;
+        let translated_refs = translated.iter().map(|(id, f)| (id.clone(), f)).collect();
+        validate_no_cycles(&translated_refs)?;
         annotate_stored_functions(&mut translated, snapshot, type_manager)
             .map_err(|source| FunctionError::AllFunctionsTypeCheckFailure { typedb_source: source })?;
         Ok(())
@@ -220,8 +221,8 @@ impl FunctionReader {
     }
 }
 
-pub(crate) fn validate_no_cycles<ID: FunctionIDAPI>(
-    functions: &HashMap<ID, ir::pipeline::function::Function>,
+pub fn validate_no_cycles<ID: FunctionIDAPI>(
+    functions: &HashMap<ID, &ir::pipeline::function::Function>,
 ) -> Result<(), FunctionError> {
     let mut active = HashMap::new();
     let mut complete = HashSet::new();
@@ -237,7 +238,7 @@ pub(crate) fn validate_no_cycles<ID: FunctionIDAPI>(
 
 fn validate_no_cycles_impl<ID: FunctionIDAPI>(
     id: ID,
-    functions: &HashMap<ID, ir::pipeline::function::Function>,
+    functions: &HashMap<ID, &ir::pipeline::function::Function>,
     active: &mut HashMap<ID, usize>,
     complete: &mut HashSet<ID>,
     current_stratum: usize,

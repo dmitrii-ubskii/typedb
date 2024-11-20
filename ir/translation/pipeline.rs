@@ -17,7 +17,7 @@ use crate::{
         block::Block,
         fetch::FetchObject,
         function::Function,
-        function_signature::FunctionSignatureIndex,
+        function_signature::{FunctionID, FunctionSignatureIndex},
         modifier::{Limit, Offset, Require, Select, Sort},
         reduce::Reduce,
         ParameterRegistry, VariableRegistry,
