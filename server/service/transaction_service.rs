@@ -496,25 +496,25 @@ impl TransactionService {
         _rollback_req: typedb_protocol::transaction::rollback::Req,
     ) -> Result<ControlFlow<(), ()>, Status> {
         // interrupt all queries, cancel writes, then rollback
-        self.interrupt_and_close_responders(InterruptType::TransactionRolledback).await;
-        if let Break(_) = self.cancel_queued_read_queries(InterruptType::TransactionRolledback).await {
-            return Ok(Break(()));
-        }
-
-        self.finish_running_write_query_no_transmit(InterruptType::TransactionRolledback).await?;
-        if let Break(()) = self.cancel_queued_write_queries(InterruptType::TransactionRolledback).await {
-            return Ok(Break(()));
-        }
-
-        match self.transaction.take().unwrap() {
-            Transaction::Read(_) => {
-                return Err(TransactionServiceError::CannotRollbackReadTransaction {}
-                    .into_error_message()
-                    .into_status());
-            }
-            Transaction::Write(mut transaction) => transaction.rollback(),
-            Transaction::Schema(mut transaction) => transaction.rollback(),
-        };
+        // self.interrupt_and_close_responders(InterruptType::TransactionRolledback).await;
+        // if let Break(_) = self.cancel_queued_read_queries(InterruptType::TransactionRolledback).await {
+        //     return Ok(Break(()));
+        // }
+        //
+        // self.finish_running_write_query_no_transmit(InterruptType::TransactionRolledback).await?;
+        // if let Break(()) = self.cancel_queued_write_queries(InterruptType::TransactionRolledback).await {
+        //     return Ok(Break(()));
+        // }
+        //
+        // match self.transaction.take().unwrap() {
+        //     Transaction::Read(_) => {
+        //         return Err(TransactionServiceError::CannotRollbackReadTransaction {}
+        //             .into_error_message()
+        //             .into_status());
+        //     }
+        //     Transaction::Write(mut transaction) => transaction.rollback(),
+        //     Transaction::Schema(mut transaction) => transaction.rollback(),
+        // };
         Ok(Continue(()))
     }
 
