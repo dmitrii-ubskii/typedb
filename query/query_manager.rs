@@ -16,7 +16,10 @@ use executor::pipeline::{
     pipeline::Pipeline,
     stage::{ReadPipelineStage, WritePipelineStage},
 };
-use function::function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex};
+use function::{
+    function_manager::{validate_no_cycles, FunctionManager, ReadThroughFunctionSignatureIndex},
+    FunctionError,
+};
 use ir::{
     pipeline::function_signature::{FunctionID, HashMapFunctionSignatureIndex},
     translation::pipeline::{translate_pipeline, TranslatedPipeline},
@@ -71,6 +74,13 @@ impl QueryManager {
             mut variable_registry,
             value_parameters: parameters,
         } = self.translate_pipeline(snapshot.as_ref(), function_manager, query)?;
+        match validate_no_cycles(
+            &translated_preamble.iter().enumerate().map(|(i, translated)| (i, translated)).collect(),
+        ) {
+            Ok(_) => {}
+            Err(typedb_source) => return Err(QueryError::FunctionRetrieval { typedb_source }),
+        } // TODO: ^It's not really a retrieval error is it?
+        eprintln!("Actually, we got here so it's too late anyway");
 
         // 2: Annotate
         let annotated_schema_functions = function_manager
@@ -136,7 +146,13 @@ impl QueryManager {
             Err(err) => return Err((snapshot, err)),
         };
 
-        // 2: Annotate
+        match validate_no_cycles(
+            &translated_preamble.iter().enumerate().map(|(i, translated)| (i, translated)).collect(),
+        ) {
+            Ok(_) => {}
+            Err(typedb_source) => return Err((snapshot, QueryError::FunctionRetrieval { typedb_source })),
+        } // TODO: ^It's not really a retrieval error is it?
+          // 2: Annotate
         let annotated_schema_functions = match function_manager.get_annotated_functions(&snapshot, type_manager) {
             Ok(functions) => functions,
             Err(err) => {
