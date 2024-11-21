@@ -21,13 +21,13 @@ use itertools::chain;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
+    function::AnnotatedFunctionSignatures,
     type_annotations::{
         ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations, TypeAnnotations,
     },
     type_seeder::TypeGraphSeedingContext,
     TypeInferenceError,
 };
-use crate::annotation::function::AnnotatedFunctionSignatures;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct VertexAnnotations {

@@ -13,10 +13,12 @@ use std::{
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
-use encoding::graph::definition::definition_key::DefinitionKey;
-use encoding::value::value_type::{ValueType, ValueTypeCategory};
+use encoding::{
+    graph::definition::definition_key::DefinitionKey,
+    value::value_type::{ValueType, ValueTypeCategory},
+};
 use ir::{
-    pattern::{conjunction::Conjunction, constraint::Constraint},
+    pattern::{conjunction::Conjunction, constraint::Constraint, nested_pattern::NestedPattern},
     pipeline::{
         block::Block,
         fetch::FetchObject,
@@ -28,7 +30,6 @@ use ir::{
     },
     translation::pipeline::TranslatedStage,
 };
-use ir::pattern::nested_pattern::NestedPattern;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -40,7 +41,8 @@ use crate::{
         },
         fetch::{annotate_fetch, AnnotatedFetch},
         function::{
-            annotate_preamble_functions, FunctionParameterAnnotation,
+            annotate_preamble_functions, AnnotatedFunction, AnnotatedFunctionSignature, AnnotatedFunctionSignatures,
+            AnnotatedPreambleFunctions, AnnotatedSchemaFunctions, FunctionParameterAnnotation,
         },
         match_inference::infer_types,
         type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
@@ -49,7 +51,6 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
-use crate::annotation::function::{AnnotatedFunction, AnnotatedFunctionSignature, AnnotatedFunctionSignatures, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions};
 
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedPreambleFunctions,
@@ -113,13 +114,19 @@ pub fn annotate_preamble_and_pipeline(
     translated_stages: Vec<TranslatedStage>,
     translated_fetch: Option<FetchObject>,
 ) -> Result<AnnotatedPipeline, AnnotationError> {
-    let schema_signature_annotations: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature> = schema_function_annotations.iter().map(|(id, function)| (id.clone(), function.get_annotated_signature())).collect();
+    let schema_signature_annotations: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature> =
+        schema_function_annotations
+            .iter()
+            .map(|(id, function)| (id.clone(), function.get_annotated_signature()))
+            .collect();
     let annotated_preamble =
         annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_signature_annotations.clone())
             .map_err(|typedb_source| AnnotationError::PreambleTypeInference { typedb_source })?;
-    let preamble_signature_annotations = annotated_preamble.iter().map(|function| function.get_annotated_signature()).collect();
+    let preamble_signature_annotations =
+        annotated_preamble.iter().map(|function| function.get_annotated_signature()).collect();
 
-    let combined_signature_annotations = AnnotatedFunctionSignatures::new(schema_signature_annotations, preamble_signature_annotations);
+    let combined_signature_annotations =
+        AnnotatedFunctionSignatures::new(schema_signature_annotations, preamble_signature_annotations);
     let (annotated_stages, annotated_fetch) = annotate_stages_and_fetch(
         snapshot,
         type_manager,
@@ -278,7 +285,7 @@ fn annotate_stage(
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                &annotated_function_signatures
+                &annotated_function_signatures,
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             block.conjunction().constraints().iter().for_each(|constraint| match constraint {
@@ -315,7 +322,7 @@ fn annotate_stage(
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                annotated_function_signatures
+                annotated_function_signatures,
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             deleted_variables.iter().for_each(|v| {
@@ -535,19 +542,27 @@ fn collect_value_types_of_function_call_assignments(
                 FunctionParameterAnnotation::Concept(_) => {}
             })
         });
-    conjunction.nested_patterns().iter().for_each(|nested| {
-        match nested {
-            NestedPattern::Disjunction(disjunction) => {
-                disjunction.conjunctions().iter().for_each(|inner|{
-                    collect_value_types_of_function_call_assignments(inner, annotated_function_signatures, value_type_annotations);
-                })
-            }
-            NestedPattern::Negation(negation) => {
-                collect_value_types_of_function_call_assignments(negation.conjunction(), annotated_function_signatures, value_type_annotations);
-            }
-            NestedPattern::Optional(optional) => {
-                collect_value_types_of_function_call_assignments(optional.conjunction(), annotated_function_signatures, value_type_annotations);
-            }
+    conjunction.nested_patterns().iter().for_each(|nested| match nested {
+        NestedPattern::Disjunction(disjunction) => disjunction.conjunctions().iter().for_each(|inner| {
+            collect_value_types_of_function_call_assignments(
+                inner,
+                annotated_function_signatures,
+                value_type_annotations,
+            );
+        }),
+        NestedPattern::Negation(negation) => {
+            collect_value_types_of_function_call_assignments(
+                negation.conjunction(),
+                annotated_function_signatures,
+                value_type_annotations,
+            );
+        }
+        NestedPattern::Optional(optional) => {
+            collect_value_types_of_function_call_assignments(
+                optional.conjunction(),
+                annotated_function_signatures,
+                value_type_annotations,
+            );
         }
     })
 }

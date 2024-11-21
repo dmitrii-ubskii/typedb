@@ -36,12 +36,11 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     function::{
-        AnnotatedFunction, FunctionParameterAnnotation,
+        AnnotatedFunction, AnnotatedFunctionSignature, AnnotatedFunctionSignatures, FunctionParameterAnnotation,
     },
     match_inference::{NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations},
     TypeInferenceError,
 };
-use crate::annotation::function::{AnnotatedFunctionSignature, AnnotatedFunctionSignatures};
 
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
@@ -49,7 +48,6 @@ pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     function_annotations: &'this AnnotatedFunctionSignatures,
     variable_registry: &'this VariableRegistry,
 }
-
 
 impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot> {
     pub(crate) fn new(
@@ -64,7 +62,6 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     fn get_annotated_function(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
         self.function_annotations.get(&function_id)
     }
-
 
     pub(crate) fn create_graph<'graph>(
         &self,
