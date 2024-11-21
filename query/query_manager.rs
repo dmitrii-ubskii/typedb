@@ -7,7 +7,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use compiler::{
-    annotation::pipeline::{annotate_pipeline, AnnotatedPipeline},
+    annotation::pipeline::{annotate_preamble_and_pipeline, AnnotatedPipeline},
     executable::pipeline::{compile_pipeline, ExecutablePipeline},
 };
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
@@ -101,7 +101,7 @@ impl QueryManager {
                     .get_annotated_functions(snapshot.as_ref(), type_manager)
                     .map_err(|err| QueryError::FunctionRetrieval { typedb_source: err })?;
 
-                let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_pipeline(
+                let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_preamble_and_pipeline(
                     snapshot.as_ref(),
                     type_manager,
                     &annotated_schema_functions,
@@ -196,7 +196,7 @@ impl QueryManager {
                     Err(err) => return Err((snapshot, QueryError::FunctionRetrieval { typedb_source: err })),
                 };
 
-                let annotated_pipeline = annotate_pipeline(
+                let annotated_pipeline = annotate_preamble_and_pipeline(
                     &snapshot,
                     type_manager,
                     &annotated_schema_functions,

@@ -81,7 +81,7 @@ pub mod tests {
     use typeql::{type_::NamedType, TypeRef, TypeRefAny};
 
     use crate::annotation::{
-        function::{annotate_named_function, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        function::{annotate_named_function, AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         match_inference::{
             compute_type_inference_graph, infer_types, NestedTypeInferenceGraphDisjunction, TypeInferenceEdge,
             TypeInferenceGraph, VertexAnnotations,
@@ -299,7 +299,7 @@ pub mod tests {
                 &entry_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -318,7 +318,7 @@ pub mod tests {
                 &mut f_ir,
                 &snapshot,
                 &type_manager,
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -342,10 +342,10 @@ pub mod tests {
             // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
             // match $animal = fn_test();
             let var_animal = var_from_registry(&entry_context.variable_registry, "animal").unwrap();
-            let local_cache = AnnotatedUnindexedFunctions::new(vec![f_annotations]);
+            let local_cache = AnnotatedPreambleFunctionSignatures::new(vec![f_annotations]);
             let variable_registry = &entry_context.variable_registry;
             let previous_stage_variable_annotations = &BTreeMap::new();
-            let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
+            let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
             let entry_annotations = infer_types(
                 &snapshot,
                 &entry,
@@ -478,7 +478,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -551,7 +551,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -619,7 +619,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap_err();
@@ -656,7 +656,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -747,7 +747,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&IndexedAnnotatedFunctions::empty()),
+            Some(&AnnotatedSchemaFunctionSignatures::empty()),
             None,
         )
         .unwrap();
@@ -859,7 +859,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&IndexedAnnotatedFunctions::empty()),
+            Some(&AnnotatedSchemaFunctionSignatures::empty()),
             None,
         )
         .unwrap();
@@ -948,7 +948,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&IndexedAnnotatedFunctions::empty()),
+            Some(&AnnotatedSchemaFunctionSignatures::empty()),
             None,
         )
         .unwrap();
@@ -1062,7 +1062,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -1132,7 +1132,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -1198,7 +1198,7 @@ pub mod tests {
             let mut graph = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
                 &translation_context.variable_registry,
             )
@@ -1255,7 +1255,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -1334,7 +1334,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -1400,7 +1400,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();
@@ -1461,7 +1461,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap_err();
@@ -1492,7 +1492,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&IndexedAnnotatedFunctions::empty()),
+                Some(&AnnotatedSchemaFunctionSignatures::empty()),
                 None,
             )
             .unwrap();

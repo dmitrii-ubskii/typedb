@@ -32,6 +32,7 @@ use typeql::{
     type_::NamedType,
     TypeRef, TypeRefAny,
 };
+use ir::pipeline::function_signature::{FunctionID, HashMapFunctionSignatureIndex};
 
 use crate::{
     annotation::{
@@ -54,26 +55,9 @@ pub struct AnnotatedFunction {
     pub parameter_registry: ParameterRegistry,
     pub arguments: Vec<Variable>,
     pub stages: Vec<AnnotatedStage>,
-    pub return_: AnnotatedFunctionReturn,
+    pub signature: AnnotatedFunctionSignature,
 }
 
-impl AnnotatedFunction {
-    pub(crate) fn argument_annotations(&self) -> impl Iterator<Item = Option<&Arc<BTreeSet<Type>>>> {
-        let first_match_annotations = self
-            .stages
-            .iter()
-            .filter_map(|stage| {
-                if let AnnotatedStage::Match { block_annotations, .. } = stage {
-                    Some(block_annotations)
-                } else {
-                    None
-                }
-            })
-            .next()
-            .unwrap();
-        self.arguments.iter().map(|var| first_match_annotations.vertex_annotations_of(&Vertex::Variable(var.clone())))
-    }
-}
 #[derive(Debug, Clone)]
 pub enum AnnotatedFunctionReturn {
     Stream { variables: Vec<Variable>, annotations: Vec<FunctionParameterAnnotation> },
@@ -113,80 +97,98 @@ impl AnnotatedFunctionReturn {
     }
 }
 
-/// Indexed by Function ID
-#[derive(Debug)]
-pub struct IndexedAnnotatedFunctions {
-    functions: HashMap<DefinitionKey<'static>, AnnotatedFunction>,
+
+#[derive(Debug, Clone)]
+pub struct AnnotatedFunctionSignature {
+    pub arguments: Vec<FunctionParameterAnnotation>,
+    pub return_: AnnotatedFunctionReturn,
 }
 
-impl IndexedAnnotatedFunctions {
-    pub fn new(functions: HashMap<DefinitionKey<'static>, AnnotatedFunction>) -> Self {
-        Self { functions }
+#[derive(Debug)]
+pub struct AnnotatedFunctionSignatures {
+    schema_functions: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>,
+    local_functions: Vec<AnnotatedFunctionSignature>,
+}
+
+impl AnnotatedFunctionSignatures {
+    fn new(schema_functions: AnnotatedSchemaFunctionSignatures, local_functions: AnnotatedPreambleFunctionSignatures) -> Self {
+        Self { schema_functions, local_functions }
+    }
+
+    pub(crate) fn get(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
+        match function_id {
+            FunctionID::Schema(definition_key) => {
+                self.schema_functions.get_function(definition_key.clone())
+            }
+            FunctionID::Preamble(index) => {
+                self.local_functions.get_function(index.clone())
+            }
+        }
+    }
+}
+
+
+/// Indexed by Function ID
+#[derive(Debug)]
+pub struct AnnotatedSchemaFunctionSignatures {
+    annotated_signatures: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>,
+}
+
+impl AnnotatedSchemaFunctionSignatures {
+    pub fn new(annotated_signatures: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>) -> Self {
+        Self { annotated_signatures }
     }
 
     pub fn empty() -> Self {
-        Self { functions: HashMap::new() }
+        Self { annotated_signatures: HashMap::new() }
     }
 }
 
 pub trait AnnotatedFunctions {
     type ID;
-
-    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunction>;
-    fn iter_functions(&self) -> impl Iterator<Item = (Self::ID, &AnnotatedFunction)>;
-
+    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunctionSignature>;
     fn is_empty(&self) -> bool;
 }
 
-impl AnnotatedFunctions for IndexedAnnotatedFunctions {
+impl AnnotatedFunctions for AnnotatedSchemaFunctionSignatures {
     type ID = DefinitionKey<'static>;
 
-    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunction> {
-        self.functions.get(&id)
-    }
-
-    fn iter_functions(&self) -> impl Iterator<Item = (DefinitionKey<'static>, &AnnotatedFunction)> {
-        self.functions.iter().map(|(key, function)| (key.clone(), function))
+    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunctionSignature> {
+        self.annotated_signatures.get(&id)
     }
 
     fn is_empty(&self) -> bool {
-        self.functions.is_empty()
+        self.annotated_signatures.is_empty()
     }
 }
 
 // May hold IR & Annotations for either uncommitted Schema functions or Preamble functions
 // For schema functions, The index does not correspond to function_id.as_usize().
-pub struct AnnotatedUnindexedFunctions {
-    unindexed_functions: Vec<AnnotatedFunction>,
+#[derive(Debug)]
+pub struct AnnotatedPreambleFunctionSignatures {
+    annotated_signatures: Vec<AnnotatedFunctionSignature>
 }
 
-impl AnnotatedUnindexedFunctions {
-    pub fn new(functions: Vec<AnnotatedFunction>) -> Self {
-        Self { unindexed_functions: functions }
+// TODO: Dissolve
+impl AnnotatedPreambleFunctionSignatures {
+    pub fn new(annotated_signatures: Vec<AnnotatedFunctionSignature>) -> Self {
+        Self { annotated_signatures }
     }
 
     pub fn empty() -> Self {
-        Self { unindexed_functions: Vec::new() }
-    }
-
-    pub fn into_iter_functions(self) -> impl Iterator<Item = AnnotatedFunction> {
-        self.unindexed_functions.into_iter()
+        Self { annotated_signatures: Vec::new() }
     }
 }
 
-impl AnnotatedFunctions for AnnotatedUnindexedFunctions {
+impl AnnotatedFunctions for AnnotatedPreambleFunctionSignatures {
     type ID = usize;
 
-    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunction> {
-        self.unindexed_functions.get(id)
-    }
-
-    fn iter_functions(&self) -> impl Iterator<Item = (usize, &AnnotatedFunction)> {
-        self.unindexed_functions.iter().enumerate()
+    fn get_function(&self, id: Self::ID) -> Option<&AnnotatedFunctionSignature> {
+        self.annotated_signatures.get(id)
     }
 
     fn is_empty(&self) -> bool {
-        self.unindexed_functions.is_empty()
+        self.annotated_signatures.is_empty()
     }
 }
 
@@ -194,20 +196,27 @@ pub fn annotate_stored_functions<'a>(
     functions: &mut HashMap<DefinitionKey<'static>, Function>,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-) -> Result<IndexedAnnotatedFunctions, Box<FunctionAnnotationError>> {
-    let preliminary_annotated_functions = functions
-        .iter_mut()
-        .map(|(function_id, function)| {
-            annotate_named_function(function, snapshot, type_manager, None, None)
-                .map(|annotated| (function_id.clone(), annotated))
-        })
-        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
-    let preliminary_annotations = IndexedAnnotatedFunctions::new(preliminary_annotated_functions);
+) -> Result<AnnotatedSchemaFunctionSignatures, Box<FunctionAnnotationError>> {
+    let label_based_signature_annotations_as_map = functions.iter().map(|(id, function)| {
+        (id.clone(), annotate_signature_based_on_labels(snapshot, type_manager, function))
+    }).collect::<HashMap<_,_>>();
+    let seed_signature_annotations = AnnotatedFunctionSignatures::new(
+        AnnotatedSchemaFunctionSignatures::new(label_based_signature_annotations_as_map),
+        AnnotatedPreambleFunctionSignatures::empty()
+    );
+    let preliminary_signature_annotations = functions.iter_mut().map(|(function_id, function)| {
+            annotate_named_function(function, snapshot, type_manager, &seed_signature_annotations)
+                .map(|annotated| (function_id.clone(), annotated.signature))
+        }).collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>, Box<FunctionAnnotationError>>>()?;
+    let preliminary_signature_annotations = AnnotatedFunctionSignatures::new(
+        AnnotatedSchemaFunctionSignatures::new(preliminary_signature_annotations),
+        AnnotatedPreambleFunctionSignatures::empty()
+    );
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
         .map(|(function_id, function)| {
-            annotate_named_function(function, snapshot, type_manager, Some(&preliminary_annotations), None)
+            annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations)
                 .map(|annotated| (function_id.clone(), annotated))
         })
         .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
@@ -216,22 +225,29 @@ pub fn annotate_stored_functions<'a>(
     // TODO: We don't propagate annotations until convergence, so we don't always detect unsatisfiable queries
     // Further, In a chain of three functions where the first two bodies have no function calls
     // but rely on the third function to infer annotations, the annotations will not reach the first function.
-    Ok(IndexedAnnotatedFunctions::new(annotated_functions))
+    Ok(AnnotatedSchemaFunctionSignatures::new(annotated_functions))
 }
 
-pub fn annotate_functions(
+fn annotate_signature_based_on_labels(todo: &impl ReadableSnapshot, type_manager: &TypeManager, function: &Function) -> AnnotatedFunctionSignature {
+    todo!()
+}
+
+pub fn annotate_preamble_functions(
     mut functions: Vec<Function>,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: &IndexedAnnotatedFunctions,
-) -> Result<AnnotatedUnindexedFunctions, Box<FunctionAnnotationError>> {
-    let preliminary_annotated_functions = functions
+    indexed_annotated_functions: &AnnotatedSchemaFunctionSignatures,
+) -> Result<AnnotatedPreambleFunctionSignatures, Box<FunctionAnnotationError>> {
+    let signature_annotations_from_labels = AnnotatedPreambleFunctionSignatures::new(
+        functions.iter().map(|function| annotate_signature_based_on_labels(snapshot, type_manager, function)).collect()
+    );
+    let label_based_signature_annotations = AnnotatedFunctionSignatures::new(indexed_annotated_functions, signature_annotations_from_labels);
+    let preliminary_signature_annotations = functions
         .iter_mut()
         .map(|function| {
-            annotate_named_function(function, snapshot, type_manager, Some(indexed_annotated_functions), None)
+            Ok(annotate_named_function(function, snapshot, type_manager, label_based_signature_annotations)?.signature)
         })
-        .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
-    let preliminary_annotations = AnnotatedUnindexedFunctions::new(preliminary_annotated_functions);
+        .collect::<Result<Vec<AnnotatedFunctionSignature>, Box<FunctionAnnotationError>>>()?;
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
@@ -240,8 +256,7 @@ pub fn annotate_functions(
                 function,
                 snapshot,
                 type_manager,
-                Some(indexed_annotated_functions),
-                Some(&preliminary_annotations),
+                AnnotatedFunctionSignatures::new(AnnotatedSchemaFunctionSignatures::empty(), preliminary_signature_annotations)
             )
         })
         .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
@@ -250,15 +265,14 @@ pub fn annotate_functions(
     // TODO: We don't propagate annotations until convergence, so we don't always detect unsatisfiable queries
     // Further, In a chain of three functions where the first two bodies have no function calls
     // but rely on the third function to infer annotations, the annotations will not reach the first function.
-    Ok(AnnotatedUnindexedFunctions::new(annotated_functions))
+    Ok(AnnotatedPreambleFunctionSignatures::new(annotated_functions))
 }
 
 pub(crate) fn annotate_anonymous_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
-    local_functions: Option<&AnnotatedUnindexedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     caller_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     caller_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
@@ -279,8 +293,7 @@ pub(crate) fn annotate_anonymous_function(
         function,
         snapshot,
         type_manager,
-        indexed_annotated_functions,
-        local_functions,
+        annotated_function_signatures,
         argument_concept_variable_types,
         argument_value_variable_types,
     )
@@ -290,8 +303,7 @@ pub(super) fn annotate_named_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
-    local_functions: Option<&AnnotatedUnindexedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
     let Function { arguments, argument_labels, .. } = function;
     debug_assert!(argument_labels.is_some());
@@ -311,8 +323,7 @@ pub(super) fn annotate_named_function(
         function,
         snapshot,
         type_manager,
-        indexed_annotated_functions,
-        local_functions,
+        annotated_function_signatures,
         argument_concept_variable_types,
         argument_value_variable_types,
     )
@@ -322,8 +333,7 @@ fn annotate_function_impl(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    indexed_annotated_functions: Option<&IndexedAnnotatedFunctions>,
-    local_functions: Option<&AnnotatedUnindexedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     argument_concept_variable_types: BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     argument_value_variable_types: BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
@@ -334,10 +344,9 @@ fn annotate_function_impl(
     let (stages, running_variable_types, running_value_types) = annotate_pipeline_stages(
         snapshot,
         type_manager,
-        indexed_annotated_functions,
+        annotated_function_signatures,
         &mut context.variable_registry,
         &parameters,
-        local_functions,
         stages.clone(),
         argument_concept_variable_types,
         argument_value_variable_types,
@@ -361,13 +370,31 @@ fn annotate_function_impl(
         };
         validate_return_against_signature(snapshot, type_manager, &return_, return_labels)?;
     }
+    let first_match_annotations = stages.iter().filter_map(|stage| {
+        if let AnnotatedStage::Match { block_annotations, .. } = stage {
+            Some(block_annotations)
+        } else {
+            None
+        }
+    }).next().unwrap();
+    let argument_annotations = arguments.iter().map(|var| {
+        if let Some(types_) = first_match_annotations.vertex_annotations_of(&Vertex::Variable(var.clone())) {
+            FunctionParameterAnnotation::Concept(types_.clone())
+        } else if let Some(value_type) = argument_value_variable_types.get(var) {
+            FunctionParameterAnnotation::Value(value_type)
+        } else {
+            unreachable!()
+        }
+    });
 
+
+    let signature = AnnotatedFunctionSignature { arguments: argument_annotations, return_};
     Ok(AnnotatedFunction {
         variable_registry: context.variable_registry.clone(),
         parameter_registry: parameters.clone(),
         arguments: arguments.clone(),
         stages,
-        return_,
+        signature,
     })
 }
 

@@ -36,49 +36,36 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     function::{
-        AnnotatedFunction, AnnotatedFunctions, AnnotatedUnindexedFunctions, FunctionParameterAnnotation,
-        IndexedAnnotatedFunctions,
+        AnnotatedFunction, AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, FunctionParameterAnnotation,
+        AnnotatedSchemaFunctionSignatures,
     },
     match_inference::{NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations},
     TypeInferenceError,
 };
+use crate::annotation::function::{AnnotatedFunctionSignature, AnnotatedFunctionSignatures};
 
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
     type_manager: &'this TypeManager,
-    schema_functions: Option<&'this IndexedAnnotatedFunctions>,
-    local_functions: Option<&'this AnnotatedUnindexedFunctions>,
+    function_annotations: &'this AnnotatedFunctionSignatures,
     variable_registry: &'this VariableRegistry,
 }
+
 
 impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot> {
     pub(crate) fn new(
         snapshot: &'this Snapshot,
         type_manager: &'this TypeManager,
-        schema_functions: Option<&'this IndexedAnnotatedFunctions>,
-        local_functions: Option<&'this AnnotatedUnindexedFunctions>,
+        function_annotations: &'this AnnotatedFunctionSignatures,
         variable_registry: &'this VariableRegistry,
     ) -> Self {
-        TypeGraphSeedingContext { snapshot, type_manager, schema_functions, local_functions, variable_registry }
+        TypeGraphSeedingContext { snapshot, type_manager, function_annotations, variable_registry }
     }
 
-    fn get_annotated_function(&self, function_id: FunctionID) -> Option<&AnnotatedFunction> {
-        match function_id {
-            FunctionID::Schema(definition_key) => {
-                debug_assert!(
-                    self.schema_functions.is_none()
-                        || self.schema_functions.unwrap().get_function(definition_key.clone()).is_some()
-                );
-                self.schema_functions?.get_function(definition_key.clone())
-            }
-            FunctionID::Preamble(index) => {
-                debug_assert!(
-                    self.local_functions.is_none() || self.local_functions.unwrap().get_function(index).is_some()
-                );
-                self.local_functions?.get_function(index)
-            }
-        }
+    fn get_annotated_function(&self, function_id: FunctionID) -> &AnnotatedFunctionSignature {
+        self.function_annotations.get(function_id).unwrap()
     }
+
 
     pub(crate) fn create_graph<'graph>(
         &self,
@@ -1557,7 +1544,7 @@ pub mod tests {
     use storage::snapshot::CommittableSnapshot;
 
     use crate::annotation::{
-        function::IndexedAnnotatedFunctions,
+        function::AnnotatedSchemaFunctionSignatures,
         match_inference::{TypeInferenceGraph, VertexAnnotations},
         tests::{
             managers,
@@ -1637,7 +1624,7 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = IndexedAnnotatedFunctions::empty();
+        let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
@@ -1692,7 +1679,7 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = IndexedAnnotatedFunctions::empty();
+        let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
@@ -1828,7 +1815,7 @@ pub mod tests {
             };
 
             let snapshot = storage.clone().open_snapshot_write();
-            let empty_function_cache = IndexedAnnotatedFunctions::empty();
+            let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
             let seeder = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,

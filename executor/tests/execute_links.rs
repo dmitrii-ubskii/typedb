@@ -12,7 +12,7 @@ use std::{
 
 use compiler::{
     annotation::{
-        function::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         match_inference::infer_types,
     },
     executable::{
@@ -223,8 +223,8 @@ fn traverse_links_unbounded_sorted_from() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
@@ -344,8 +344,8 @@ fn traverse_links_unbounded_sorted_to() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
@@ -455,8 +455,8 @@ fn traverse_links_bounded_relation() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
@@ -579,8 +579,8 @@ fn traverse_links_bounded_relation_player() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
@@ -711,8 +711,8 @@ fn traverse_links_reverse_unbounded_sorted_from() {
     let variable_registry = &translation_context.variable_registry;
     let snapshot1 = &*snapshot;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         snapshot1,
         &entry,
@@ -819,8 +819,8 @@ fn traverse_links_reverse_unbounded_sorted_to() {
     let variable_registry = &translation_context.variable_registry;
     let snapshot1 = &*snapshot;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         snapshot1,
         &entry,
@@ -927,8 +927,8 @@ fn traverse_links_reverse_bounded_player() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
@@ -1051,8 +1051,8 @@ fn traverse_links_reverse_bounded_player_relation() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-    let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
