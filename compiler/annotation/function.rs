@@ -305,7 +305,7 @@ fn annotate_function_impl(
         &running_value_types,
     )?;
     if let Some(output) = function.output.as_ref() {
-        validate_return_against_signature(snapshot, type_manager, &return_, output)?;
+        validate_return_against_signature(snapshot, type_manager, function.name.as_str(), &return_, output)?;
     }
     let first_match_annotations = stages
         .iter()
@@ -345,6 +345,7 @@ fn annotate_function_impl(
 fn validate_return_against_signature(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
+    name: &str,
     annotated: &AnnotatedFunctionReturn,
     signature_return: &Output,
 ) -> Result<(), Box<FunctionAnnotationError>> {
@@ -368,8 +369,8 @@ fn validate_return_against_signature(
         }
     };
     debug_assert!(inferred_types.len() == declared_types.len());
-    zip(inferred_types, declared_types).try_for_each(|(inferred, declared)| {
-        let matches = match (inferred, declared) {
+    zip(inferred_types, declared_types).enumerate().try_for_each(|(i, (inferred, declared))| {
+        let matches = match (&inferred, &declared) {
             (
                 FunctionParameterAnnotation::Concept(inferred_types),
                 FunctionParameterAnnotation::Concept(declared_types),
@@ -378,14 +379,17 @@ fn validate_return_against_signature(
                 FunctionParameterAnnotation::Value(inferred_value),
                 FunctionParameterAnnotation::Value(declared_value),
             ) => {
-                declared_value == inferred_value // TODO
+                declared_value == inferred_value
             }
             _ => false,
         };
         if matches {
             Ok(())
         } else {
-            Err(Box::new(FunctionAnnotationError::SignatureReturnMismatch {}))
+            Err(Box::new(FunctionAnnotationError::SignatureReturnMismatch {
+                function_name: name.to_owned(),
+                mismatching_index: i,
+            }))
         }
     })
 }
