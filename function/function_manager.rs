@@ -95,18 +95,18 @@ impl FunctionManager {
         Ok(())
     }
 
-    pub fn define_functions(
+    pub fn define_functions<'a>(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        definitions: Vec<String>,
+        definitions: impl Iterator<Item=&'a typeql::Function> + Clone,
     ) -> Result<Vec<SchemaFunction>, FunctionError> {
         let mut functions: Vec<SchemaFunction> = Vec::new();
-        for definition in &definitions {
+        for definition in definitions.clone() {
             let definition_key = self
                 .definition_key_generator
                 .create_function(snapshot)
                 .map_err(|source| FunctionError::CreateFunctionEncoding { source })?;
-            let function = SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition))?;
+            let function = SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition.unparsed.as_str()))?;
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let existing = snapshot.get::<BUFFER_VALUE_INLINE>(index_key.as_reference()).map_err(|source| {
                 FunctionError::FunctionRetrieval { source: FunctionReadError::FunctionRetrieval { source } }
@@ -123,13 +123,13 @@ impl FunctionManager {
         let function_index = ReadThroughFunctionSignatureIndex::new(snapshot, self, buffered);
         // Translate to ensure the function calls are valid references. Type-inference is done at commit-time.
         Self::translate_functions(snapshot, &functions, &function_index)?;
-        for (function, definition) in zip(functions.iter(), definitions.iter()) {
+        for (function, definition) in zip(functions.iter(), definitions.clone()) {
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let definition_key = &function.function_id;
             snapshot.put_val(index_key.into_owned_array(), ByteArray::copy(definition_key.bytes().bytes()));
             snapshot.put_val(
                 definition_key.clone().into_storage_key().into_owned_array(),
-                FunctionDefinition::build_ref(definition).into_bytes().into_array(),
+                FunctionDefinition::build_ref(definition.unparsed.as_str()).into_bytes().into_array(),
             );
         }
         Ok(functions)
@@ -249,6 +249,8 @@ fn validate_no_cycles_impl<ID: FunctionIDAPI>(
     if let Some(stratum) = active.get(&id) {
         if *stratum < current_stratum {
             return Err(FunctionError::StratificationViolation {});
+        } else {
+            return Ok(());
         }
     }
 
