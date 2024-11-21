@@ -12,7 +12,7 @@ use std::{
 
 use compiler::{
     annotation::{
-        function::{AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         match_inference::infer_types,
     },
     executable::match_::{
@@ -175,8 +175,8 @@ fn anonymous_vars_not_enumerated_or_counted() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-        let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,
@@ -277,8 +277,8 @@ fn unselected_named_vars_counted() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-        let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,
@@ -391,8 +391,8 @@ fn cartesian_named_counted_checked() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &IndexedAnnotatedFunctions::empty();
-        let annotated_preamble_functions = &AnnotatedUnindexedFunctions::empty();
+        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,

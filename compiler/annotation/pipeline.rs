@@ -38,8 +38,8 @@ use crate::{
         },
         fetch::{annotate_fetch, AnnotatedFetch},
         function::{
-            annotate_functions, AnnotatedFunctions, AnnotatedUnindexedFunctions, FunctionParameterAnnotation,
-            IndexedAnnotatedFunctions,
+            annotate_preamble_functions, AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, FunctionParameterAnnotation,
+            AnnotatedSchemaFunctionSignatures,
         },
         match_inference::infer_types,
         type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
@@ -48,9 +48,10 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
+use crate::annotation::function::AnnotatedFunctionSignatures;
 
 pub struct AnnotatedPipeline {
-    pub annotated_preamble: AnnotatedUnindexedFunctions,
+    pub annotated_preamble: AnnotatedPreambleFunctionSignatures,
     pub annotated_stages: Vec<AnnotatedStage>,
     pub annotated_fetch: Option<AnnotatedFetch>,
 }
@@ -101,10 +102,10 @@ impl AnnotatedStage {
     }
 }
 
-pub fn annotate_pipeline(
+pub fn annotate_preamble_and_pipeline(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: &IndexedAnnotatedFunctions,
+    schema_function_annotations: &AnnotatedSchemaFunctionSignatures,
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
     translated_preamble: Vec<Function>,
@@ -112,7 +113,7 @@ pub fn annotate_pipeline(
     translated_fetch: Option<FetchObject>,
 ) -> Result<AnnotatedPipeline, AnnotationError> {
     let annotated_preamble =
-        annotate_functions(translated_preamble, snapshot, type_manager, schema_function_annotations)
+        annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_function_annotations)
             .map_err(|typedb_source| AnnotationError::PreambleTypeInference { typedb_source })?;
     let (annotated_stages, annotated_fetch) = annotate_stages_and_fetch(
         snapshot,
@@ -132,10 +133,9 @@ pub fn annotate_pipeline(
 pub(crate) fn annotate_stages_and_fetch(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: &IndexedAnnotatedFunctions,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_preamble: Option<&AnnotatedUnindexedFunctions>,
     translated_stages: Vec<TranslatedStage>,
     translated_fetch: Option<FetchObject>,
     input_type_annotations: BTreeMap<Variable, Arc<BTreeSet<Type>>>,
@@ -144,10 +144,9 @@ pub(crate) fn annotate_stages_and_fetch(
     let (annotated_stages, running_variable_annotations, running_value_variable_types) = annotate_pipeline_stages(
         snapshot,
         type_manager,
-        Some(schema_function_annotations),
+        annotated_function_signatures,
         variable_registry,
         parameters,
-        annotated_preamble,
         translated_stages,
         input_type_annotations,
         input_value_type_annotations,
@@ -161,8 +160,7 @@ pub(crate) fn annotate_stages_and_fetch(
                 type_manager,
                 variable_registry,
                 parameters,
-                schema_function_annotations,
-                annotated_preamble,
+                annotated_function_signatures,
                 &running_variable_annotations,
                 &running_value_variable_types,
             );
@@ -175,10 +173,9 @@ pub(crate) fn annotate_stages_and_fetch(
 pub(crate) fn annotate_pipeline_stages(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_preamble: Option<&AnnotatedUnindexedFunctions>,
     translated_stages: Vec<TranslatedStage>,
     input_type_annotations: BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: BTreeMap<Variable, ExpressionValueType>,
@@ -208,8 +205,7 @@ pub(crate) fn annotate_pipeline_stages(
             parameters,
             snapshot,
             type_manager,
-            schema_function_annotations,
-            annotated_preamble,
+            annotated_function_signatures,
             running_constraint_annotations,
             stage,
         )?;
@@ -228,8 +224,7 @@ fn annotate_stage(
     parameters: &ParameterRegistry,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
-    preamble_function_annotations: Option<&AnnotatedUnindexedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     running_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
     stage: TranslatedStage,
 ) -> Result<AnnotatedStage, AnnotationError> {
@@ -241,8 +236,7 @@ fn annotate_stage(
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                schema_function_annotations,
-                preamble_function_annotations,
+                annotated_function_signatures,
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             block_annotations.vertex_annotations().iter().for_each(|(vertex, types)| {
@@ -253,8 +247,7 @@ fn annotate_stage(
 
             collect_value_types_of_function_call_assignments(
                 block.conjunction(),
-                schema_function_annotations,
-                preamble_function_annotations,
+                annotated_function_signatures,
                 running_value_variable_assigned_types,
             );
 
@@ -519,8 +512,7 @@ pub fn resolve_reduce_instruction_by_value_type(
 
 fn collect_value_types_of_function_call_assignments(
     conjunction: &Conjunction,
-    schema_function_annotations: Option<&IndexedAnnotatedFunctions>,
-    preamble_function_annotations: Option<&AnnotatedUnindexedFunctions>,
+    annotated_function_signatures: &AnnotatedFunctionSignatures,
     value_type_annotations: &mut BTreeMap<Variable, ExpressionValueType>,
 ) {
     conjunction
@@ -531,10 +523,7 @@ fn collect_value_types_of_function_call_assignments(
             _ => None,
         })
         .for_each(|binding| {
-            let return_ = match binding.function_call().function_id() {
-                FunctionID::Schema(id) => &schema_function_annotations.unwrap().get_function(id).unwrap().return_,
-                FunctionID::Preamble(id) => &preamble_function_annotations.unwrap().get_function(id).unwrap().return_,
-            };
+            let return_ = annotated_function_signatures.get(&binding.function_call().function_id()).return_;
             zip(binding.assigned(), return_.annotations().iter()).for_each(|(var, annotation)| match &annotation {
                 FunctionParameterAnnotation::Value(value_type) => {
                     debug_assert!(!value_type_annotations.contains_key(&var.as_variable().unwrap()));

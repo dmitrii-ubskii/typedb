@@ -18,7 +18,7 @@ use itertools::Itertools;
 use crate::{
     annotation::{
         fetch::AnnotatedFetch,
-        function::{AnnotatedFunctions, AnnotatedUnindexedFunctions, IndexedAnnotatedFunctions},
+        function::{AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         pipeline::AnnotatedStage,
     },
     executable::{
@@ -84,8 +84,8 @@ impl ExecutableStage {
 pub fn compile_pipeline(
     statistics: &Statistics,
     variable_registry: Arc<VariableRegistry>,
-    annotated_schema_functions: &IndexedAnnotatedFunctions,
-    annotated_preamble: AnnotatedUnindexedFunctions,
+    annotated_schema_functions: &AnnotatedSchemaFunctionSignatures,
+    annotated_preamble: AnnotatedPreambleFunctionSignatures,
     annotated_stages: Vec<AnnotatedStage>,
     annotated_fetch: Option<AnnotatedFetch>,
     input_variables: &HashSet<Variable>,

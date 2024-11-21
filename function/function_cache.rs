@@ -7,7 +7,7 @@
 use std::{collections::HashMap, iter::zip, sync::Arc};
 
 use compiler::annotation::function::{
-    annotate_functions, annotate_stored_functions, AnnotatedFunction, AnnotatedFunctions, IndexedAnnotatedFunctions,
+    annotate_stored_functions, AnnotatedFunction, AnnotatedFunctions, AnnotatedSchemaFunctionSignatures,
 };
 use concept::type_::type_manager::TypeManager;
 use encoding::graph::definition::definition_key::DefinitionKey;
@@ -23,7 +23,7 @@ use crate::{
 #[derive(Debug)]
 pub struct FunctionCache {
     parsed_functions: HashMap<DefinitionKey<'static>, SchemaFunction>,
-    annotated_functions: Arc<IndexedAnnotatedFunctions>,
+    annotated_functions: Arc<AnnotatedSchemaFunctionSignatures>,
     index: HashMapFunctionSignatureIndex,
 }
 
@@ -75,7 +75,7 @@ impl FunctionCache {
         self.parsed_functions.get(&definition_key)
     }
 
-    pub(crate) fn get_annotated_functions(&self) -> Arc<IndexedAnnotatedFunctions> {
+    pub(crate) fn get_annotated_functions(&self) -> Arc<AnnotatedSchemaFunctionSignatures> {
         self.annotated_functions.clone()
     }
 
