@@ -76,6 +76,7 @@ use crate::service::{
     },
     row::encode_row,
 };
+use crate::service::response_builders::transaction::{transaction_rollback_res, transaction_server_res_rollback_res};
 
 #[derive(Debug)]
 pub enum Transaction {
@@ -130,7 +131,9 @@ macro_rules! unwrap_or_execute_and_return {
 
 macro_rules! send_ok_message_else_return_break {
     ($response_sender: expr, $message: expr) => {{
-        if let Err(err) = $response_sender.send(Ok($message)).await {
+        let k = $message;
+        println!("Submit message: {:?}", k);
+        if let Err(err) = $response_sender.send(Ok(k)).await {
             event!(Level::TRACE, "Submit message failed: {:?}", err);
             return Break(());
         }
@@ -364,7 +367,7 @@ impl TransactionService {
                 Ok(Break(()))
             }
             (true, typedb_protocol::transaction::req::Req::RollbackReq(rollback_req)) => {
-                self.handle_rollback(rollback_req).await
+                self.handle_rollback(request_id, rollback_req).await
             }
             (true, typedb_protocol::transaction::req::Req::CloseReq(close_req)) => {
                 self.handle_close(close_req).await;
@@ -493,6 +496,7 @@ impl TransactionService {
 
     async fn handle_rollback(
         &mut self,
+        request_id: Uuid,
         _rollback_req: typedb_protocol::transaction::rollback::Req,
     ) -> Result<ControlFlow<(), ()>, Status> {
         // interrupt all queries, cancel writes, then rollback
@@ -515,7 +519,12 @@ impl TransactionService {
         //     Transaction::Write(mut transaction) => transaction.rollback(),
         //     Transaction::Schema(mut transaction) => transaction.rollback(),
         // };
-        Ok(Continue(()))
+        if let Err(err) = self.response_sender.send(Ok(transaction_server_res_rollback_res(request_id, transaction_rollback_res()))).await {
+            event!(Level::TRACE, "Submit message failed: {:?}", err);
+            Ok(Break(()))
+        } else {
+            Ok(Continue(()))
+        }
     }
 
     async fn handle_close(&mut self, _close_req: typedb_protocol::transaction::close::Req) {

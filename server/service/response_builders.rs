@@ -105,6 +105,11 @@ pub(crate) mod transaction {
         transaction_server_res(req_id, message)
     }
 
+    pub(crate) fn transaction_rollback_res(
+    ) -> typedb_protocol::transaction::rollback::Res {
+        typedb_protocol::transaction::rollback::Res {}
+    }
+
     pub(crate) fn query_res_ok_done(
         query_type: typedb_protocol::query::Type,
     ) -> typedb_protocol::query::initial_res::ok::Ok {
@@ -260,6 +265,13 @@ pub(crate) mod transaction {
     #[inline]
     pub(crate) fn transaction_server_res_part_stream_signal_done(req_id: Uuid) -> typedb_protocol::transaction::Server {
         transaction_server_res_part(req_id, transaction_res_part_res_part_stream_signal_done())
+    }
+
+    pub(crate) fn transaction_server_res_rollback_res(
+        req_id: Uuid,
+        message: typedb_protocol::transaction::rollback::Res,
+    ) -> typedb_protocol::transaction::Server {
+        transaction_server_res(req_id, typedb_protocol::transaction::res::Res::RollbackRes(message))
     }
 
     #[inline]
