@@ -33,13 +33,10 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     expression::compiled_expression::ExpressionValueType,
-    function::{
-        annotate_anonymous_function, AnnotatedFunction,
-    },
+    function::{annotate_anonymous_function, AnnotatedFunction, AnnotatedFunctionSignatures},
     pipeline::{annotate_stages_and_fetch, AnnotatedStage},
     AnnotationError,
 };
-use crate::annotation::function::AnnotatedFunctionSignatures;
 
 #[derive(Debug, Clone)]
 pub struct AnnotatedFetch {

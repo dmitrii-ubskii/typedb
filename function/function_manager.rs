@@ -98,7 +98,7 @@ impl FunctionManager {
     pub fn define_functions<'a>(
         &self,
         snapshot: &mut impl WritableSnapshot,
-        definitions: impl Iterator<Item=&'a typeql::Function> + Clone,
+        definitions: impl Iterator<Item = &'a typeql::Function> + Clone,
     ) -> Result<Vec<SchemaFunction>, FunctionError> {
         let mut functions: Vec<SchemaFunction> = Vec::new();
         for definition in definitions.clone() {
@@ -106,7 +106,8 @@ impl FunctionManager {
                 .definition_key_generator
                 .create_function(snapshot)
                 .map_err(|source| FunctionError::CreateFunctionEncoding { source })?;
-            let function = SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition.unparsed.as_str()))?;
+            let function =
+                SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition.unparsed.as_str()))?;
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let existing = snapshot.get::<BUFFER_VALUE_INLINE>(index_key.as_reference()).map_err(|source| {
                 FunctionError::FunctionRetrieval { source: FunctionReadError::FunctionRetrieval { source } }

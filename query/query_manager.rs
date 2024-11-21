@@ -86,17 +86,18 @@ impl QueryManager {
             .get_annotated_functions(snapshot.as_ref(), type_manager)
             .map_err(|err| QueryError::FunctionRetrieval { typedb_source: err })?;
 
-        let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_preamble_and_pipeline(
-            snapshot.as_ref(),
-            type_manager,
-            annotated_schema_functions.clone(),
-            &mut variable_registry,
-            &parameters,
-            translated_preamble,
-            translated_stages,
-            translated_fetch,
-        )
-        .map_err(|err| QueryError::Annotation { typedb_source: err })?;
+        let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } =
+            annotate_preamble_and_pipeline(
+                snapshot.as_ref(),
+                type_manager,
+                annotated_schema_functions.clone(),
+                &mut variable_registry,
+                &parameters,
+                translated_preamble,
+                translated_stages,
+                translated_fetch,
+            )
+            .map_err(|err| QueryError::Annotation { typedb_source: err })?;
 
         // 3: Compile
         let variable_registry = Arc::new(variable_registry);

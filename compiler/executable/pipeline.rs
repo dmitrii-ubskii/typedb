@@ -18,6 +18,7 @@ use itertools::Itertools;
 use crate::{
     annotation::{
         fetch::AnnotatedFetch,
+        function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions},
         pipeline::AnnotatedStage,
     },
     executable::{
@@ -32,7 +33,6 @@ use crate::{
     },
     VariablePosition,
 };
-use crate::annotation::function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions};
 
 pub struct ExecutablePipeline {
     pub executable_functions: ExecutableFunctionRegistry,
