@@ -89,7 +89,7 @@ impl QueryManager {
         let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_preamble_and_pipeline(
             snapshot.as_ref(),
             type_manager,
-            &annotated_schema_functions,
+            annotated_schema_functions.clone(),
             &mut variable_registry,
             &parameters,
             translated_preamble,
@@ -162,7 +162,7 @@ impl QueryManager {
         let annotated_pipeline = annotate_preamble_and_pipeline(
             &snapshot,
             type_manager,
-            &annotated_schema_functions,
+            annotated_schema_functions.clone(),
             &mut variable_registry,
             &value_parameters,
             translated_preamble,

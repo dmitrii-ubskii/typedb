@@ -13,6 +13,7 @@ use std::{
 
 use answer::{variable::Variable, Type};
 use concept::type_::type_manager::TypeManager;
+use encoding::graph::definition::definition_key::DefinitionKey;
 use encoding::value::value_type::{ValueType, ValueTypeCategory};
 use ir::{
     pattern::{conjunction::Conjunction, constraint::Constraint},
@@ -27,6 +28,7 @@ use ir::{
     },
     translation::pipeline::TranslatedStage,
 };
+use ir::pattern::nested_pattern::NestedPattern;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -38,8 +40,7 @@ use crate::{
         },
         fetch::{annotate_fetch, AnnotatedFetch},
         function::{
-            annotate_preamble_functions, AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, FunctionParameterAnnotation,
-            AnnotatedSchemaFunctionSignatures,
+            annotate_preamble_functions, FunctionParameterAnnotation,
         },
         match_inference::infer_types,
         type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
@@ -48,10 +49,10 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
-use crate::annotation::function::AnnotatedFunctionSignatures;
+use crate::annotation::function::{AnnotatedFunction, AnnotatedFunctionSignature, AnnotatedFunctionSignatures, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions};
 
 pub struct AnnotatedPipeline {
-    pub annotated_preamble: AnnotatedPreambleFunctionSignatures,
+    pub annotated_preamble: AnnotatedPreambleFunctions,
     pub annotated_stages: Vec<AnnotatedStage>,
     pub annotated_fetch: Option<AnnotatedFetch>,
 }
@@ -105,23 +106,26 @@ impl AnnotatedStage {
 pub fn annotate_preamble_and_pipeline(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_annotations: &AnnotatedSchemaFunctionSignatures,
+    schema_function_annotations: Arc<AnnotatedSchemaFunctions>,
     variable_registry: &mut VariableRegistry,
     parameters: &ParameterRegistry,
     translated_preamble: Vec<Function>,
     translated_stages: Vec<TranslatedStage>,
     translated_fetch: Option<FetchObject>,
 ) -> Result<AnnotatedPipeline, AnnotationError> {
+    let schema_signature_annotations: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature> = schema_function_annotations.iter().map(|(id, function)| (id.clone(), function.get_annotated_signature())).collect();
     let annotated_preamble =
-        annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_function_annotations)
+        annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_signature_annotations.clone())
             .map_err(|typedb_source| AnnotationError::PreambleTypeInference { typedb_source })?;
+    let preamble_signature_annotations = annotated_preamble.iter().map(|function| function.get_annotated_signature()).collect();
+
+    let combined_signature_annotations = AnnotatedFunctionSignatures::new(schema_signature_annotations, preamble_signature_annotations);
     let (annotated_stages, annotated_fetch) = annotate_stages_and_fetch(
         snapshot,
         type_manager,
-        schema_function_annotations,
+        &combined_signature_annotations,
         variable_registry,
         parameters,
-        Some(&annotated_preamble),
         translated_stages,
         translated_fetch,
         BTreeMap::new(),
@@ -274,8 +278,7 @@ fn annotate_stage(
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                None,
-                None,
+                &annotated_function_signatures
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             block.conjunction().constraints().iter().for_each(|constraint| match constraint {
@@ -312,8 +315,7 @@ fn annotate_stage(
                 variable_registry,
                 type_manager,
                 running_variable_annotations,
-                None,
-                None,
+                annotated_function_signatures
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             deleted_variables.iter().for_each(|v| {
@@ -523,8 +525,8 @@ fn collect_value_types_of_function_call_assignments(
             _ => None,
         })
         .for_each(|binding| {
-            let return_ = annotated_function_signatures.get(&binding.function_call().function_id()).return_;
-            zip(binding.assigned(), return_.annotations().iter()).for_each(|(var, annotation)| match &annotation {
+            let return_ = &annotated_function_signatures.get(&binding.function_call().function_id()).unwrap().returned;
+            zip(binding.assigned(), return_.iter()).for_each(|(var, annotation)| match &annotation {
                 FunctionParameterAnnotation::Value(value_type) => {
                     debug_assert!(!value_type_annotations.contains_key(&var.as_variable().unwrap()));
                     value_type_annotations
@@ -533,4 +535,19 @@ fn collect_value_types_of_function_call_assignments(
                 FunctionParameterAnnotation::Concept(_) => {}
             })
         });
+    conjunction.nested_patterns().iter().for_each(|nested| {
+        match nested {
+            NestedPattern::Disjunction(disjunction) => {
+                disjunction.conjunctions().iter().for_each(|inner|{
+                    collect_value_types_of_function_call_assignments(inner, annotated_function_signatures, value_type_annotations);
+                })
+            }
+            NestedPattern::Negation(negation) => {
+                collect_value_types_of_function_call_assignments(negation.conjunction(), annotated_function_signatures, value_type_annotations);
+            }
+            NestedPattern::Optional(optional) => {
+                collect_value_types_of_function_call_assignments(optional.conjunction(), annotated_function_signatures, value_type_annotations);
+            }
+        }
+    })
 }

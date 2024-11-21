@@ -270,7 +270,7 @@ fn function_compiles() {
     {
         let query = r#"
             with
-            fun get_ages($p_arg: person) -> { age }:
+            fun get_ages($p_arg: person) -> { long }:
             match
                 $p_arg has age $age_return;
             reduce $age_sum = sum($age_return);
@@ -475,7 +475,7 @@ fn fibonacci() {
     {
         let query = r#"
             with
-            fun ith_fibonacci_number($i: long) -> { long }:
+            fun ith_fibonacci_number($i: long) -> { number }:
             match
                 $ret isa number;
                 { $i == 1; $ret == 1; $ret isa number; } or

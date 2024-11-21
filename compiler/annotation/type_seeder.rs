@@ -36,8 +36,7 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
     function::{
-        AnnotatedFunction, AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, FunctionParameterAnnotation,
-        AnnotatedSchemaFunctionSignatures,
+        AnnotatedFunction, FunctionParameterAnnotation,
     },
     match_inference::{NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations},
     TypeInferenceError,
@@ -62,8 +61,8 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
         TypeGraphSeedingContext { snapshot, type_manager, function_annotations, variable_registry }
     }
 
-    fn get_annotated_function(&self, function_id: FunctionID) -> &AnnotatedFunctionSignature {
-        self.function_annotations.get(function_id).unwrap()
+    fn get_annotated_function(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
+        self.function_annotations.get(&function_id)
     }
 
 
@@ -730,9 +729,9 @@ impl UnaryConstraint for FunctionCallBinding<Variable> {
         seeder: &TypeGraphSeedingContext<'_, Snapshot>,
         graph_vertices: &mut VertexAnnotations,
     ) -> Result<(), TypeInferenceError> {
-        if let Some(annotated_function) = seeder.get_annotated_function(self.function_call().function_id()) {
+        if let Some(annotated_function_signature) = seeder.get_annotated_function(&self.function_call().function_id()) {
             for (assigned_variable, return_annotation) in
-                zip(self.assigned(), annotated_function.return_.annotations().iter())
+                zip(self.assigned(), annotated_function_signature.returned.iter())
             {
                 if let FunctionParameterAnnotation::Concept(types) = return_annotation {
                     graph_vertices.add_or_intersect(assigned_variable, Cow::Borrowed(types));
@@ -746,9 +745,9 @@ impl UnaryConstraint for FunctionCallBinding<Variable> {
                 .sorted()
                 .map(|(_, var)| var.clone())
                 .collect();
-            for (arg_var, arg_annotations) in zip(args_by_position, annotated_function.argument_annotations()) {
-                if let Some(types) = arg_annotations {
-                    graph_vertices.add_or_intersect(&Vertex::Variable(arg_var.clone()), Cow::Borrowed(&*types));
+            for (arg_var, arg_annotations) in zip(args_by_position, &annotated_function_signature.arguments) {
+                if let FunctionParameterAnnotation::Concept(types) = arg_annotations {
+                    graph_vertices.add_or_intersect(&Vertex::Variable(arg_var.clone()), Cow::Borrowed(&types));
                 }
             }
         }

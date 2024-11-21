@@ -168,6 +168,10 @@ features = {}
 	name = "test_signature"
 
 [[test]]
+	path = "tests/behaviour/query/functions/usage.rs"
+	name = "test_usage"
+
+[[test]]
 	path = "tests/behaviour/debug/debug.rs"
 	name = "test_debug"
 

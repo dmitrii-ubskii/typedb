@@ -61,17 +61,17 @@ pub(crate) fn compile_function(
     function: AnnotatedFunction,
     is_tabled: FunctionTablingType,
 ) -> Result<ExecutableFunction, ExecutableCompilationError> {
-    let AnnotatedFunction { variable_registry, parameter_registry, arguments, stages, signature } = function;
+    let AnnotatedFunction { variable_registry, parameter_registry, arguments, stages, return_, .. } = function;
     let (argument_positions, executable_stages) = compile_pipeline_stages(
         statistics,
         Arc::new(variable_registry),
         schema_functions,
         stages,
         arguments.into_iter(),
-        &signature.return_.referenced_variables(),
+        &return_.referenced_variables(),
     )?;
 
-    let returns = compile_return_operation(&executable_stages, signature.return_)?;
+    let returns = compile_return_operation(&executable_stages, return_)?;
     Ok(ExecutableFunction {
         executable_stages,
         argument_positions,
