@@ -21,7 +21,6 @@ use itertools::chain;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::annotation::{
-    function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
     type_annotations::{
         ConstraintTypeAnnotations, LeftRightAnnotations, LeftRightFilteredAnnotations, TypeAnnotations,
     },

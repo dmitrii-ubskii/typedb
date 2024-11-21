@@ -18,7 +18,6 @@ use itertools::Itertools;
 use crate::{
     annotation::{
         fetch::AnnotatedFetch,
-        function::{AnnotatedFunctions, AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         pipeline::AnnotatedStage,
     },
     executable::{
@@ -33,6 +32,7 @@ use crate::{
     },
     VariablePosition,
 };
+use crate::annotation::function::{AnnotatedPreambleFunctions, AnnotatedSchemaFunctions};
 
 #[derive(Debug, Clone)]
 pub struct ExecutablePipeline {
@@ -85,8 +85,8 @@ impl ExecutableStage {
 pub fn compile_pipeline(
     statistics: &Statistics,
     variable_registry: &VariableRegistry,
-    annotated_schema_functions: &AnnotatedSchemaFunctionSignatures,
-    annotated_preamble: AnnotatedPreambleFunctionSignatures,
+    annotated_schema_functions: &AnnotatedSchemaFunctions,
+    annotated_preamble: AnnotatedPreambleFunctions,
     annotated_stages: Vec<AnnotatedStage>,
     annotated_fetch: Option<AnnotatedFetch>,
     input_variables: &HashSet<Variable>,
@@ -94,9 +94,9 @@ pub fn compile_pipeline(
     // TODO: Cache compiled schema functions?
     let mut executable_schema_functions = HashMap::new();
     let schema_tabling_requirements = determine_tabling_requirements(
-        &annotated_schema_functions.iter_functions().map(|(id, function)| (FunctionID::Schema(id), function)).collect(),
+        &annotated_schema_functions.iter().map(|(id, function)| (FunctionID::Schema(id.clone()), function)).collect(),
     );
-    for (id, function) in annotated_schema_functions.iter_functions() {
+    for (id, function) in annotated_schema_functions.iter() {
         // TODO: We could save cloning the whole function and only clone the stages.
         let compiled = compile_function(
             statistics,
@@ -111,10 +111,10 @@ pub fn compile_pipeline(
         ExecutableFunctionRegistry::new(arced_executable_schema_functions.clone(), HashMap::new());
 
     let preamble_tabling_requirements = determine_tabling_requirements(
-        &annotated_preamble.iter_functions().map(|(id, function)| (FunctionID::Preamble(id), function)).collect(),
+        &annotated_preamble.iter().enumerate().map(|(id, function)| (FunctionID::Preamble(id), function)).collect(),
     );
     let mut executable_preamble_functions = HashMap::new();
-    for (id, function) in annotated_preamble.into_iter_functions().enumerate() {
+    for (id, function) in annotated_preamble.into_iter().enumerate() {
         let compiled = compile_function(
             statistics,
             &schema_function_registry,

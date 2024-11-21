@@ -6,9 +6,7 @@
 
 use std::{collections::HashMap, iter::zip, sync::Arc};
 
-use compiler::annotation::function::{
-    annotate_stored_functions, AnnotatedFunction, AnnotatedFunctions, AnnotatedSchemaFunctionSignatures,
-};
+use compiler::annotation::function::{annotate_stored_functions, AnnotatedFunction, AnnotatedSchemaFunctions};
 use concept::type_::type_manager::TypeManager;
 use encoding::graph::definition::definition_key::DefinitionKey;
 use ir::pipeline::function_signature::{FunctionSignatureIndex, HashMapFunctionSignatureIndex};
@@ -23,7 +21,7 @@ use crate::{
 #[derive(Debug)]
 pub struct FunctionCache {
     parsed_functions: HashMap<DefinitionKey<'static>, SchemaFunction>,
-    annotated_functions: Arc<AnnotatedSchemaFunctionSignatures>,
+    annotated_functions: Arc<AnnotatedSchemaFunctions>,
     index: HashMapFunctionSignatureIndex,
 }
 
@@ -75,11 +73,11 @@ impl FunctionCache {
         self.parsed_functions.get(&definition_key)
     }
 
-    pub(crate) fn get_annotated_functions(&self) -> Arc<AnnotatedSchemaFunctionSignatures> {
+    pub(crate) fn get_annotated_functions(&self) -> Arc<AnnotatedSchemaFunctions> {
         self.annotated_functions.clone()
     }
 
     pub(crate) fn get_annotated_function(&self, definition_key: DefinitionKey<'static>) -> Option<&AnnotatedFunction> {
-        self.annotated_functions.get_function(definition_key)
+        self.annotated_functions.get(&definition_key)
     }
 }

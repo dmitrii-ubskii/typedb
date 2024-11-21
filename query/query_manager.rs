@@ -104,7 +104,7 @@ impl QueryManager {
                 let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_preamble_and_pipeline(
                     snapshot.as_ref(),
                     type_manager,
-                    &annotated_schema_functions,
+                    annotated_schema_functions.clone(),
                     &mut variable_registry,
                     &parameters,
                     (*arced_premable).clone(),

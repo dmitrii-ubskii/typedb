@@ -28,7 +28,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::annotation::{
     expression::compiled_expression::ExpressionValueType,
     function::{
-        annotate_anonymous_function, AnnotatedFunction, AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures,
+        annotate_anonymous_function, AnnotatedFunction,
     },
     pipeline::{annotate_stages_and_fetch, AnnotatedStage},
     AnnotationError,

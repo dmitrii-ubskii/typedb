@@ -11,7 +11,7 @@ use std::{
 };
 
 use bytes::{byte_array::ByteArray, Bytes};
-use compiler::annotation::function::{annotate_stored_functions, AnnotatedSchemaFunctionSignatures};
+use compiler::annotation::function::{annotate_stored_functions, AnnotatedSchemaFunctions};
 use concept::type_::type_manager::TypeManager;
 use encoding::{
     graph::{
@@ -71,7 +71,7 @@ impl FunctionManager {
         &self,
         snapshot: &impl ReadableSnapshot,
         type_manager: &TypeManager,
-    ) -> Result<Arc<AnnotatedSchemaFunctionSignatures>, FunctionError> {
+    ) -> Result<Arc<AnnotatedSchemaFunctions>, FunctionError> {
         match self.function_cache.as_ref() {
             None => FunctionCache::build_cache(snapshot, type_manager).map(|cache| cache.get_annotated_functions()),
             Some(cache) => Ok(cache.get_annotated_functions()),
