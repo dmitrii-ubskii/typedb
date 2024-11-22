@@ -66,9 +66,6 @@ impl AnnotatedFunction {
     }
 }
 
-pub type AnnotatedPreambleFunctions = Vec<AnnotatedFunction>; // TODO
-pub type AnnotatedSchemaFunctions = HashMap<DefinitionKey<'static>, AnnotatedFunction>; // TODO
-
 #[derive(Debug, Clone)]
 pub enum AnnotatedFunctionReturn {
     Stream { variables: Vec<Variable>, annotations: Vec<FunctionParameterAnnotation> },
@@ -113,6 +110,9 @@ pub struct AnnotatedFunctionSignature {
     pub arguments: Vec<FunctionParameterAnnotation>,
     pub returned: Vec<FunctionParameterAnnotation>,
 }
+
+pub type AnnotatedPreambleFunctions = Vec<AnnotatedFunction>;
+pub type AnnotatedSchemaFunctions = HashMap<DefinitionKey<'static>, AnnotatedFunction>;
 
 #[derive(Debug)]
 pub struct AnnotatedFunctionSignatures {
