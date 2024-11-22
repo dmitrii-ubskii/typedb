@@ -20,6 +20,7 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
 };
 use error::typedb_error;
+use function::{function_manager::FunctionManager, FunctionError};
 use ir::{translation::tokens::translate_annotation_category, LiteralParseError};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
@@ -39,8 +40,6 @@ use typeql::{
     },
     type_::Label as TypeQLLabel,
 };
-use function::function_manager::FunctionManager;
-use function::FunctionError;
 
 use crate::{
     definable_resolution::{
@@ -154,10 +153,10 @@ fn undefine_function(
     function_undefinable: &Function,
 ) -> Result<(), UndefineError> {
     let name = function_undefinable.ident.as_str();
-    function_manager.undefine_function(snapshot, name)
-        .map_err(|source| UndefineError::FunctionUndefinition {
-            name: name.to_owned(), typedb_source: Box::new(source)
-        })
+    function_manager.undefine_function(snapshot, name).map_err(|source| UndefineError::FunctionUndefinition {
+        name: name.to_owned(),
+        typedb_source: Box::new(source),
+    })
 }
 
 fn undefine_specialise(

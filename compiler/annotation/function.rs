@@ -378,9 +378,7 @@ fn validate_return_against_signature(
             (
                 FunctionParameterAnnotation::Value(inferred_value),
                 FunctionParameterAnnotation::Value(declared_value),
-            ) => {
-                declared_value == inferred_value
-            }
+            ) => declared_value == inferred_value,
             _ => false,
         };
         if matches {

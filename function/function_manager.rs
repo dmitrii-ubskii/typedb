@@ -136,11 +136,7 @@ impl FunctionManager {
         Ok(functions)
     }
 
-    pub fn undefine_function(
-        &self,
-        snapshot: &mut impl WritableSnapshot,
-        name: &str,
-    ) -> Result<(), FunctionError>{
+    pub fn undefine_function(&self, snapshot: &mut impl WritableSnapshot, name: &str) -> Result<(), FunctionError> {
         let definition_key = match self.get_function_key(snapshot, name) {
             Err(source) => Err(FunctionError::FunctionRetrieval { source }),
             Ok(None) => Err(FunctionError::FunctionNotFound {}),
@@ -151,6 +147,37 @@ impl FunctionManager {
         snapshot.delete(index_key.into_storage_key().into_owned_array());
 
         Ok(())
+    }
+
+    pub fn redefine_function(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        definition: &typeql::Function,
+    ) -> Result<SchemaFunction, FunctionError> {
+        // TODO: Better query time checking. Maybe redefine all functions at once.
+        let definition_key = match self.get_function_key(snapshot, definition.signature.ident.as_str()) {
+            Err(source) => Err(FunctionError::FunctionRetrieval { source }),
+            Ok(None) => Err(FunctionError::FunctionNotFound {}),
+            Ok(Some(key)) => Ok(key),
+        }?;
+        let functions =
+            [SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition.unparsed.as_str()))?];
+        let buffered =
+            HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
+        let function_index = ReadThroughFunctionSignatureIndex::new(snapshot, self, buffered);
+        // Translate to ensure the function calls are valid references. Type-inference is done at commit-time.
+        Self::translate_functions(snapshot, &functions, &function_index)?;
+        for (function, definition) in zip(functions.iter(), [definition].iter()) {
+            let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
+            let definition_key = &function.function_id;
+            snapshot.put_val(index_key.into_owned_array(), ByteArray::copy(definition_key.bytes().bytes()));
+            snapshot.put_val(
+                definition_key.clone().into_storage_key().into_owned_array(),
+                FunctionDefinition::build_ref(definition.unparsed.as_str()).into_bytes().into_array(),
+            );
+        }
+        let [function] = functions;
+        Ok(function)
     }
 
     pub(crate) fn translate_functions(
