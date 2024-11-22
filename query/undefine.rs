@@ -39,6 +39,8 @@ use typeql::{
     },
     type_::Label as TypeQLLabel,
 };
+use function::function_manager::FunctionManager;
+use function::FunctionError;
 
 use crate::{
     definable_resolution::{
@@ -58,9 +60,10 @@ pub(crate) fn execute(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    function_manager: &FunctionManager,
     undefine: Undefine,
 ) -> Result<(), UndefineError> {
-    process_function_undefinitions(snapshot, type_manager, &undefine.undefinables)?;
+    process_function_undefinitions(snapshot, function_manager, &undefine.undefinables)?;
     process_specialise_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
     process_capability_annotation_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
     process_type_capability_undefinitions(snapshot, type_manager, thing_manager, &undefine.undefinables)?;
@@ -72,11 +75,11 @@ pub(crate) fn execute(
 
 fn process_function_undefinitions(
     snapshot: &mut impl WritableSnapshot,
-    type_manager: &TypeManager,
+    function_manager: &FunctionManager,
     undefinables: &[Undefinable],
 ) -> Result<(), UndefineError> {
     filter_variants!(Undefinable::Function : undefinables)
-        .try_for_each(|function| undefine_function(snapshot, type_manager, function))?;
+        .try_for_each(|function| undefine_function(snapshot, function_manager, function))?;
     Ok(())
 }
 
@@ -146,11 +149,15 @@ fn process_struct_undefinitions(
 }
 
 fn undefine_function(
-    _snapshot: &mut impl WritableSnapshot,
-    _type_manager: &TypeManager,
-    _function_undefinable: &Function,
+    snapshot: &mut impl WritableSnapshot,
+    function_manager: &FunctionManager,
+    function_undefinable: &Function,
 ) -> Result<(), UndefineError> {
-    Err(UndefineError::Unimplemented { description: "Function undefinition.".to_string() })
+    let name = function_undefinable.ident.as_str();
+    function_manager.undefine_function(snapshot, name)
+        .map_err(|source| UndefineError::FunctionUndefinition {
+            name: name.to_owned(), typedb_source: Box::new(source)
+        })
 }
 
 fn undefine_specialise(
@@ -1164,6 +1171,12 @@ typedb_error!(
             declaration: CapabilityType,
             left_kind: Kind,
             right_kind: Kind
+        ),
+        FunctionUndefinition(
+            35,
+            "Undefining the function \"{name}\" failed",
+            name: String,
+            ( typedb_source: Box<FunctionError> )
         ),
     }
 );
