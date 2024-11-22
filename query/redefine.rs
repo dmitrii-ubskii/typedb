@@ -39,6 +39,7 @@ use typeql::{
     token::Keyword,
     Definable,
 };
+use function::function_manager::FunctionManager;
 
 use crate::{
     definable_resolution::{
@@ -73,12 +74,12 @@ pub(crate) fn execute(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    function_manager: &FunctionManager,
     redefine: Redefine,
 ) -> Result<(), RedefineError> {
     let redefined_structs = process_struct_redefinitions(snapshot, type_manager, thing_manager, &redefine.definables)?;
     let redefined_types = process_type_redefinitions(snapshot, type_manager, thing_manager, &redefine.definables)?;
-    let redefined_functions = process_function_redefinitions(snapshot, type_manager, &redefine.definables)?;
-
+    let redefined_functions = process_function_redefinitions(snapshot, type_manager, function_manager, &redefine.definables)?;
     if !redefined_structs && !redefined_types && !redefined_functions {
         Err(RedefineError::NothingRedefined {})
     } else {
@@ -134,11 +135,12 @@ fn process_type_redefinitions(
 fn process_function_redefinitions(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
+    function_manager: &FunctionManager,
     definables: &[Definable],
 ) -> Result<bool, RedefineError> {
     let mut anything_redefined = false;
     filter_variants!(Definable::Function : definables)
-        .try_for_each(|function| redefine_function(snapshot, type_manager, &mut anything_redefined, function))?;
+        .try_for_each(|function| redefine_function(snapshot, type_manager, function_manager, &mut anything_redefined, function))?;
     Ok(anything_redefined)
 }
 
@@ -850,6 +852,7 @@ fn redefine_plays_annotations(
 fn redefine_function(
     _snapshot: &impl WritableSnapshot,
     _type_manager: &TypeManager,
+    _function_manager: &FunctionManager,
     _anything_redefined: &mut bool,
     _function_declaration: &Function,
 ) -> Result<(), RedefineError> {

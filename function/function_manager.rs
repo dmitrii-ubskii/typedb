@@ -136,6 +136,23 @@ impl FunctionManager {
         Ok(functions)
     }
 
+    pub fn undefine_function(
+        &self,
+        snapshot: &mut impl WritableSnapshot,
+        name: &str,
+    ) -> Result<(), FunctionError>{
+        let definition_key = match self.get_function_key(snapshot, name) {
+            Err(source) => Err(FunctionError::FunctionRetrieval { source }),
+            Ok(None) => Err(FunctionError::FunctionNotFound {}),
+            Ok(Some(key)) => Ok(key),
+        }?;
+        snapshot.delete(definition_key.into_storage_key().into_owned_array());
+        let index_key = NameToFunctionDefinitionIndex::build(name);
+        snapshot.delete(index_key.into_storage_key().into_owned_array());
+
+        Ok(())
+    }
+
     pub(crate) fn translate_functions(
         snapshot: &impl ReadableSnapshot,
         functions: &[SchemaFunction],
