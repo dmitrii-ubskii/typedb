@@ -12,19 +12,21 @@ use std::{
 use compiler::{
     self,
     annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
-    executable::match_::{
-        instructions::{
-            thing::{IsaInstruction, IsaReverseInstruction},
-            ConstraintInstruction, Inputs,
+    executable::{
+        match_::{
+            instructions::{
+                thing::{IsaInstruction, IsaReverseInstruction},
+                ConstraintInstruction, Inputs,
+            },
+            planner::{
+                function_plan::ExecutableFunctionRegistry,
+                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+            },
         },
-        planner::{
-            function_plan::ExecutableFunctionRegistry,
-            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
-        },
+        next_executable_id,
     },
     ExecutorVariable, VariablePosition,
 };
-use compiler::executable::next_executable_id;
 use encoding::value::label::Label;
 use executor::{
     error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile,

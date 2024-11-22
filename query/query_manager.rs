@@ -82,9 +82,7 @@ impl QueryManager {
         let arced_premable = Arc::new(translated_preamble);
         let arced_stages = Arc::new(translated_stages);
         let arced_fetch = Arc::new(translated_fetch);
-        match validate_no_cycles(
-            &arced_premable.iter().enumerate().map(|(i, translated)| (i, translated)).collect(),
-        ) {
+        match validate_no_cycles(&arced_premable.iter().enumerate().map(|(i, translated)| (i, translated)).collect()) {
             Ok(_) => {}
             Err(typedb_source) => return Err(QueryError::FunctionRetrieval { typedb_source }),
         } // TODO: ^It's not really a retrieval error is it?
@@ -105,17 +103,18 @@ impl QueryManager {
                     .get_annotated_functions(snapshot.as_ref(), type_manager)
                     .map_err(|err| QueryError::FunctionRetrieval { typedb_source: err })?;
 
-                let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } = annotate_preamble_and_pipeline(
-                    snapshot.as_ref(),
-                    type_manager,
-                    annotated_schema_functions.clone(),
-                    &mut variable_registry,
-                    &parameters,
-                    (*arced_premable).clone(),
-                    (*arced_stages).clone(),
-                    (*arced_fetch).clone(),
-                )
-                .map_err(|err| QueryError::Annotation { typedb_source: err })?;
+                let AnnotatedPipeline { annotated_preamble, annotated_stages, annotated_fetch } =
+                    annotate_preamble_and_pipeline(
+                        snapshot.as_ref(),
+                        type_manager,
+                        annotated_schema_functions.clone(),
+                        &mut variable_registry,
+                        &parameters,
+                        (*arced_premable).clone(),
+                        (*arced_stages).clone(),
+                        (*arced_fetch).clone(),
+                    )
+                    .map_err(|err| QueryError::Annotation { typedb_source: err })?;
 
                 // 3: Compile
                 let executable_pipeline = compile_pipeline(

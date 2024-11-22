@@ -12,19 +12,21 @@ use std::{
 
 use compiler::{
     annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
-    executable::match_::{
-        instructions::{
-            thing::{IsaInstruction, LinksInstruction, LinksReverseInstruction},
-            ConstraintInstruction, Inputs,
+    executable::{
+        match_::{
+            instructions::{
+                thing::{IsaInstruction, LinksInstruction, LinksReverseInstruction},
+                ConstraintInstruction, Inputs,
+            },
+            planner::{
+                function_plan::ExecutableFunctionRegistry,
+                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+            },
         },
-        planner::{
-            function_plan::ExecutableFunctionRegistry,
-            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
-        },
+        next_executable_id,
     },
     ExecutorVariable, VariablePosition,
 };
-use compiler::executable::next_executable_id;
 use concept::{
     thing::object::ObjectAPI,
     type_::{

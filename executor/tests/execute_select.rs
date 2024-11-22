@@ -12,16 +12,18 @@ use std::{
 
 use compiler::{
     annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
-    executable::match_::{
-        instructions::{thing::HasInstruction, ConstraintInstruction, Inputs},
-        planner::{
-            function_plan::ExecutableFunctionRegistry,
-            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+    executable::{
+        match_::{
+            instructions::{thing::HasInstruction, ConstraintInstruction, Inputs},
+            planner::{
+                function_plan::ExecutableFunctionRegistry,
+                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+            },
         },
+        next_executable_id,
     },
     ExecutorVariable, VariablePosition,
 };
-use compiler::executable::next_executable_id;
 use concept::{
     thing::object::ObjectAPI,
     type_::{annotation::AnnotationCardinality, owns::OwnsAnnotation, Ordering, OwnerAPI},
