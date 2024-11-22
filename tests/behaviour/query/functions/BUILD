@@ -18,6 +18,18 @@ rust_test(
 )
 
 rust_test(
+    name = "test_definition",
+    srcs = ["definition.rs"],
+    deps = [
+        "//tests/behaviour/steps:steps",
+
+        "@crates//:tokio",
+    ],
+    data = ["@typedb_behaviour//query/functions:definition.feature"],
+    crate_features = ["bazel"],
+)
+
+rust_test(
     name = "test_recursion",
     srcs = ["recursion.rs"],
     deps = [
@@ -26,6 +38,18 @@ rust_test(
         "@crates//:tokio",
     ],
     data = ["@typedb_behaviour//query/functions:recursion.feature"],
+    crate_features = ["bazel"],
+)
+
+rust_test(
+    name = "test_signature",
+    srcs = ["signature.rs"],
+    deps = [
+        "//tests/behaviour/steps:steps",
+
+        "@crates//:tokio",
+    ],
+    data = ["@typedb_behaviour//query/functions:signature.feature"],
     crate_features = ["bazel"],
 )
 
@@ -50,18 +74,6 @@ rust_test(
         "@crates//:tokio",
     ],
     data = ["@typedb_behaviour//query/functions:usage.feature"],
-    crate_features = ["bazel"],
-)
-
-rust_test(
-    name = "test_signature",
-    srcs = ["signature.rs"],
-    deps = [
-        "//tests/behaviour/steps:steps",
-
-        "@crates//:tokio",
-    ],
-    data = ["@typedb_behaviour//query/functions:signature.feature"],
     crate_features = ["bazel"],
 )
 

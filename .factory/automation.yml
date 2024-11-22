@@ -148,6 +148,7 @@ build:
       dependencies: [build]
       command: |
         bazel run @typedb_dependencies//tool/bazelinstall:remote_cache_setup.sh
+        bazel test //tests/behaviour/query/language:test_definition --test_output=streamed
         bazel test //tests/behaviour/query/language:test_signature --test_output=streamed
         bazel test //tests/behaviour/query/language:test_structure --test_output=streamed
         bazel test //tests/behaviour/query/language:test_usage --test_output=streamed
