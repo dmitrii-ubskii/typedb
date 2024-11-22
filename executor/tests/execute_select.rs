@@ -11,22 +11,17 @@ use std::{
 };
 
 use compiler::{
-    annotation::{
-        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
-        match_inference::infer_types,
-    },
-    executable::{
-        match_::{
-            instructions::{thing::HasInstruction, ConstraintInstruction, Inputs},
-            planner::{
-                function_plan::ExecutableFunctionRegistry,
-                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
-            },
+    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    executable::match_::{
+        instructions::{thing::HasInstruction, ConstraintInstruction, Inputs},
+        planner::{
+            function_plan::ExecutableFunctionRegistry,
+            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
         },
-        next_executable_id,
     },
     ExecutorVariable, VariablePosition,
 };
+use compiler::executable::next_executable_id;
 use concept::{
     thing::object::ObjectAPI,
     type_::{annotation::AnnotationCardinality, owns::OwnsAnnotation, Ordering, OwnerAPI},
@@ -178,16 +173,13 @@ fn anonymous_vars_not_enumerated_or_counted() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            Some(annotated_schema_functions),
-            Some(annotated_preamble_functions),
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap()
     };
@@ -281,16 +273,13 @@ fn unselected_named_vars_counted() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            Some(annotated_schema_functions),
-            Some(annotated_preamble_functions),
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap()
     };
@@ -396,16 +385,13 @@ fn cartesian_named_counted_checked() {
         let (type_manager, _) = load_managers(storage.clone(), None);
         let variable_registry = &translation_context.variable_registry;
         let previous_stage_variable_annotations = &BTreeMap::new();
-        let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-        let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
         infer_types(
             &snapshot,
             &entry,
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            Some(annotated_schema_functions),
-            Some(annotated_preamble_functions),
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap()
     };

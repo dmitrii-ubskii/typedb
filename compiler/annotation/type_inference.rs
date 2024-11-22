@@ -78,10 +78,11 @@ pub mod tests {
     };
     use itertools::Itertools;
     use test_utils::assert_matches;
-    use typeql::{type_::NamedType, TypeRef, TypeRefAny};
 
     use crate::annotation::{
-        function::{annotate_named_function, AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
+        function::{
+            annotate_named_function, AnnotatedFunctionSignatures, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions,
+        },
         match_inference::{
             compute_type_inference_graph, infer_types, NestedTypeInferenceGraphDisjunction, TypeInferenceEdge,
             TypeInferenceGraph, VertexAnnotations,
@@ -299,8 +300,7 @@ pub mod tests {
                 &entry_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
             assert_eq!(
@@ -314,14 +314,9 @@ pub mod tests {
             // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
             let (entry, entry_context, mut f_ir) = with_local_cache;
 
-            let f_annotations = annotate_named_function(
-                &mut f_ir,
-                &snapshot,
-                &type_manager,
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
-            )
-            .unwrap();
+            let f_annotations =
+                annotate_named_function(&mut f_ir, &snapshot, &type_manager, &AnnotatedFunctionSignatures::empty())
+                    .unwrap();
             let f_var_animal =
                 var_from_registry(&f_ir.translation_context().variable_registry, "called_animal").unwrap();
             let f_var_animal_type =
@@ -342,18 +337,17 @@ pub mod tests {
             // with fun fn_test() -> animal: match $called_animal isa cat, has $called_name; return { $called_animal };
             // match $animal = fn_test();
             let var_animal = var_from_registry(&entry_context.variable_registry, "animal").unwrap();
-            let local_cache = AnnotatedPreambleFunctionSignatures::new(vec![f_annotations]);
             let variable_registry = &entry_context.variable_registry;
             let previous_stage_variable_annotations = &BTreeMap::new();
-            let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
+            let preamble_functions = vec![f_annotations.get_annotated_signature()];
+            let function_annotations = AnnotatedFunctionSignatures::new(HashMap::new(), preamble_functions);
             let entry_annotations = infer_types(
                 &snapshot,
                 &entry,
                 variable_registry,
                 &type_manager,
                 previous_stage_variable_annotations,
-                Some(annotated_schema_functions),
-                Some(&local_cache),
+                &function_annotations,
             )
             .unwrap();
             assert_eq!(
@@ -478,8 +472,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -551,8 +544,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -619,8 +611,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap_err();
 
@@ -656,8 +647,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -747,8 +737,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&AnnotatedSchemaFunctionSignatures::empty()),
-            None,
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap();
 
@@ -859,8 +848,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&AnnotatedSchemaFunctionSignatures::empty()),
-            None,
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap();
 
@@ -948,8 +936,7 @@ pub mod tests {
             &translation_context.variable_registry,
             &type_manager,
             &BTreeMap::new(),
-            Some(&AnnotatedSchemaFunctionSignatures::empty()),
-            None,
+            &AnnotatedFunctionSignatures::empty(),
         )
         .unwrap();
 
@@ -1062,8 +1049,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -1132,8 +1118,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -1198,8 +1183,7 @@ pub mod tests {
             let mut graph = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
                 &translation_context.variable_registry,
             )
             .create_graph(block.block_context(), &BTreeMap::new(), block.conjunction())
@@ -1255,8 +1239,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -1334,8 +1317,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -1400,8 +1382,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 
@@ -1461,8 +1442,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap_err();
             assert_matches!(err, TypeInferenceError::DetectedUnsatisfiablePattern {});
@@ -1492,8 +1472,7 @@ pub mod tests {
                 &translation_context.variable_registry,
                 &type_manager,
                 &BTreeMap::new(),
-                Some(&AnnotatedSchemaFunctionSignatures::empty()),
-                None,
+                &AnnotatedFunctionSignatures::empty(),
             )
             .unwrap();
 

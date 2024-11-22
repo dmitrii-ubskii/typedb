@@ -11,25 +11,20 @@ use std::{
 
 use compiler::{
     self,
-    annotation::{
-        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
-        match_inference::infer_types,
-    },
-    executable::{
-        match_::{
-            instructions::{
-                thing::{IsaInstruction, IsaReverseInstruction},
-                ConstraintInstruction, Inputs,
-            },
-            planner::{
-                function_plan::ExecutableFunctionRegistry,
-                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
-            },
+    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    executable::match_::{
+        instructions::{
+            thing::{IsaInstruction, IsaReverseInstruction},
+            ConstraintInstruction, Inputs,
         },
-        next_executable_id,
+        planner::{
+            function_plan::ExecutableFunctionRegistry,
+            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+        },
     },
     ExecutorVariable, VariablePosition,
 };
+use compiler::executable::next_executable_id;
 use encoding::value::label::Label;
 use executor::{
     error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile,
@@ -100,16 +95,13 @@ fn traverse_isa_unbounded_sorted_thing() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -187,16 +179,13 @@ fn traverse_isa_unbounded_sorted_type() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -279,16 +268,13 @@ fn traverse_isa_bounded_thing() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -383,16 +369,13 @@ fn traverse_isa_reverse_unbounded_sorted_thing() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -470,16 +453,13 @@ fn traverse_isa_reverse_unbounded_sorted_type() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -562,16 +542,13 @@ fn traverse_isa_reverse_bounded_type_exact() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -669,16 +646,13 @@ fn traverse_isa_reverse_bounded_type_subtype() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -773,16 +747,13 @@ fn traverse_isa_reverse_fixed_type_exact() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -863,16 +834,13 @@ fn traverse_isa_reverse_fixed_type_subtype() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 

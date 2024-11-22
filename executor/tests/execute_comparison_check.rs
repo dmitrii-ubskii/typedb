@@ -12,7 +12,6 @@ use std::{
 
 use compiler::{
     annotation::{
-        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
         match_inference::infer_types,
     },
     executable::match_::{
@@ -25,6 +24,7 @@ use compiler::{
     ExecutorVariable, VariablePosition,
 };
 use compiler::executable::next_executable_id;
+use compiler::annotation::function::AnnotatedFunctionSignatures;
 use concept::type_::{annotation::AnnotationIndependent, attribute_type::AttributeTypeAnnotation};
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
@@ -102,16 +102,13 @@ fn attribute_equality() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        annotated_schema_functions,
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 

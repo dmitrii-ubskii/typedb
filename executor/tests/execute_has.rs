@@ -11,25 +11,20 @@ use std::{
 };
 
 use compiler::{
-    annotation::{
-        function::{AnnotatedPreambleFunctionSignatures, AnnotatedSchemaFunctionSignatures},
-        match_inference::infer_types,
-    },
-    executable::{
-        match_::{
-            instructions::{
-                thing::{HasInstruction, HasReverseInstruction, IsaInstruction},
-                ConstraintInstruction, Inputs,
-            },
-            planner::{
-                function_plan::ExecutableFunctionRegistry,
-                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
-            },
+    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    executable::match_::{
+        instructions::{
+            thing::{HasInstruction, HasReverseInstruction, IsaInstruction},
+            ConstraintInstruction, Inputs,
         },
-        next_executable_id,
+        planner::{
+            function_plan::ExecutableFunctionRegistry,
+            match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+        },
     },
     ExecutorVariable, VariablePosition,
 };
+use compiler::executable::next_executable_id;
 use concept::{
     thing::object::ObjectAPI,
     type_::{annotation::AnnotationCardinality, owns::OwnsAnnotation, Ordering, OwnerAPI},
@@ -152,16 +147,13 @@ fn traverse_has_unbounded_sorted_from() {
 
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
     let row_vars = vec![var_person, var_age];
@@ -253,16 +245,13 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
     let entry = builder.finish().unwrap();
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -372,16 +361,13 @@ fn traverse_has_unbounded_sorted_from_intersect() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -469,16 +455,13 @@ fn traverse_has_unbounded_sorted_to_merged() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 
@@ -581,16 +564,13 @@ fn traverse_has_reverse_unbounded_sorted_from() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let variable_registry = &translation_context.variable_registry;
     let previous_stage_variable_annotations = &BTreeMap::new();
-    let annotated_schema_functions = &AnnotatedSchemaFunctionSignatures::empty();
-    let annotated_preamble_functions = &AnnotatedPreambleFunctionSignatures::empty();
     let entry_annotations = infer_types(
         &snapshot,
         &entry,
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        Some(annotated_schema_functions),
-        Some(annotated_preamble_functions),
+        &AnnotatedFunctionSignatures::empty(),
     )
     .unwrap();
 

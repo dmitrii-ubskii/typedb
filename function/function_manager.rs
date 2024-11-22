@@ -511,10 +511,14 @@ pub mod tests {
             vec![(VariableCategory::Object, VariableOptionality::Required)],
             true,
         );
+        let parsed = functions_to_define
+            .iter()
+            .map(|f| typeql::parse_definition_function(f.as_str()).unwrap())
+            .collect::<Vec<_>>();
         let sequence_number = {
             let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
             let mut snapshot = storage.clone().open_snapshot_write();
-            let stored_functions = function_manager.define_functions(&mut snapshot, functions_to_define).unwrap();
+            let stored_functions = function_manager.define_functions(&mut snapshot, parsed.iter()).unwrap();
             // Read buffered
             assert_eq!(expected_function_id, stored_functions[0].function_id());
 

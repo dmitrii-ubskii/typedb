@@ -1540,7 +1540,7 @@ pub mod tests {
     use storage::snapshot::CommittableSnapshot;
 
     use crate::annotation::{
-        function::AnnotatedSchemaFunctionSignatures,
+        function::AnnotatedFunctionSignatures,
         match_inference::{TypeInferenceGraph, VertexAnnotations},
         tests::{
             managers,
@@ -1620,12 +1620,11 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
+        let empty_function_cache = AnnotatedFunctionSignatures::empty();
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
-            Some(&empty_function_cache),
-            None,
+            &empty_function_cache,
             &translation_context.variable_registry,
         );
         let graph = seeder.create_graph(block.block_context(), &BTreeMap::new(), conjunction).unwrap();
@@ -1675,12 +1674,11 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
+        let empty_function_cache = AnnotatedFunctionSignatures::empty();
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
-            Some(&empty_function_cache),
-            None,
+            &empty_function_cache,
             &translation_context.variable_registry,
         );
         let graph = seeder.create_graph(block.block_context(), &BTreeMap::new(), conjunction).unwrap();
@@ -1811,12 +1809,11 @@ pub mod tests {
             };
 
             let snapshot = storage.clone().open_snapshot_write();
-            let empty_function_cache = AnnotatedSchemaFunctionSignatures::empty();
+            let empty_function_cache = AnnotatedFunctionSignatures::empty();
             let seeder = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,
-                Some(&empty_function_cache),
-                None,
+                &empty_function_cache,
                 &translation_context.variable_registry,
             );
             let graph = seeder.create_graph(block.block_context(), &BTreeMap::new(), conjunction).unwrap();

@@ -128,6 +128,10 @@ impl AnnotatedFunctionSignatures {
         Self { schema_functions, local_functions }
     }
 
+    pub fn empty() -> Self {
+        Self::new(HashMap::new(), Vec::new())
+    }
+
     pub(crate) fn get(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
         match function_id {
             FunctionID::Schema(definition_key) => self.schema_functions.get(definition_key),
