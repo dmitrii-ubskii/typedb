@@ -395,11 +395,11 @@ fn validate_return_against_signature(
     debug_assert!(inferred_types.len() == declared_types.len());
     zip(inferred_types, declared_types).enumerate().try_for_each(|(i, (inferred, declared))| {
         let matches = match (inferred, declared) {
-            (FunctionParameterAnnotation::Concept(declared_types), Either::Left(inferred_types)) => {
+            (FunctionParameterAnnotation::Concept(inferred_types), Either::Left(declared_types)) => {
                 inferred_types.iter().all(|type_| declared_types.contains(type_))
             }
-            (FunctionParameterAnnotation::Value(declared_value), Either::Right(inferred_value)) => {
-                ExpressionValueType::Single(declared_value) == inferred_value // TODO
+            (FunctionParameterAnnotation::Value(inferred_value), Either::Right(declared_value)) => {
+                ExpressionValueType::Single(inferred_value) == declared_value
             }
             _ => false,
         };
