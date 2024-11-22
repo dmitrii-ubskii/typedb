@@ -23,6 +23,7 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
 };
 use error::typedb_error;
+use function::{function::SchemaFunction, function_manager::FunctionManager, FunctionError};
 use ir::{translation::tokens::translate_annotation, LiteralParseError};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use typeql::{
@@ -39,7 +40,6 @@ use typeql::{
     token::Keyword,
     Definable,
 };
-use function::function_manager::FunctionManager;
 
 use crate::{
     definable_resolution::{
@@ -79,7 +79,7 @@ pub(crate) fn execute(
 ) -> Result<(), RedefineError> {
     let redefined_structs = process_struct_redefinitions(snapshot, type_manager, thing_manager, &redefine.definables)?;
     let redefined_types = process_type_redefinitions(snapshot, type_manager, thing_manager, &redefine.definables)?;
-    let redefined_functions = process_function_redefinitions(snapshot, type_manager, function_manager, &redefine.definables)?;
+    let redefined_functions = process_function_redefinitions(snapshot, function_manager, &redefine.definables)?;
     if !redefined_structs && !redefined_types && !redefined_functions {
         Err(RedefineError::NothingRedefined {})
     } else {
@@ -134,13 +134,13 @@ fn process_type_redefinitions(
 
 fn process_function_redefinitions(
     snapshot: &mut impl WritableSnapshot,
-    type_manager: &TypeManager,
     function_manager: &FunctionManager,
     definables: &[Definable],
 ) -> Result<bool, RedefineError> {
     let mut anything_redefined = false;
-    filter_variants!(Definable::Function : definables)
-        .try_for_each(|function| redefine_function(snapshot, type_manager, function_manager, &mut anything_redefined, function))?;
+    for function in filter_variants!(Definable::Function : definables) {
+        redefine_function(snapshot, function_manager, &mut anything_redefined, function)?;
+    }
     Ok(anything_redefined)
 }
 
@@ -850,13 +850,19 @@ fn redefine_plays_annotations(
 }
 
 fn redefine_function(
-    _snapshot: &impl WritableSnapshot,
-    _type_manager: &TypeManager,
-    _function_manager: &FunctionManager,
-    _anything_redefined: &mut bool,
-    _function_declaration: &Function,
-) -> Result<(), RedefineError> {
-    Err(RedefineError::Unimplemented { description: "Function redefinition.".to_string() })
+    snapshot: &mut impl WritableSnapshot,
+    function_manager: &FunctionManager,
+    anything_redefined: &mut bool,
+    function_declaration: &Function,
+) -> Result<SchemaFunction, RedefineError> {
+    let function = function_manager.redefine_function(snapshot, function_declaration).map_err(|source| {
+        RedefineError::FunctionRedefinition {
+            name: function_declaration.signature.ident.as_str().to_owned(),
+            typedb_source: Box::new(source),
+        }
+    })?;
+    *anything_redefined = true;
+    Ok(function)
 }
 
 fn check_can_redefine_sub<'a, T: TypeAPI<'a>>(
@@ -1212,6 +1218,12 @@ typedb_error!(
             left_kind: Kind,
             right_kind: Kind,
             declaration: Capability
+        ),
+        FunctionRedefinition(
+            36,
+            "Redefining the function \"{name}\" failed",
+            name: String,
+            ( typedb_source: Box<FunctionError> )
         ),
     }
 );

@@ -51,10 +51,14 @@ impl QueryManager {
                 define::execute(snapshot, type_manager, thing_manager, function_manager, define)
                     .map_err(|err| QueryError::Define { typedb_source: err })
             }
-            SchemaQuery::Redefine(redefine) => redefine::execute(snapshot, type_manager, thing_manager, function_manager, redefine)
-                .map_err(|err| QueryError::Redefine { typedb_source: err }),
-            SchemaQuery::Undefine(undefine) => undefine::execute(snapshot, type_manager, thing_manager, function_manager, undefine)
-                .map_err(|err| QueryError::Undefine { typedb_source: err }),
+            SchemaQuery::Redefine(redefine) => {
+                redefine::execute(snapshot, type_manager, thing_manager, function_manager, redefine)
+                    .map_err(|err| QueryError::Redefine { typedb_source: err })
+            }
+            SchemaQuery::Undefine(undefine) => {
+                undefine::execute(snapshot, type_manager, thing_manager, function_manager, undefine)
+                    .map_err(|err| QueryError::Undefine { typedb_source: err })
+            }
         }
     }
 
