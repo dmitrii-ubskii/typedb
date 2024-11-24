@@ -70,6 +70,10 @@ pub fn translate_function_from(
         (Output::Single(declared_vars), ReturnOperation::Single(_, defined_vars)) => {
             defined_vars.len() == declared_vars.types.len()
         }
+        (Output::Single(declared_vars), ReturnOperation::ReduceReducer(reducers)) => {
+            reducers.len() == declared_vars.types.len()
+        }
+        (Output::Single(declared_vars), ReturnOperation::ReduceCheck()) => declared_vars.types.len() == 1,
         _ => false,
     };
     if !returns_consistent {
