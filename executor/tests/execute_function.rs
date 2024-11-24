@@ -492,10 +492,11 @@ fn fibonacci() {
 
             match
                 $f_7 = ith_fibonacci_number(7);
+                $as_value = $f_7;
         "#;
         let (rows, positions) = run_read_query(&context, query).unwrap();
         assert_eq!(rows.len(), 1);
-        let f_7_position = positions.get("f_7").unwrap().clone();
-        assert_eq!(rows[0].get(f_7_position).as_value().clone().unwrap_long(), 13);
+        let answer_position = positions.get("as_value").unwrap().clone();
+        assert_eq!(rows[0].get(answer_position).as_value().clone().unwrap_long(), 13);
     }
 }
