@@ -104,7 +104,7 @@ pub fn infer_types(
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
     previous_stage_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<TypeAnnotation>>>,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
 ) -> Result<TypeAnnotations, TypeInferenceError> {
     let graph = compute_type_inference_graph(
         snapshot,
@@ -138,7 +138,7 @@ pub(crate) fn compute_type_inference_graph<'graph>(
     variable_registry: &VariableRegistry,
     type_manager: &TypeManager,
     previous_stage_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<TypeAnnotation>>>,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
 ) -> Result<TypeInferenceGraph<'graph>, TypeInferenceError> {
     let mut graph =
         TypeGraphSeedingContext::new(snapshot, type_manager, annotated_function_signatures, variable_registry)

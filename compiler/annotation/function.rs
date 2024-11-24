@@ -5,7 +5,6 @@
  */
 
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashMap},
     iter::zip,
     sync::Arc,
@@ -54,22 +53,16 @@ pub struct AnnotatedFunction {
     pub variable_registry: VariableRegistry,
     pub parameter_registry: ParameterRegistry,
     pub arguments: Vec<Variable>,
-    pub argument_annotations: Vec<FunctionParameterAnnotation>,
-    pub stages: Vec<AnnotatedStage>,
     pub return_: AnnotatedFunctionReturn,
+    pub stages: Vec<AnnotatedStage>,
+    pub annotated_signature: AnnotatedFunctionSignature,
 }
 
-impl AnnotatedFunction {
-    pub(crate) fn get_annotated_signature(&self) -> AnnotatedFunctionSignature {
-        let returned = Vec::from(self.return_.annotations());
-        AnnotatedFunctionSignature { returned, arguments: self.argument_annotations.clone() }
-    }
-}
-
+// TODO: Merge with ReturnOperation
 #[derive(Debug, Clone)]
 pub enum AnnotatedFunctionReturn {
-    Stream { variables: Vec<Variable>, annotations: Vec<FunctionParameterAnnotation> },
-    Single { selector: SingleSelector, variables: Vec<Variable>, annotations: Vec<FunctionParameterAnnotation> },
+    Stream { variables: Vec<Variable> },
+    Single { selector: SingleSelector, variables: Vec<Variable> },
     ReduceCheck {},
     ReduceReducer { instructions: Vec<ReduceInstruction<Variable>> },
 }
@@ -87,24 +80,6 @@ impl AnnotatedFunctionReturn {
     }
 }
 
-impl AnnotatedFunctionReturn {
-    pub fn annotations(&self) -> Cow<'_, [FunctionParameterAnnotation]> {
-        match self {
-            AnnotatedFunctionReturn::Stream { annotations, .. } => Cow::Borrowed(annotations),
-            AnnotatedFunctionReturn::Single { annotations, .. } => Cow::Borrowed(annotations),
-            AnnotatedFunctionReturn::ReduceCheck { .. } => {
-                Cow::Borrowed(&[FunctionParameterAnnotation::Value(ValueType::Boolean)])
-            }
-            AnnotatedFunctionReturn::ReduceReducer { instructions } => Cow::Owned(
-                instructions
-                    .iter()
-                    .map(|instruction| FunctionParameterAnnotation::Value(instruction.output_type()))
-                    .collect(),
-            ),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct AnnotatedFunctionSignature {
     pub arguments: Vec<FunctionParameterAnnotation>,
@@ -114,28 +89,54 @@ pub struct AnnotatedFunctionSignature {
 pub type AnnotatedPreambleFunctions = Vec<AnnotatedFunction>;
 pub type AnnotatedSchemaFunctions = HashMap<DefinitionKey<'static>, AnnotatedFunction>;
 
-#[derive(Debug)]
-pub struct AnnotatedFunctionSignatures {
-    schema_functions: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>,
-    local_functions: Vec<AnnotatedFunctionSignature>,
+trait GetAnnotatedSignature {
+    fn get_annotated_signature(&self) -> &AnnotatedFunctionSignature;
 }
 
-impl AnnotatedFunctionSignatures {
+impl GetAnnotatedSignature for AnnotatedFunctionSignature {
+    fn get_annotated_signature(&self) -> &AnnotatedFunctionSignature {
+        self
+    }
+}
+
+impl GetAnnotatedSignature for AnnotatedFunction {
+    fn get_annotated_signature(&self) -> &AnnotatedFunctionSignature {
+        &self.annotated_signature
+    }
+}
+
+pub trait AnnotatedFunctionSignatures {
+    fn get_annotated_signature(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature>;
+}
+
+#[derive(Debug)]
+pub struct AnnotatedFunctionSignaturesImpl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> {
+    schema_functions: HashMap<DefinitionKey<'static>, T1>,
+    local_functions: Vec<T2>,
+}
+
+
+impl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignaturesImpl<T1, T2> {
     pub(crate) fn new(
-        schema_functions: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>,
-        local_functions: Vec<AnnotatedFunctionSignature>,
+        schema_functions: HashMap<DefinitionKey<'static>, T1>,
+        local_functions: Vec<T2>,
     ) -> Self {
         Self { schema_functions, local_functions }
     }
 
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self::new(HashMap::new(), Vec::new())
     }
-
-    pub(crate) fn get(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
+}
+impl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignatures for AnnotatedFunctionSignaturesImpl<T1, T2> {
+    fn get_annotated_signature(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
         match function_id {
-            FunctionID::Schema(definition_key) => self.schema_functions.get(definition_key),
-            FunctionID::Preamble(index) => self.local_functions.get(index.clone()),
+            FunctionID::Schema(definition_key) => {
+                self.schema_functions.get(&definition_key).map(|getter| getter.get_annotated_signature())
+            },
+            FunctionID::Preamble(index) => {
+                self.local_functions.get(index.clone()).map(|getter| getter.get_annotated_signature())
+            },
         }
     }
 }
@@ -152,17 +153,15 @@ pub fn annotate_stored_functions<'a>(
         })
         .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     let seed_signature_annotations =
-        AnnotatedFunctionSignatures::new(label_based_signature_annotations_as_map, Vec::new());
+        AnnotatedFunctionSignaturesImpl::new(label_based_signature_annotations_as_map, Vec::<AnnotatedFunctionSignature>::new());
+
     let preliminary_signature_annotations = functions
         .iter_mut()
         .map(|(function_id, function)| {
-            annotate_named_function(function, snapshot, type_manager, &seed_signature_annotations)
-                .map(|annotated| (function_id.clone(), annotated.get_annotated_signature()))
+            Ok((function_id.clone(), annotate_named_function(function, snapshot, type_manager, &seed_signature_annotations)?))
         })
-        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>, Box<FunctionAnnotationError>>>(
-        )?;
-    let preliminary_signature_annotations =
-        AnnotatedFunctionSignatures::new(preliminary_signature_annotations, Vec::new());
+        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+    let preliminary_signature_annotations = AnnotatedFunctionSignaturesImpl::new(preliminary_signature_annotations, Vec::<AnnotatedFunctionSignature>::new());
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
@@ -190,17 +189,16 @@ pub fn annotate_preamble_functions(
         .map(|function| annotate_signature_based_on_labels(snapshot, type_manager, function))
         .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     let label_based_signature_annotations =
-        AnnotatedFunctionSignatures::new(schema_function_signatures.clone(), preamble_annotations_from_labels_as_map);
+        AnnotatedFunctionSignaturesImpl::new(schema_function_signatures.clone(), preamble_annotations_from_labels_as_map);
     let preliminary_signature_annotations_as_map = functions
         .iter_mut()
         .map(|function| {
-            Ok(annotate_named_function(function, snapshot, type_manager, &label_based_signature_annotations)?
-                .get_annotated_signature())
+            annotate_named_function(function, snapshot, type_manager, &label_based_signature_annotations)
         })
-        .collect::<Result<Vec<AnnotatedFunctionSignature>, Box<FunctionAnnotationError>>>()?;
+        .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let preliminary_signature_annotations =
-        AnnotatedFunctionSignatures::new(schema_function_signatures, preliminary_signature_annotations_as_map);
+        AnnotatedFunctionSignaturesImpl::new(schema_function_signatures, preliminary_signature_annotations_as_map);
     let annotated_functions = functions
         .iter_mut()
         .map(|function| annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations))
@@ -217,7 +215,7 @@ pub(crate) fn annotate_anonymous_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     caller_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     caller_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
@@ -248,7 +246,7 @@ pub(super) fn annotate_named_function(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
     let Function { arguments, argument_labels, .. } = function;
     debug_assert!(argument_labels.is_some());
@@ -278,7 +276,7 @@ fn annotate_function_impl(
     function: &mut Function,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     argument_concept_variable_types: BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     argument_value_variable_types: BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFunction, Box<FunctionAnnotationError>> {
@@ -299,50 +297,22 @@ fn annotate_function_impl(
     .map_err(|err| {
         Box::new(FunctionAnnotationError::TypeInference { name: name.to_string(), typedb_source: Box::new(err) })
     })?;
-
-    let return_ = annotate_return(
-        snapshot,
-        type_manager,
-        &context.variable_registry,
-        return_operation,
-        &running_variable_types,
-        &running_value_types,
+    let mapped_return = map_return_operation(
+        snapshot, type_manager, &context.variable_registry, return_operation, &running_variable_types, &running_value_types
     )?;
+    let return_annotations = annotate_return(&mapped_return, &running_variable_types, &running_value_types,);
     if let Some(output) = function.output.as_ref() {
-        validate_return_against_signature(snapshot, type_manager, function.name.as_str(), &return_, output)?;
+        validate_return_against_signature(snapshot, type_manager, function.name.as_str(), &return_annotations, output)?;
     }
-    let first_match_annotations = stages
-        .iter()
-        .filter_map(|stage| {
-            if let AnnotatedStage::Match { block_annotations, .. } = stage {
-                Some(block_annotations)
-            } else {
-                None
-            }
-        })
-        .next()
-        .unwrap();
-    let argument_annotations = arguments
-        .iter()
-        .map(|var| {
-            if let Some(types_) = first_match_annotations.vertex_annotations_of(&Vertex::Variable(var.clone())) {
-                let types_: &BTreeSet<Type> = &types_;
-                FunctionParameterAnnotation::Concept(types_.clone())
-            } else if let Some(ExpressionValueType::Single(value_type)) = argument_value_variable_types.get(var) {
-                FunctionParameterAnnotation::Value(value_type.clone())
-            } else {
-                unreachable!()
-            }
-        })
-        .collect();
-
+    let argument_annotations = annotate_arguments(stages.as_slice(), arguments, &argument_value_variable_types);
+    let annotated_signature = AnnotatedFunctionSignature { arguments: argument_annotations, returned: return_annotations };
     Ok(AnnotatedFunction {
         variable_registry: context.variable_registry.clone(),
         parameter_registry: parameters.clone(),
         arguments: arguments.clone(),
         stages,
-        return_,
-        argument_annotations,
+        return_: mapped_return,
+        annotated_signature,
     })
 }
 
@@ -350,30 +320,21 @@ fn validate_return_against_signature(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     name: &str,
-    annotated: &AnnotatedFunctionReturn,
+    inferred_return: &Vec<FunctionParameterAnnotation>,
     signature_return: &Output,
 ) -> Result<(), Box<FunctionAnnotationError>> {
     let return_labels = match signature_return {
         Output::Stream(stream) => &stream.types,
         Output::Single(single) => &single.types,
     };
-    let declared_types = return_labels
+    let declared_return = return_labels
         .iter()
         .enumerate()
         .map(|(i, label)| get_return_annotations_from_labels(snapshot, type_manager, label, i))
         .collect::<Result<Vec<_>, Box<FunctionAnnotationError>>>()?;
-    let inferred_types: Vec<FunctionParameterAnnotation> = match annotated {
-        AnnotatedFunctionReturn::Stream { annotations, .. } | AnnotatedFunctionReturn::Single { annotations, .. } => {
-            annotations.iter().cloned().collect()
-        }
-        AnnotatedFunctionReturn::ReduceCheck { .. } => vec![],
-        AnnotatedFunctionReturn::ReduceReducer { instructions } => {
-            debug_assert!(instructions.len() == declared_types.len());
-            instructions.iter().map(|reducer| FunctionParameterAnnotation::Value(reducer.output_type())).collect()
-        }
-    };
-    debug_assert!(inferred_types.len() == declared_types.len());
-    zip(inferred_types, declared_types).enumerate().try_for_each(|(i, (inferred, declared))| {
+
+    debug_assert!(inferred_return.len() == declared_return.len());
+    zip(inferred_return, declared_return).enumerate().try_for_each(|(i, (inferred, declared))| {
         let matches = match (&inferred, &declared) {
             (
                 FunctionParameterAnnotation::Concept(inferred_types),
@@ -471,7 +432,7 @@ fn get_annotations_from_labels(
     }
 }
 
-fn annotate_return(
+fn map_return_operation(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     variable_registry: &VariableRegistry,
@@ -479,25 +440,10 @@ fn annotate_return(
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFunctionReturn, Box<FunctionAnnotationError>> {
-    match return_operation {
-        ReturnOperation::Stream(vars) => {
-            let type_annotations = vars
-                .iter()
-                .map(|var| get_function_parameter(var, input_type_annotations, input_value_type_annotations))
-                .collect();
-            Ok(AnnotatedFunctionReturn::Stream { variables: vars.clone(), annotations: type_annotations })
-        }
-        ReturnOperation::Single(selector, vars) => {
-            let type_annotations = vars
-                .iter()
-                .map(|var| get_function_parameter(var, input_type_annotations, input_value_type_annotations))
-                .collect();
-            Ok(AnnotatedFunctionReturn::Single {
-                selector: selector.clone(),
-                variables: vars.clone(),
-                annotations: type_annotations,
-            })
-        }
+    let return_ = match return_operation {
+        ReturnOperation::Stream(variables) => AnnotatedFunctionReturn::Stream { variables: variables.clone() },
+        ReturnOperation::Single(selector, variables) => AnnotatedFunctionReturn::Single { selector: selector.clone(), variables: variables.clone() },
+        ReturnOperation::ReduceCheck() => AnnotatedFunctionReturn::ReduceCheck {},
         ReturnOperation::ReduceReducer(reducers) => {
             let mut instructions = Vec::with_capacity(reducers.len());
             for &reducer in reducers {
@@ -509,12 +455,59 @@ fn annotate_return(
                     input_type_annotations,
                     input_value_type_annotations,
                 )
-                .map_err(|err| Box::new(FunctionAnnotationError::ReturnReduce { typedb_source: Box::new(err) }))?;
+                    .map_err(|err| Box::new(FunctionAnnotationError::ReturnReduce { typedb_source: Box::new(err) }))?;
                 instructions.push(instruction);
             }
-            Ok(AnnotatedFunctionReturn::ReduceReducer { instructions })
+            AnnotatedFunctionReturn::ReduceReducer { instructions }
         }
-        ReturnOperation::ReduceCheck() => Ok(AnnotatedFunctionReturn::ReduceCheck {}),
+    };
+    Ok(return_)
+}
+
+fn annotate_arguments(
+    annotated_stages: &[AnnotatedStage],
+    arguments: &[Variable],
+    argument_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+) ->  Vec<FunctionParameterAnnotation> {
+    let first_match_annotations = annotated_stages.iter().filter_map(|stage| {
+        if let AnnotatedStage::Match { block_annotations, .. } = stage {
+            Some(block_annotations)
+        } else {
+            None
+        }
+    }).next().unwrap();
+    arguments
+        .iter()
+        .map(|var| {
+            if let Some(types_) = first_match_annotations.vertex_annotations_of(&Vertex::Variable(var.clone())) {
+                let types_: &BTreeSet<Type> = &types_;
+                FunctionParameterAnnotation::Concept(types_.clone())
+            } else if let Some(ExpressionValueType::Single(value_type)) = argument_value_type_annotations.get(var) {
+                FunctionParameterAnnotation::Value(value_type.clone())
+            } else {
+                unreachable!()
+            }
+        })
+        .collect()
+}
+
+fn annotate_return(
+    return_operation: &AnnotatedFunctionReturn,
+    final_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
+    final_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
+) -> Vec<FunctionParameterAnnotation> {
+    match return_operation {
+        AnnotatedFunctionReturn::Stream { variables } | AnnotatedFunctionReturn::Single { variables, .. } => {
+            variables.iter().map(|var| {
+                get_function_parameter(var, final_type_annotations, final_value_type_annotations)
+            }).collect()
+        }
+        AnnotatedFunctionReturn::ReduceReducer { instructions } => {
+            instructions.iter().map(|instruction| {
+                FunctionParameterAnnotation::Value(instruction.output_type())
+            }).collect()
+        }
+        AnnotatedFunctionReturn::ReduceCheck {} => vec![FunctionParameterAnnotation::Value(ValueType::Boolean)],
     }
 }
 

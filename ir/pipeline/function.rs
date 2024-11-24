@@ -85,12 +85,14 @@ impl FunctionBody {
 }
 
 #[derive(Debug, Clone)]
-pub enum ReturnOperation {
+pub enum LiftedReturnOperation<ReducerType> {
     Stream(Vec<Variable>),
     Single(SingleSelector, Vec<Variable>),
     ReduceCheck(),
-    ReduceReducer(Vec<Reducer>),
+    ReduceReducer(Vec<ReducerType>),
 }
+
+pub type ReturnOperation = LiftedReturnOperation<Reducer>;
 
 impl ReturnOperation {
     pub(crate) fn is_stream(&self) -> bool {

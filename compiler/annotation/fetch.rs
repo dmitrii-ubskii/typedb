@@ -71,7 +71,7 @@ pub(crate) fn annotate_fetch(
     type_manager: &TypeManager,
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFetch, AnnotationError> {
@@ -81,7 +81,7 @@ pub(crate) fn annotate_fetch(
         type_manager,
         variable_registry,
         parameters,
-        &annotated_function_signatures,
+        annotated_function_signatures,
         input_type_annotations,
         input_value_type_annotations,
     )?;
@@ -94,7 +94,7 @@ fn annotate_object(
     type_manager: &TypeManager,
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFetchObject, AnnotationError> {
@@ -106,7 +106,7 @@ fn annotate_object(
                 type_manager,
                 variable_registry,
                 parameters,
-                &annotated_function_signatures,
+                annotated_function_signatures,
                 input_type_annotations,
                 input_value_type_annotations,
             )?;
@@ -122,7 +122,7 @@ fn annotated_object_entries(
     type_manager: &TypeManager,
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<HashMap<ParameterID, AnnotatedFetchSome>, AnnotationError> {
@@ -153,7 +153,7 @@ fn annotate_some(
     type_manager: &TypeManager,
     variable_registry: &VariableRegistry,
     parameters: &ParameterRegistry,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,
     input_value_type_annotations: &BTreeMap<Variable, ExpressionValueType>,
 ) -> Result<AnnotatedFetchSome, AnnotationError> {
@@ -183,7 +183,7 @@ fn annotate_some(
                 &mut function,
                 snapshot,
                 type_manager,
-                &annotated_function_signatures,
+                annotated_function_signatures,
                 input_type_annotations,
                 input_value_type_annotations,
             )
@@ -197,7 +197,7 @@ fn annotate_some(
                 type_manager,
                 variable_registry,
                 parameters,
-                &annotated_function_signatures,
+                annotated_function_signatures,
                 input_type_annotations,
                 input_value_type_annotations,
             )?;
@@ -208,7 +208,7 @@ fn annotate_some(
                 &mut function,
                 snapshot,
                 type_manager,
-                &annotated_function_signatures,
+                annotated_function_signatures,
                 input_type_annotations,
                 input_value_type_annotations,
             )
@@ -219,7 +219,7 @@ fn annotate_some(
             let annotated_sub_fetch = annotate_sub_fetch(
                 snapshot,
                 type_manager,
-                &annotated_function_signatures,
+                annotated_function_signatures,
                 parameters,
                 sub_fetch,
                 input_type_annotations,
@@ -329,7 +329,7 @@ fn validate_attribute_owned_and_streamable(
 fn annotate_sub_fetch(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    annotated_function_signatures: &AnnotatedFunctionSignatures,
+    annotated_function_signatures: &dyn AnnotatedFunctionSignatures,
     parameters: &ParameterRegistry,
     sub_fetch: FetchListSubFetch,
     input_type_annotations: &BTreeMap<Variable, Arc<BTreeSet<Type>>>,

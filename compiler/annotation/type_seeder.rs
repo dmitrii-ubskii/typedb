@@ -45,7 +45,7 @@ use crate::annotation::{
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
     type_manager: &'this TypeManager,
-    function_annotations: &'this AnnotatedFunctionSignatures,
+    function_annotations: &'this dyn AnnotatedFunctionSignatures,
     variable_registry: &'this VariableRegistry,
 }
 
@@ -53,14 +53,14 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
     pub(crate) fn new(
         snapshot: &'this Snapshot,
         type_manager: &'this TypeManager,
-        function_annotations: &'this AnnotatedFunctionSignatures,
+        function_annotations: &'this dyn AnnotatedFunctionSignatures,
         variable_registry: &'this VariableRegistry,
     ) -> Self {
         TypeGraphSeedingContext { snapshot, type_manager, function_annotations, variable_registry }
     }
 
-    fn get_annotated_function(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
-        self.function_annotations.get(&function_id)
+    fn get_annotated_function_signature(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
+        self.function_annotations.get_annotated_signature(&function_id)
     }
 
     pub(crate) fn create_graph<'graph>(
@@ -726,7 +726,7 @@ impl UnaryConstraint for FunctionCallBinding<Variable> {
         seeder: &TypeGraphSeedingContext<'_, Snapshot>,
         graph_vertices: &mut VertexAnnotations,
     ) -> Result<(), TypeInferenceError> {
-        if let Some(annotated_function_signature) = seeder.get_annotated_function(&self.function_call().function_id()) {
+        if let Some(annotated_function_signature) = seeder.get_annotated_function_signature(&self.function_call().function_id()) {
             for (assigned_variable, return_annotation) in
                 zip(self.assigned(), annotated_function_signature.returned.iter())
             {
