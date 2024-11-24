@@ -16,47 +16,52 @@ Feature: Debugging Space
 
     Given connection open schema transaction for database: typedb
     Given typeql schema query
-    """
-    define
-    entity person, owns name;
-    attribute name, value string;
-    """
+      """
+      define
+
+      entity person, owns name, owns ref @key;
+      attribute ref value long;
+      attribute name value string;
+      """
     Given transaction commits
 
 
-  Scenario: If a modification of a function causes a caller function to become invalid, the modification is blocked.
+
+  Scenario: Functions can return single instances.
+    Given connection open schema transaction for database: typedb
+    Given typeql write query
+    """
+    insert
+    $p1 isa person, has ref 0, has name "Alice";
+    $p2 isa person, has ref 1, has name "Bob";
+    """
+    Given transaction commits
+
     Given connection open schema transaction for database: typedb
     Given typeql schema query
     """
     define
-    attribute nickname, value string;
-    person owns nickname;
+    fun person_of_name($name: name) -> person:
+    match
+      $p isa person, has name $name;
+    return first $p;
+
+    fun name_value_of_person($p: person) -> string:
+    match
+      $p isa person, has name $name_attr;
+      $name_value = $name_attr;
+    return first $name_value;
+
     """
     Given transaction commits
-
-    Given connection open schema transaction for database: typedb
-    Given typeql schema query
+    When connection open read transaction for database: typedb
+    When get answers of typeql read query
     """
-    define
-    fun nickname_of($p: person) -> { nickname }:
     match
-      $nickname in default_nickname($p);
-    return { $nickname };
-
-    fun default_nickname($p: person) -> { nickname }:
-    match
-      $nickname "Steve" isa nickname;
-    return { $nickname };
+      $name "Bob" isa name;
+      $person = person_of_name($name);
     """
-    Given transaction commits
-    Given connection open schema transaction for database: typedb
-    Given typeql schema query
-    """
-    define
-    fun default_nickname($p: person) -> { string }:
-    match
-      $nickname_attr "Steve" isa nickname;
-      $nickname_value = $nickname_attr;
-    return { $nickname_value };
-    """
-    Then transaction commits; fails with a message containing: "TODO: Add message when we support redefine"
+    Then uniquely identify answer concepts
+      | person    | name            |
+      | key:ref:1 | attr:name:Bob   |
+    Given transaction closes
