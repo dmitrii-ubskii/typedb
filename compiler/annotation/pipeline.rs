@@ -115,19 +115,11 @@ pub fn annotate_preamble_and_pipeline(
     translated_stages: Vec<TranslatedStage>,
     translated_fetch: Option<FetchObject>,
 ) -> Result<AnnotatedPipeline, AnnotationError> {
-    let schema_signature_annotations: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature> =
-        schema_function_annotations
-            .iter()
-            .map(|(id, function)| (id.clone(), function.annotated_signature.clone())) // TODO: Avoid clone
-            .collect();
     let annotated_preamble =
-        annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_signature_annotations.clone())
+        annotate_preamble_functions(translated_preamble, snapshot, type_manager, schema_function_annotations.clone())
             .map_err(|typedb_source| AnnotationError::PreambleTypeInference { typedb_source })?;
-    let preamble_signature_annotations =
-        annotated_preamble.iter().map(|function| function.annotated_signature.clone()).collect(); // TODO: Avoid clone
-
     let combined_signature_annotations =
-        AnnotatedFunctionSignaturesImpl::new(schema_signature_annotations, preamble_signature_annotations);
+        AnnotatedFunctionSignaturesImpl::new(&schema_function_annotations, &annotated_preamble);
     let (annotated_stages, annotated_fetch) = annotate_stages_and_fetch(
         snapshot,
         type_manager,

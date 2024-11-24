@@ -110,25 +110,25 @@ pub trait AnnotatedFunctionSignatures {
 }
 
 #[derive(Debug)]
-pub struct AnnotatedFunctionSignaturesImpl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> {
-    schema_functions: HashMap<DefinitionKey<'static>, T1>,
-    local_functions: Vec<T2>,
+pub struct AnnotatedFunctionSignaturesImpl<'a, T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> {
+    schema_functions: &'a HashMap<DefinitionKey<'static>, T1>,
+    local_functions: &'a Vec<T2>,
 }
 
 
-impl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignaturesImpl<T1, T2> {
+impl<'a, T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignaturesImpl<'a, T1, T2> {
     pub(crate) fn new(
-        schema_functions: HashMap<DefinitionKey<'static>, T1>,
-        local_functions: Vec<T2>,
+        schema_functions: &'a HashMap<DefinitionKey<'static>, T1>,
+        local_functions: &'a Vec<T2>,
     ) -> Self {
         Self { schema_functions, local_functions }
     }
 
-    pub(crate) fn empty() -> Self {
-        Self::new(HashMap::new(), Vec::new())
-    }
+    // pub(crate) fn empty() -> Self {
+    //     Self::new(HashMap::new(), Vec::new())
+    // }
 }
-impl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignatures for AnnotatedFunctionSignaturesImpl<T1, T2> {
+impl<'a, T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignatures for AnnotatedFunctionSignaturesImpl<'a, T1, T2> {
     fn get_annotated_signature(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
         match function_id {
             FunctionID::Schema(definition_key) => {
@@ -152,8 +152,9 @@ pub fn annotate_stored_functions<'a>(
             annotate_signature_based_on_labels(snapshot, type_manager, function).map(|x| (id.clone(), x))
         })
         .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
+    let empty_preamble_annotations = Vec::<AnnotatedFunctionSignature>::new();
     let seed_signature_annotations =
-        AnnotatedFunctionSignaturesImpl::new(label_based_signature_annotations_as_map, Vec::<AnnotatedFunctionSignature>::new());
+        AnnotatedFunctionSignaturesImpl::new(&label_based_signature_annotations_as_map, &empty_preamble_annotations);
 
     let preliminary_signature_annotations = functions
         .iter_mut()
@@ -161,7 +162,7 @@ pub fn annotate_stored_functions<'a>(
             Ok((function_id.clone(), annotate_named_function(function, snapshot, type_manager, &seed_signature_annotations)?))
         })
         .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
-    let preliminary_signature_annotations = AnnotatedFunctionSignaturesImpl::new(preliminary_signature_annotations, Vec::<AnnotatedFunctionSignature>::new());
+    let preliminary_signature_annotations = AnnotatedFunctionSignaturesImpl::new(&preliminary_signature_annotations, &empty_preamble_annotations);
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
@@ -182,14 +183,14 @@ pub fn annotate_preamble_functions(
     mut functions: Vec<Function>,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    schema_function_signatures: HashMap<DefinitionKey<'static>, AnnotatedFunctionSignature>,
+    schema_function_signatures: Arc<AnnotatedSchemaFunctions>,
 ) -> Result<AnnotatedPreambleFunctions, Box<FunctionAnnotationError>> {
     let preamble_annotations_from_labels_as_map = functions
         .iter()
         .map(|function| annotate_signature_based_on_labels(snapshot, type_manager, function))
         .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     let label_based_signature_annotations =
-        AnnotatedFunctionSignaturesImpl::new(schema_function_signatures.clone(), preamble_annotations_from_labels_as_map);
+        AnnotatedFunctionSignaturesImpl::new(&schema_function_signatures, &preamble_annotations_from_labels_as_map);
     let preliminary_signature_annotations_as_map = functions
         .iter_mut()
         .map(|function| {
@@ -198,7 +199,7 @@ pub fn annotate_preamble_functions(
         .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let preliminary_signature_annotations =
-        AnnotatedFunctionSignaturesImpl::new(schema_function_signatures, preliminary_signature_annotations_as_map);
+        AnnotatedFunctionSignaturesImpl::new(&schema_function_signatures, &preliminary_signature_annotations_as_map);
     let annotated_functions = functions
         .iter_mut()
         .map(|function| annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations))
@@ -523,5 +524,15 @@ fn get_function_parameter(
         FunctionParameterAnnotation::Value(expression_value_type.value_type().clone())
     } else {
         unreachable!("Could not find annotations for a function return variable.")
+    }
+}
+
+#[cfg(test)]
+pub struct EmptyAnnotatedFunctionSignatures {}
+
+#[cfg(test)]
+impl AnnotatedFunctionSignatures for EmptyAnnotatedFunctionSignatures {
+    fn get_annotated_signature(&self, function_id: &FunctionID) -> Option<&AnnotatedFunctionSignature> {
+        None
     }
 }
