@@ -726,7 +726,9 @@ impl UnaryConstraint for FunctionCallBinding<Variable> {
         seeder: &TypeGraphSeedingContext<'_, Snapshot>,
         graph_vertices: &mut VertexAnnotations,
     ) -> Result<(), TypeInferenceError> {
-        if let Some(annotated_function_signature) = seeder.get_annotated_function_signature(&self.function_call().function_id()) {
+        if let Some(annotated_function_signature) =
+            seeder.get_annotated_function_signature(&self.function_call().function_id())
+        {
             for (assigned_variable, return_annotation) in
                 zip(self.assigned(), annotated_function_signature.returned.iter())
             {
@@ -1540,7 +1542,7 @@ pub mod tests {
     use storage::snapshot::CommittableSnapshot;
 
     use crate::annotation::{
-        function::AnnotatedFunctionSignatures,
+        function::{AnnotatedFunctionSignatures, EmptyAnnotatedFunctionSignatures},
         match_inference::{TypeInferenceGraph, VertexAnnotations},
         tests::{
             managers,
@@ -1620,7 +1622,7 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = AnnotatedFunctionSignatures::empty();
+        let empty_function_cache = EmptyAnnotatedFunctionSignatures;
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
@@ -1674,7 +1676,7 @@ pub mod tests {
         };
 
         let snapshot = storage.clone().open_snapshot_write();
-        let empty_function_cache = AnnotatedFunctionSignatures::empty();
+        let empty_function_cache = EmptyAnnotatedFunctionSignatures;
         let seeder = TypeGraphSeedingContext::new(
             &snapshot,
             &type_manager,
@@ -1809,7 +1811,7 @@ pub mod tests {
             };
 
             let snapshot = storage.clone().open_snapshot_write();
-            let empty_function_cache = AnnotatedFunctionSignatures::empty();
+            let empty_function_cache = EmptyAnnotatedFunctionSignatures;
             let seeder = TypeGraphSeedingContext::new(
                 &snapshot,
                 &type_manager,

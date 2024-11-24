@@ -11,7 +11,10 @@ use std::{
 };
 
 use compiler::{
-    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    annotation::{
+        function::{AnnotatedFunctionSignatures, EmptyAnnotatedFunctionSignatures},
+        match_inference::infer_types,
+    },
     executable::{
         match_::{
             instructions::{
@@ -155,7 +158,7 @@ fn traverse_has_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
     let row_vars = vec![var_person, var_age];
@@ -253,7 +256,7 @@ fn traverse_has_bounded_sorted_from_chain_intersect() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -369,7 +372,7 @@ fn traverse_has_unbounded_sorted_from_intersect() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -463,7 +466,7 @@ fn traverse_has_unbounded_sorted_to_merged() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -572,7 +575,7 @@ fn traverse_has_reverse_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 

@@ -11,7 +11,7 @@ use std::{
 };
 
 use compiler::{
-    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
     executable::{
         match_::{
             instructions::{
@@ -226,7 +226,7 @@ fn traverse_links_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -344,7 +344,7 @@ fn traverse_links_unbounded_sorted_to() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -452,7 +452,7 @@ fn traverse_links_bounded_relation() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -573,7 +573,7 @@ fn traverse_links_bounded_relation_player() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -702,7 +702,7 @@ fn traverse_links_reverse_unbounded_sorted_from() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -807,7 +807,7 @@ fn traverse_links_reverse_unbounded_sorted_to() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -912,7 +912,7 @@ fn traverse_links_reverse_bounded_player() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -1033,7 +1033,7 @@ fn traverse_links_reverse_bounded_player_relation() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 

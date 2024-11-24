@@ -13,7 +13,7 @@ use std::{
 use answer::variable_value::VariableValue;
 use compiler::{
     self,
-    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
     VariablePosition,
 };
 use concept::{
@@ -167,7 +167,7 @@ fn execute_insert<Snapshot: WritableSnapshot + 'static>(
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -248,7 +248,7 @@ fn execute_delete<Snapshot: WritableSnapshot + 'static>(
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            &AnnotatedFunctionSignatures::empty(),
+            &EmptyAnnotatedFunctionSignatures,
         )
         .unwrap()
     };

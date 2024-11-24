@@ -23,8 +23,8 @@ use compiler::{
     },
     ExecutorVariable, VariablePosition,
 };
+use compiler::annotation::function::EmptyAnnotatedFunctionSignatures;
 use compiler::executable::next_executable_id;
-use compiler::annotation::function::AnnotatedFunctionSignatures;
 use concept::type_::{annotation::AnnotationIndependent, attribute_type::AttributeTypeAnnotation};
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
@@ -108,7 +108,7 @@ fn attribute_equality() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 

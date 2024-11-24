@@ -42,7 +42,8 @@ use crate::{
         fetch::{annotate_fetch, AnnotatedFetch},
         function::{
             annotate_preamble_functions, AnnotatedFunction, AnnotatedFunctionSignature, AnnotatedFunctionSignatures,
-            AnnotatedPreambleFunctions, AnnotatedSchemaFunctions, FunctionParameterAnnotation,
+            AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions,
+            FunctionParameterAnnotation,
         },
         match_inference::infer_types,
         type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
@@ -51,7 +52,6 @@ use crate::{
     },
     executable::{insert::type_check::check_annotations, reduce::ReduceInstruction},
 };
-use crate::annotation::function::AnnotatedFunctionSignaturesImpl;
 
 pub struct AnnotatedPipeline {
     pub annotated_preamble: AnnotatedPreambleFunctions,
@@ -525,7 +525,10 @@ fn collect_value_types_of_function_call_assignments(
             _ => None,
         })
         .for_each(|binding| {
-            let return_ = &annotated_function_signatures.get_annotated_signature(&binding.function_call().function_id()).unwrap().returned;
+            let return_ = &annotated_function_signatures
+                .get_annotated_signature(&binding.function_call().function_id())
+                .unwrap()
+                .returned;
             zip(binding.assigned(), return_.iter()).for_each(|(var, annotation)| match &annotation {
                 FunctionParameterAnnotation::Value(value_type) => {
                     debug_assert!(!value_type_annotations.contains_key(&var.as_variable().unwrap()));

@@ -11,7 +11,7 @@ use std::{
 };
 
 use compiler::{
-    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
     executable::{
         match_::{
             instructions::{thing::HasInstruction, ConstraintInstruction, Inputs},
@@ -181,7 +181,7 @@ fn anonymous_vars_not_enumerated_or_counted() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            &AnnotatedFunctionSignatures::empty(),
+            &EmptyAnnotatedFunctionSignatures,
         )
         .unwrap()
     };
@@ -281,7 +281,7 @@ fn unselected_named_vars_counted() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            &AnnotatedFunctionSignatures::empty(),
+            &EmptyAnnotatedFunctionSignatures,
         )
         .unwrap()
     };
@@ -393,7 +393,7 @@ fn cartesian_named_counted_checked() {
             variable_registry,
             &type_manager,
             previous_stage_variable_annotations,
-            &AnnotatedFunctionSignatures::empty(),
+            &EmptyAnnotatedFunctionSignatures,
         )
         .unwrap()
     };

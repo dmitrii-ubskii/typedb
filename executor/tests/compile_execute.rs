@@ -11,7 +11,7 @@ use std::{
 
 use compiler::{
     annotation::{
-        expression::block_compiler::compile_expressions, function::AnnotatedFunctionSignatures,
+        expression::block_compiler::compile_expressions, function::EmptyAnnotatedFunctionSignatures,
         match_inference::infer_types,
     },
     executable::match_::planner::function_plan::ExecutableFunctionRegistry,
@@ -32,7 +32,7 @@ use ir::{
 };
 use itertools::Itertools;
 use lending_iterator::LendingIterator;
-use query::{query_cache::QueryCache, query_manager::QueryManager};
+use query::query_manager::QueryManager;
 use storage::{
     durability_client::WALClient, sequence_number::SequenceNumber, snapshot::CommittableSnapshot, MVCCStorage,
 };
@@ -111,7 +111,7 @@ fn test_has_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -196,7 +196,7 @@ fn test_expression_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -291,7 +291,7 @@ fn test_links_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -382,7 +382,7 @@ fn test_links_intersection() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -464,7 +464,7 @@ fn test_negation_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -567,7 +567,7 @@ fn test_forall_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -656,7 +656,7 @@ fn test_named_var_select() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -745,7 +745,7 @@ fn test_disjunction_planning_traversal() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -838,7 +838,7 @@ fn test_disjunction_planning_nested_negations() {
         &translation_context.variable_registry,
         &type_manager,
         &BTreeMap::new(),
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 

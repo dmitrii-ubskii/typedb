@@ -11,7 +11,7 @@ use std::{
 
 use compiler::{
     self,
-    annotation::{function::AnnotatedFunctionSignatures, match_inference::infer_types},
+    annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
     executable::{
         match_::{
             instructions::{
@@ -103,7 +103,7 @@ fn traverse_isa_unbounded_sorted_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -187,7 +187,7 @@ fn traverse_isa_unbounded_sorted_type() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -276,7 +276,7 @@ fn traverse_isa_bounded_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -377,7 +377,7 @@ fn traverse_isa_reverse_unbounded_sorted_thing() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -461,7 +461,7 @@ fn traverse_isa_reverse_unbounded_sorted_type() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -550,7 +550,7 @@ fn traverse_isa_reverse_bounded_type_exact() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -654,7 +654,7 @@ fn traverse_isa_reverse_bounded_type_subtype() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -755,7 +755,7 @@ fn traverse_isa_reverse_fixed_type_exact() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
@@ -842,7 +842,7 @@ fn traverse_isa_reverse_fixed_type_subtype() {
         variable_registry,
         &type_manager,
         previous_stage_variable_annotations,
-        &AnnotatedFunctionSignatures::empty(),
+        &EmptyAnnotatedFunctionSignatures,
     )
     .unwrap();
 
