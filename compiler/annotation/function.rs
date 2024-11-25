@@ -144,35 +144,31 @@ pub fn annotate_stored_functions<'a>(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
 ) -> Result<AnnotatedSchemaFunctions, Box<FunctionAnnotationError>> {
-    let label_based_signature_annotations_as_map = functions
+    let annotations_from_declaration = functions
         .iter()
         .map(|(id, function)| {
-            annotate_signature_based_on_labels(snapshot, type_manager, function).map(|x| (id.clone(), x))
+            Ok((id.clone(), annotate_signature_based_on_labels(snapshot, type_manager, function)?))
         })
         .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     let empty_preamble_annotations = Vec::<AnnotatedFunctionSignature>::new();
-    let seed_signature_annotations =
-        AnnotatedFunctionSignaturesImpl::new(&label_based_signature_annotations_as_map, &empty_preamble_annotations);
+    let declared_annotations =
+        AnnotatedFunctionSignaturesImpl::new(&annotations_from_declaration, &empty_preamble_annotations);
 
     let preliminary_signature_annotations = functions
         .iter_mut()
         .map(|(function_id, function)| {
-            Ok((
-                function_id.clone(),
-                annotate_named_function(function, snapshot, type_manager, &seed_signature_annotations)?,
-            ))
+            Ok((function_id.clone(), annotate_named_function(function, snapshot, type_manager, &declared_annotations)?))
         })
-        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+        .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     let preliminary_signature_annotations =
         AnnotatedFunctionSignaturesImpl::new(&preliminary_signature_annotations, &empty_preamble_annotations);
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let annotated_functions = functions
         .iter_mut()
-        .map(|(function_id, function)| {
-            annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations)
-                .map(|annotated| (function_id.clone(), annotated))
+        .map(|(id, function)| {
+            Ok((id.clone(), annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations)?))
         })
-        .collect::<Result<HashMap<DefinitionKey<'static>, AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+        .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
 
     // TODO: ^Optimise. There's no reason to do all of type inference again. We can re-use the graphs, and restart at the source of any SCC.
     // TODO: We don't propagate annotations until convergence, so we don't always detect unsatisfiable queries
@@ -196,14 +192,14 @@ pub fn annotate_preamble_functions(
     let preliminary_signature_annotations_as_map = functions
         .iter_mut()
         .map(|function| annotate_named_function(function, snapshot, type_manager, &label_based_signature_annotations))
-        .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+        .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
     // In the second round, finer annotations are available at the function calls so the annotations in function bodies can be refined.
     let preliminary_signature_annotations =
         AnnotatedFunctionSignaturesImpl::new(&schema_function_signatures, &preliminary_signature_annotations_as_map);
     let annotated_functions = functions
         .iter_mut()
         .map(|function| annotate_named_function(function, snapshot, type_manager, &preliminary_signature_annotations))
-        .collect::<Result<Vec<AnnotatedFunction>, Box<FunctionAnnotationError>>>()?;
+        .collect::<Result<_, Box<FunctionAnnotationError>>>()?;
 
     // TODO: ^Optimise. There's no reason to do all of type inference again. We can re-use the graphs, and restart at the source of any SCC.
     // TODO: We don't propagate annotations until convergence, so we don't always detect unsatisfiable queries
