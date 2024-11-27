@@ -215,7 +215,7 @@ fn redefine_type_annotations(
                     snapshot,
                     type_manager,
                     &label,
-                    entity.clone(),
+                    entity,
                     annotation.clone(),
                     type_declaration,
                 )? {
@@ -235,7 +235,7 @@ fn redefine_type_annotations(
                     snapshot,
                     type_manager,
                     &label,
-                    relation.clone(),
+                    relation,
                     annotation.clone(),
                     type_declaration,
                 )? {
@@ -255,7 +255,7 @@ fn redefine_type_annotations(
                     snapshot,
                     type_manager,
                     &label,
-                    attribute.clone(),
+                    attribute,
                     annotation.clone(),
                     type_declaration,
                 )? {
@@ -331,21 +331,21 @@ fn redefine_sub(
 
         match (&type_, supertype) {
             (TypeEnum::Entity(type_), TypeEnum::Entity(supertype)) => {
-                check_can_redefine_sub(snapshot, type_manager, &label, type_.clone(), supertype.clone(), capability)?;
+                check_can_redefine_sub(snapshot, type_manager, &label, *type_, supertype, capability)?;
                 error_if_anything_redefined_else_set_true(anything_redefined)?;
                 type_.set_supertype(snapshot, type_manager, thing_manager, supertype).map_err(|source| {
                     RedefineError::SetSupertype { declaration: sub.clone(), typedb_source: source }
                 })?;
             }
             (TypeEnum::Relation(type_), TypeEnum::Relation(supertype)) => {
-                check_can_redefine_sub(snapshot, type_manager, &label, type_.clone(), supertype.clone(), capability)?;
+                check_can_redefine_sub(snapshot, type_manager, &label, *type_, supertype, capability)?;
                 error_if_anything_redefined_else_set_true(anything_redefined)?;
                 type_.set_supertype(snapshot, type_manager, thing_manager, supertype).map_err(|source| {
                     RedefineError::SetSupertype { declaration: sub.clone(), typedb_source: source }
                 })?;
             }
             (TypeEnum::Attribute(type_), TypeEnum::Attribute(supertype)) => {
-                check_can_redefine_sub(snapshot, type_manager, &label, type_.clone(), supertype.clone(), capability)?;
+                check_can_redefine_sub(snapshot, type_manager, &label, *type_, supertype, capability)?;
                 error_if_anything_redefined_else_set_true(anything_redefined)?;
                 type_.set_supertype(snapshot, type_manager, thing_manager, supertype).map_err(|source| {
                     RedefineError::SetSupertype { declaration: sub.clone(), typedb_source: source }
@@ -390,7 +390,7 @@ fn redefine_value_type(
         let definition_status = get_value_type_status(
             snapshot,
             type_manager,
-            attribute_type.clone(),
+            *attribute_type,
             value_type.clone(),
             DefinableStatusMode::Declared,
         )
@@ -420,7 +420,7 @@ fn redefine_value_type(
             type_manager,
             thing_manager,
             anything_redefined,
-            attribute_type.clone(),
+            *attribute_type,
             &label,
             capability,
             type_declaration,
@@ -429,13 +429,13 @@ fn redefine_value_type(
     Ok(())
 }
 
-fn redefine_value_type_annotations<'a>(
+fn redefine_value_type_annotations(
     snapshot: &mut impl WritableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
     anything_redefined: &mut bool,
     attribute_type: AttributeType,
-    attribute_type_label: &Label<'a>,
+    attribute_type_label: &Label<'_>,
     typeql_capability: &Capability,
     typeql_type_declaration: &Type,
 ) -> Result<(), RedefineError> {
@@ -446,7 +446,7 @@ fn redefine_value_type_annotations<'a>(
             snapshot,
             type_manager,
             attribute_type_label,
-            attribute_type.clone(),
+            attribute_type,
             annotation.clone(),
             typeql_type_declaration,
         )? {
@@ -495,7 +495,7 @@ fn redefine_relates(
         let definition_status = get_relates_status(
             snapshot,
             type_manager,
-            relation_type.clone(),
+            *relation_type,
             &role_label,
             ordering,
             DefinableStatusMode::Declared,
@@ -682,8 +682,8 @@ fn redefine_owns(
         let definition_status = get_owns_status(
             snapshot,
             type_manager,
-            object_type.clone(),
-            attribute_type.clone(),
+            object_type,
+            attribute_type,
             ordering,
             DefinableStatusMode::Declared,
         )
@@ -739,7 +739,7 @@ fn redefine_owns_annotations(
             snapshot,
             type_manager,
             owner_label,
-            owns.clone(),
+            owns,
             annotation.clone(),
             typeql_capability,
         )? {
@@ -779,14 +779,9 @@ fn redefine_plays(
         let object_type =
             type_to_object_type(&type_).map_err(|_| err_unsupported_capability(&label, type_.kind(), capability))?;
 
-        let definition_status = get_plays_status(
-            snapshot,
-            type_manager,
-            object_type.clone(),
-            role_type.clone(),
-            DefinableStatusMode::Declared,
-        )
-        .map_err(|source| RedefineError::UnexpectedConceptRead { source })?;
+        let definition_status =
+            get_plays_status(snapshot, type_manager, object_type, role_type, DefinableStatusMode::Declared)
+                .map_err(|source| RedefineError::UnexpectedConceptRead { source })?;
         let plays = match definition_status {
             DefinableStatus::DoesNotExist => {
                 return Err(RedefineError::PlaysNotDefined {

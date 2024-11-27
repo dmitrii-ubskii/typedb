@@ -434,8 +434,8 @@ pub mod tests {
                 AttributeTypeAnnotation::Abstract(AnnotationAbstract),
             )
             .unwrap();
-            catname.set_supertype(&mut snapshot, type_manager, thing_manager, name.clone()).unwrap();
-            dogname.set_supertype(&mut snapshot, type_manager, thing_manager, name.clone()).unwrap();
+            catname.set_supertype(&mut snapshot, type_manager, thing_manager, name).unwrap();
+            dogname.set_supertype(&mut snapshot, type_manager, thing_manager, name).unwrap();
 
             name.set_value_type(&mut snapshot, type_manager, thing_manager, ValueType::String).unwrap();
             catname.set_value_type(&mut snapshot, type_manager, thing_manager, ValueType::String).unwrap();
@@ -445,8 +445,8 @@ pub mod tests {
             let animal = type_manager.create_entity_type(&mut snapshot, &Label::build(LABEL_ANIMAL)).unwrap();
             let cat = type_manager.create_entity_type(&mut snapshot, &Label::build(LABEL_CAT)).unwrap();
             let dog = type_manager.create_entity_type(&mut snapshot, &Label::build(LABEL_DOG)).unwrap();
-            cat.set_supertype(&mut snapshot, type_manager, thing_manager, animal.clone()).unwrap();
-            dog.set_supertype(&mut snapshot, type_manager, thing_manager, animal.clone()).unwrap();
+            cat.set_supertype(&mut snapshot, type_manager, thing_manager, animal).unwrap();
+            dog.set_supertype(&mut snapshot, type_manager, thing_manager, animal).unwrap();
             animal
                 .set_annotation(
                     &mut snapshot,
@@ -457,9 +457,9 @@ pub mod tests {
                 .unwrap();
 
             // Ownerships
-            animal.set_owns(&mut snapshot, type_manager, thing_manager, name.clone(), Ordering::Unordered).unwrap();
-            cat.set_owns(&mut snapshot, type_manager, thing_manager, catname.clone(), Ordering::Unordered).unwrap();
-            dog.set_owns(&mut snapshot, type_manager, thing_manager, dogname.clone(), Ordering::Unordered).unwrap();
+            animal.set_owns(&mut snapshot, type_manager, thing_manager, name, Ordering::Unordered).unwrap();
+            cat.set_owns(&mut snapshot, type_manager, thing_manager, catname, Ordering::Unordered).unwrap();
+            dog.set_owns(&mut snapshot, type_manager, thing_manager, dogname, Ordering::Unordered).unwrap();
 
             snapshot.commit().unwrap();
 
