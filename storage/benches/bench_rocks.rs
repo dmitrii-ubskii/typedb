@@ -13,13 +13,14 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use std::marker::PhantomData;
 
 use itertools::Itertools;
 use rand::random;
 use rand_core::RngCore;
 use xoshiro::Xoshiro256Plus;
 
-use crate::bench_rocks_impl::rocks_database::{create_typedb, rocks};
+use crate::bench_rocks_impl::rocks_database::{create_typedb, create_nontransactional_rocks, create_transactional_rocks};
 
 pub mod bench_rocks_impl;
 
@@ -27,6 +28,8 @@ const N_DATABASES: usize = 1;
 
 const KEY_SIZE: usize = 40;
 const VALUE_SIZE: usize = 0;
+
+const N_FORWARDS_PER_SEEK: usize = 2;// TODO: Make arg
 
 pub trait RocksDatabase: Sync + Send {
     fn open_batch(&self) -> impl RocksWriteBatch;
@@ -49,14 +52,37 @@ pub trait RocksIterator {
 }
 
 
-pub struct BenchmarkResult {
+pub struct BenchmarkResult<Runner> {
     pub batch_timings: Vec<Duration>,
     pub total_time: Duration,
+    runner: PhantomData<Runner>
 }
 
-impl BenchmarkResult {
-    fn print_report(&self, args: &CLIArgs, runner: &InsertBenchmarkRunner) {
-        println!("-- Report for benchmark: {} ---", args.database);
+impl BenchmarkResult<ReadBenchmarkRunner> {
+    pub(crate) fn print_report(&self, args: &CLIArgs, runner: &ReadBenchmarkRunner) {
+        println!("-- Report for ReadBenchmark: {} ---", args.database);
+        println!("threads = {}, n_txn={}, n_iterators/txn={}, n_forwards={} ---", runner.n_threads, runner.n_transactions, runner.n_seeks_per_transaction, N_FORWARDS_PER_SEEK);
+        println!("key-size: {KEY_SIZE}; value_size: {VALUE_SIZE}");
+        // println!("cli_args: [{}]", args.for_report());
+        // println!("- - - Batch timings (ns): - - -");
+        // self.batch_timings.iter().enumerate().for_each(|(batch_id, time)| {
+        //     println!("{:8}: {:12}", batch_id, time.as_nanos());
+        // });
+        let seeks_per_thread = runner.n_transactions * runner.n_seeks_per_transaction;
+        println!("Summary:");
+        println!(
+            "Total time: {:12} ms; total_seeks: {:10}; rate: {:.2} seeks/s ({:.2} per thread)",
+            self.total_time.as_secs_f64() * 1000.0,
+            args.n_threads as usize * seeks_per_thread,
+            seeks_per_thread as f64 * args.n_threads as f64 / self.total_time.as_secs_f64(),
+            seeks_per_thread as f64 / self.total_time.as_secs_f64(),
+        );
+    }
+}
+
+impl BenchmarkResult<WriteBenchmarkRunner> {
+    fn print_report(&self, args: &CLIArgs, runner: &WriteBenchmarkRunner) {
+        println!("-- Report for WriteBenchmark: {} ---", args.database);
         println!("threads = {}, batches={}, batch_size={} ---", runner.n_threads, runner.n_batches, runner.batch_size);
         println!("key-size: {KEY_SIZE}; value_size: {VALUE_SIZE}");
         println!("cli_args: [{}]", args.for_report());
@@ -75,6 +101,7 @@ impl BenchmarkResult {
             n_keys as f64 / self.total_time.as_secs_f64(),
             data_size_mb / self.total_time.as_secs_f64(),
         );
+        println!("--- End Report ---\n");
     }
 }
 
@@ -92,14 +119,14 @@ fn generate_key_value(rng: &mut Xoshiro256Plus) -> ([u8; KEY_SIZE], [u8; VALUE_S
     (key, VALUE_EMPTY)
 }
 
-pub struct InsertBenchmarkRunner {
+pub struct WriteBenchmarkRunner {
     n_threads: u16,
     n_batches: usize,
     batch_size: usize,
 }
 
-impl InsertBenchmarkRunner {
-    fn run(&self, database_arc: &impl RocksDatabase) -> BenchmarkResult {
+impl WriteBenchmarkRunner {
+    fn run(&self, database_arc: &impl RocksDatabase) -> BenchmarkResult<Self> {
         debug_assert_eq!(1, N_DATABASES, "I've not bothered implementing multiple databases");
         let batch_timings: Vec<RwLock<Duration>> =
             (0..self.n_batches).map(|_| RwLock::new(Duration::from_secs(0))).collect();
@@ -130,19 +157,19 @@ impl InsertBenchmarkRunner {
         });
         assert!(batch_counter.load(Ordering::Relaxed) >= self.n_batches);
         let total_time = benchmark_start_instant.elapsed();
-        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time }
+        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time, runner: PhantomData }
     }
 }
 
 struct ReadBenchmarkRunner {
-    n_threads: usize,
+    n_threads: u16,
     n_transactions: usize,
     n_seeks_per_transaction: usize,
     n_forwards_per_seek: usize,
 }
 
 impl ReadBenchmarkRunner {
-    fn run(&self, database: &impl RocksDatabase) -> BenchmarkResult {
+    fn run(&self, database: &impl RocksDatabase) -> BenchmarkResult<Self> {
         debug_assert_eq!(1, N_DATABASES, "I've not bothered implementing multiple databases");
         let batch_timings: Vec<RwLock<Duration>> =
             (0..self.n_transactions).map(|_| RwLock::new(Duration::from_secs(0))).collect();
@@ -178,7 +205,7 @@ impl ReadBenchmarkRunner {
         });
         assert!(batch_counter.load(Ordering::Relaxed) >= self.n_transactions);
         let total_time = benchmark_start_instant.elapsed();
-        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time }
+        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time, runner: PhantomData }
     }
 }
 
@@ -259,19 +286,31 @@ impl CLIArgs {
     }
 }
 
-fn run_for(args: &CLIArgs, database: &impl RocksDatabase) {
+fn run_writes_for(args: &CLIArgs, database: &impl RocksDatabase) {
     let benchmarker =
-        InsertBenchmarkRunner { n_threads: args.n_threads, n_batches: args.n_batches, batch_size: args.batch_size };
-
+        WriteBenchmarkRunner { n_threads: args.n_threads, n_batches: args.n_batches, batch_size: args.batch_size };
     let report = benchmarker.run(database);
     report.print_report(args, &benchmarker);
+}
+
+fn run_reads_for(args: &CLIArgs, database: &impl RocksDatabase) {
+    let benchmarker = // TODO: Expand args
+        ReadBenchmarkRunner { n_threads: args.n_threads, n_transactions: args.n_batches, n_seeks_per_transaction: args.batch_size , n_forwards_per_seek: N_FORWARDS_PER_SEEK};
+    let report = benchmarker.run(database);
+    report.print_report(args, &benchmarker);
+}
+
+fn run_for(args: &CLIArgs, database: &impl RocksDatabase) {
+    run_writes_for(args, database);
+    run_reads_for(args, database);
 }
 
 fn main() {
     let args = CLIArgs::parse_args().unwrap();
     match args.database.as_str() {
-        "rocks" => run_for(&args, &rocks::<N_DATABASES>(&args).unwrap()),
+        "rocks" => run_for(&args, &create_nontransactional_rocks::<N_DATABASES>(&args).unwrap()),
         "typedb" => run_for(&args, &create_typedb::<N_DATABASES>().unwrap()),
+        "txn_rocks" => run_for(&args, &create_transactional_rocks::<N_DATABASES>(&args).unwrap()),
         _ => panic!("Unrecognised argument for database. Supported: rocks, typedb"),
     }
 }

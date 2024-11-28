@@ -31,11 +31,11 @@ fn write_options(args: &CLIArgs) -> WriteOptions {
     write_options
 }
 
-pub fn rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<NonTransactionalRocks<N_DATABASES>, rocksdb::Error> {
+pub fn create_nontransactional_rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<NonTransactionalRocks<N_DATABASES>, rocksdb::Error> {
     NonTransactionalRocks::<N_DATABASES>::setup(database_options(args), write_options(args))
 }
 
-pub fn transactional_rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<TransactionalRocks<N_DATABASES>, rocksdb::Error> {
+pub fn create_transactional_rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<TransactionalRocks<N_DATABASES>, rocksdb::Error> {
     TransactionalRocks::<N_DATABASES>::setup(database_options(args), write_options(args))
 }
 
