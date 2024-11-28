@@ -578,7 +578,7 @@ fn lots_of_inserts() {
     let (_tmp_dir, mut storage) = create_core_storage();
     setup_concept_storage(&mut storage);
 
-    let qm = QueryManager::new(None); // Some(Arc::new(QueryCache::new(0))));
+    let qm = QueryManager::new(Some(Arc::new(QueryCache::new(0))));
     let function_manager = FunctionManager::new(Arc::new(DefinitionKeyGenerator::new()), None);
     let schema_number = {
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
@@ -593,30 +593,32 @@ fn lots_of_inserts() {
     let q = 2515411;
     let mut at = p;
 
-    for _ in 0..2000 {
+    for _ in 0..250 {
         let mut snapshot = storage.clone().open_snapshot_write();
-        let i_id = (at + p) % q;
-        let i_im_id = (i_id + p) % q;
-        let i_name = (i_im_id + p) % q;
-        let i_price = (i_name + p) % q;
-        let i_data = (i_price + p) % q;
-        at = (i_price + p) % q;
+        for _ in 0..500 {
+            let i_id = (at + p) % q;
+            let i_im_id = (i_id + p) % q;
+            let i_name = (i_im_id + p) % q;
+            let i_price = (i_name + p) % q;
+            let i_data = (i_price + p) % q;
+            at = (i_price + p) % q;
 
-        let insert = format!(
-            r#"
-            insert
-            $item isa ITEM,
-            has I_ID {i_id}, has I_IM_ID {i_im_id}, has I_NAME "{i_name}",
-            has I_PRICE {i_price}, has I_DATA "{i_data}";
-        "#
-        );
-        let insert_parsed = typeql::parse_query(insert.as_str()).unwrap().into_pipeline();
-        let pipeline = qm
-            .prepare_write_pipeline(snapshot, &type_manager, thing_manager.clone(), &function_manager, &insert_parsed)
-            .unwrap();
-        let (mut iterator, ctx) = pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
-        iterator.collect_owned().unwrap();
-        snapshot = Arc::into_inner(ctx.snapshot).unwrap();
+            let insert = format!(
+                r#"
+                insert
+                $item isa ITEM,
+                has I_ID {i_id}, has I_IM_ID {i_im_id}, has I_NAME "{i_name}",
+                has I_PRICE {i_price}, has I_DATA "{i_data}";
+            "#
+            );
+            let insert_parsed = typeql::parse_query(insert.as_str()).unwrap().into_pipeline();
+            let pipeline = qm
+                .prepare_write_pipeline(snapshot, &type_manager, thing_manager.clone(), &function_manager, &insert_parsed)
+                .unwrap();
+            let (mut iterator, ctx) = pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
+            iterator.collect_owned().unwrap();
+            snapshot = Arc::into_inner(ctx.snapshot).unwrap();
+        }
         snapshot.commit().unwrap();
     }
     println!("Done");

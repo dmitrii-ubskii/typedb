@@ -9,6 +9,7 @@ use rocksdb::{Options, WriteOptions};
 use storage::StorageOpenError;
 
 use crate::{bench_rocks_impl::rocks_database::typedb_database::TypeDBDatabase, CLIArgs};
+use crate::bench_rocks_impl::rocks_database::transactional_rocks::TransactionalRocks;
 
 fn database_options(args: &CLIArgs) -> Options {
     let mut opts = Options::default();
@@ -34,6 +35,11 @@ pub fn rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<NonTransactiona
     NonTransactionalRocks::<N_DATABASES>::setup(database_options(args), write_options(args))
 }
 
+pub fn transactional_rocks<const N_DATABASES: usize>(args: &CLIArgs) -> Result<TransactionalRocks<N_DATABASES>, rocksdb::Error> {
+    TransactionalRocks::<N_DATABASES>::setup(database_options(args), write_options(args))
+}
+
+
 pub fn create_typedb<const N_DATABASES: usize>() -> Result<TypeDBDatabase<N_DATABASES>, StorageOpenError> {
     TypeDBDatabase::<N_DATABASES>::setup()
 }
@@ -41,10 +47,10 @@ pub fn create_typedb<const N_DATABASES: usize>() -> Result<TypeDBDatabase<N_DATA
 mod non_transactional_rocks {
     use std::iter::zip;
 
-    use rocksdb::{Options, WriteBatch, WriteOptions, DB};
+    use rocksdb::{Options, WriteBatch, WriteOptions, DB, IteratorMode, Direction};
     use test_utils::{create_tmp_dir, TempDir};
 
-    use crate::{RocksDatabase, RocksWriteBatch};
+    use crate::{KEY_SIZE, RocksDatabase, RocksIterator, RocksReadTransaction, RocksWriteBatch};
 
     pub struct NonTransactionalRocks<const N_DATABASES: usize> {
         databases: [DB; crate::N_DATABASES],
@@ -65,6 +71,10 @@ mod non_transactional_rocks {
         fn open_batch(&self) -> impl RocksWriteBatch {
             let write_batches = std::array::from_fn(|_| WriteBatch::default());
             NonTransactionalWriteBatch { database: self, write_batches }
+        }
+
+        fn open_read_tx(&self) -> impl RocksReadTransaction {
+            NonTransactionalTransaction{ database: self }
         }
     }
 
@@ -87,6 +97,35 @@ mod non_transactional_rocks {
             Ok(())
         }
     }
+
+    pub struct NonTransactionalTransaction<'this, const N_DATABASES: usize> {
+        database: &'this NonTransactionalRocks<N_DATABASES>,
+    }
+
+    impl<'this, const N_DATABASES: usize> RocksReadTransaction for  NonTransactionalTransaction<'this, N_DATABASES> {
+        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> NonTransactionalIterator {
+            let mut raw_iterator = self.database.databases[database_index].raw_iterator();
+            raw_iterator.seek(&key);
+            raw_iterator
+        }
+    }
+
+    pub type NonTransactionalIterator<'db> = rocksdb::DBRawIterator<'db>;
+    impl<'db> RocksIterator for NonTransactionalIterator<'db> {
+        type Error = rocksdb::Error;
+
+        fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>> {
+            let mut return_bytes = [0; 40];
+            if self.valid() {
+                return_bytes.copy_from_slice(self.item().unwrap().0);
+                Some(Ok(return_bytes))
+            } else if self.status().is_err() {
+                Some(Err(self.status().err().unwrap().clone()))
+            } else {
+                None
+            }
+        }
+    }
 }
 
 mod typedb_database {
@@ -103,7 +142,7 @@ mod typedb_database {
     };
     use test_utils::{create_tmp_dir, TempDir};
 
-    use crate::{RocksDatabase, RocksWriteBatch, KEY_SIZE};
+    use crate::{RocksDatabase, RocksWriteBatch, KEY_SIZE, RocksReadTransaction, RocksIterator};
 
     pub struct TypeDBDatabase<const N_DATABASES: usize> {
         storage: Arc<MVCCStorage<WALClient>>,
@@ -121,9 +160,14 @@ mod typedb_database {
         }
     }
 
+    pub struct TodoThings;
     impl<const N_DATABASES: usize> RocksDatabase for TypeDBDatabase<N_DATABASES> {
         fn open_batch(&self) -> impl RocksWriteBatch {
             TypeDBSnapshot { snapshot: self.storage.clone().open_snapshot_write() }
+        }
+
+        fn open_read_tx(&self) -> TodoThings {
+            todo!()
         }
     }
 
@@ -164,6 +208,109 @@ mod typedb_database {
 
         fn name(&self) -> &'static str {
             TypeDBSnapshot::KEYSPACE_NAMES[self.id as usize]
+        }
+    }
+
+    impl RocksReadTransaction for TodoThings {
+        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> TodoThings {
+            todo!()
+        }
+    }
+
+    impl RocksIterator for TodoThings {
+        type Error = ();
+
+        fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>> {
+            todo!()
+        }
+    }
+}
+
+mod transactional_rocks {
+    use std::iter::zip;
+
+    use rocksdb::{Options, WriteBatch, WriteOptions, Transaction, OptimisticTransactionDB, WriteBatchWithTransaction, IteratorMode, Direction, DBIteratorWithThreadMode};
+    use test_utils::{create_tmp_dir, TempDir};
+
+    use crate::{KEY_SIZE, N_DATABASES, RocksDatabase, RocksIterator, RocksReadTransaction, RocksWriteBatch};
+
+    pub struct TransactionalRocks<const N_DATABASES: usize> {
+        databases: [OptimisticTransactionDB; crate::N_DATABASES],
+        write_options: WriteOptions,
+        _path: TempDir,
+    }
+
+    impl<const N_DATABASES: usize> TransactionalRocks<N_DATABASES> {
+        pub(super) fn setup(options: Options, write_options: WriteOptions) -> Result<Self, rocksdb::Error> {
+            let path = create_tmp_dir();
+            let databases = std::array::from_fn(|i| OptimisticTransactionDB::open(&options, path.join(format!("db_{i}"))).unwrap());
+
+            Ok(Self { _path: path, databases, write_options })
+        }
+    }
+
+    impl<const N_DATABASES: usize> RocksDatabase for TransactionalRocks<N_DATABASES> {
+        fn open_batch(&self) -> impl RocksWriteBatch {
+            let write_batches = std::array::from_fn(|i|{
+                let tx = self.databases[i].transaction();
+                let wb = tx.get_writebatch();
+                (tx, wb)
+            });
+            TransactionalWriteBatch { database: self, write_batches }
+        }
+
+        fn open_read_tx(&self) -> TransactionalRocksTransaction<'_, N_DATABASES> {
+            TransactionalRocksTransaction {
+                transactions:std::array::from_fn(|i| self.databases[i].transaction())
+            }
+        }
+    }
+
+    pub struct TransactionalWriteBatch<'this, const N_DATABASES: usize> {
+        database: &'this TransactionalRocks<N_DATABASES>,
+        write_batches: [(Transaction<'this, OptimisticTransactionDB>, WriteBatchWithTransaction<true>); N_DATABASES],
+    }
+
+    impl<'this, const N_DATABASES: usize> RocksWriteBatch for TransactionalWriteBatch<'this, N_DATABASES> {
+        type CommitError = rocksdb::Error;
+        fn put(&mut self, database_index: usize, key: [u8; crate::KEY_SIZE]) {
+            self.write_batches[database_index].1.put(key, [])
+        }
+
+        fn commit(self) -> Result<(), rocksdb::Error> {
+            let write_options = &self.database.write_options;
+            for (db, (tx, write_batch) ) in zip(&self.database.databases, self.write_batches) {
+                db.write_opt(write_batch, write_options)?;
+                tx.commit()?;
+            }
+            Ok(())
+        }
+    }
+
+    pub struct TransactionalRocksTransaction<'db, const N_DATABASES:usize> {
+        transactions: [rocksdb::Transaction<'db, OptimisticTransactionDB>; N_DATABASES],
+    }
+
+    pub type TransactionalIterator<'db> = DBIteratorWithThreadMode<'db, rocksdb::Transaction<'db, OptimisticTransactionDB>>;
+    impl<'db, const N_DATABASES: usize> RocksReadTransaction for TransactionalRocksTransaction<'db, N_DATABASES> {
+        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> TransactionalIterator {
+            self.transactions[database_index].iterator(IteratorMode::From(key, Direction::Forward))
+        }
+    }
+
+    impl<'db> RocksIterator for TransactionalIterator<'db> {
+        type Error = rocksdb::Error;
+
+        fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], rocksdb::Error>> {
+            let mut return_bytes = [0; 40];
+            match <Self as Iterator>::next(self) {
+                None => None,
+                Some(Ok((kbox, _))) => {
+                    return_bytes.copy_from_slice(kbox.as_ref());
+                    Some(Ok(return_bytes))
+                },
+                Some(Err(err)) => Some(Err(err)),
+            }
         }
     }
 }

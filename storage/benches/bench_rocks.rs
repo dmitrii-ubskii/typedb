@@ -30,6 +30,7 @@ const VALUE_SIZE: usize = 0;
 
 pub trait RocksDatabase: Sync + Send {
     fn open_batch(&self) -> impl RocksWriteBatch;
+    fn open_read_tx(&self) -> impl RocksReadTransaction;
 }
 
 pub trait RocksWriteBatch {
@@ -38,13 +39,23 @@ pub trait RocksWriteBatch {
     fn commit(self) -> Result<(), Self::CommitError>;
 }
 
+pub trait RocksReadTransaction {
+    fn open_iter_at(&self, database_index: usize, key: &[u8]) -> impl RocksIterator;
+}
+
+pub trait RocksIterator {
+    type Error;
+    fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>>;
+}
+
+
 pub struct BenchmarkResult {
     pub batch_timings: Vec<Duration>,
     pub total_time: Duration,
 }
 
 impl BenchmarkResult {
-    fn print_report(&self, args: &CLIArgs, runner: &BenchmarkRunner) {
+    fn print_report(&self, args: &CLIArgs, runner: &InsertBenchmarkRunner) {
         println!("-- Report for benchmark: {} ---", args.database);
         println!("threads = {}, batches={}, batch_size={} ---", runner.n_threads, runner.n_batches, runner.batch_size);
         println!("key-size: {KEY_SIZE}; value_size: {VALUE_SIZE}");
@@ -67,14 +78,27 @@ impl BenchmarkResult {
     }
 }
 
-pub struct BenchmarkRunner {
+
+fn generate_key_value(rng: &mut Xoshiro256Plus) -> ([u8; KEY_SIZE], [u8; VALUE_SIZE]) {
+    const VALUE_EMPTY: [u8; 0] = [];
+    // Rust's inbuilt ThreadRng is secure and slow. Xoshiro is significantly faster.
+    // This ~(50 GB/s) is faster than generating 64 random bytes (~6 GB/s) or loading pre-generated (~18 GB/s).
+    let mut key: [u8; KEY_SIZE] = [0; KEY_SIZE];
+    let mut z = rng.next_u64();
+    for start in (0..KEY_SIZE).step_by(8) {
+        key[start..][..8].copy_from_slice(&z.to_le_bytes());
+        z = u64::rotate_left(z, 1); // Rotation beats the compression.
+    }
+    (key, VALUE_EMPTY)
+}
+
+pub struct InsertBenchmarkRunner {
     n_threads: u16,
     n_batches: usize,
     batch_size: usize,
 }
 
-impl BenchmarkRunner {
-    const VALUE_EMPTY: [u8; 0] = [];
+impl InsertBenchmarkRunner {
     fn run(&self, database_arc: &impl RocksDatabase) -> BenchmarkResult {
         debug_assert_eq!(1, N_DATABASES, "I've not bothered implementing multiple databases");
         let batch_timings: Vec<RwLock<Duration>> =
@@ -93,7 +117,7 @@ impl BenchmarkRunner {
                         let mut write_batch = database_arc.open_batch();
                         let batch_start_instant = Instant::now();
                         for _ in 0..self.batch_size {
-                            let (k, _) = Self::generate_key_value(&mut in_rng);
+                            let (k, _) = generate_key_value(&mut in_rng);
                             write_batch.put(0, k);
                         }
                         write_batch.commit().unwrap();
@@ -108,17 +132,53 @@ impl BenchmarkRunner {
         let total_time = benchmark_start_instant.elapsed();
         BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time }
     }
+}
 
-    fn generate_key_value(rng: &mut Xoshiro256Plus) -> ([u8; KEY_SIZE], [u8; VALUE_SIZE]) {
-        // Rust's inbuilt ThreadRng is secure and slow. Xoshiro is significantly faster.
-        // This ~(50 GB/s) is faster than generating 64 random bytes (~6 GB/s) or loading pre-generated (~18 GB/s).
-        let mut key: [u8; KEY_SIZE] = [0; KEY_SIZE];
-        let mut z = rng.next_u64();
-        for start in (0..KEY_SIZE).step_by(8) {
-            key[start..][..8].copy_from_slice(&z.to_le_bytes());
-            z = u64::rotate_left(z, 1); // Rotation beats the compression.
-        }
-        (key, Self::VALUE_EMPTY)
+struct ReadBenchmarkRunner {
+    n_threads: usize,
+    n_transactions: usize,
+    n_seeks_per_transaction: usize,
+    n_forwards_per_seek: usize,
+}
+
+impl ReadBenchmarkRunner {
+    fn run(&self, database: &impl RocksDatabase) -> BenchmarkResult {
+        debug_assert_eq!(1, N_DATABASES, "I've not bothered implementing multiple databases");
+        let batch_timings: Vec<RwLock<Duration>> =
+            (0..self.n_transactions).map(|_| RwLock::new(Duration::from_secs(0))).collect();
+        let batch_counter = AtomicUsize::new(0);
+        let benchmark_start_instant = Instant::now();
+        thread::scope(|s| {
+            for _ in 0..self.n_threads {
+                s.spawn(|| {
+                    let mut in_rng = Xoshiro256Plus::from_seed_u64(random());
+                    loop {
+                        let tx_number = batch_counter.fetch_add(1, Ordering::Relaxed);
+                        if tx_number >= self.n_transactions {
+                            break;
+                        }
+                        let mut tx = database.open_read_tx();
+                        let batch_start_instant = Instant::now();
+                        for _ in 0..self.n_seeks_per_transaction {
+                            let (k, _) = generate_key_value(&mut in_rng);
+                            let mut iter = tx.open_iter_at(0, &k);
+                            for _ in 0..self.n_forwards_per_seek {
+                                match iter.next() {
+                                    None => { break; }
+                                    Some(k) => { std::hint::black_box(&k); }
+                                }
+                            }
+                        }
+                        let batch_stop = batch_start_instant.elapsed();
+                        let mut duration_for_batch = batch_timings.get(tx_number).unwrap().write().unwrap();
+                        *duration_for_batch = batch_stop;
+                    }
+                });
+            }
+        });
+        assert!(batch_counter.load(Ordering::Relaxed) >= self.n_transactions);
+        let total_time = benchmark_start_instant.elapsed();
+        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time }
     }
 }
 
@@ -201,7 +261,7 @@ impl CLIArgs {
 
 fn run_for(args: &CLIArgs, database: &impl RocksDatabase) {
     let benchmarker =
-        BenchmarkRunner { n_threads: args.n_threads, n_batches: args.n_batches, batch_size: args.batch_size };
+        InsertBenchmarkRunner { n_threads: args.n_threads, n_batches: args.n_batches, batch_size: args.batch_size };
 
     let report = benchmarker.run(database);
     report.print_report(args, &benchmarker);
