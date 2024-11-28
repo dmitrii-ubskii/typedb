@@ -46,11 +46,13 @@ pub fn create_typedb<const N_DATABASES: usize>() -> Result<TypeDBDatabase<N_DATA
 
 mod non_transactional_rocks {
     use std::iter::zip;
+    use std::ops::{Deref, DerefMut};
+    use std::sync::{Mutex, MutexGuard};
 
-    use rocksdb::{Options, WriteBatch, WriteOptions, DB, IteratorMode, Direction};
+    use rocksdb::{Options, WriteBatch, WriteOptions, DB, IteratorMode, Direction, DBRawIterator};
     use test_utils::{create_tmp_dir, TempDir};
 
-    use crate::{KEY_SIZE, RocksDatabase, RocksIterator, RocksReadTransaction, RocksWriteBatch};
+    use crate::{KEY_SIZE, N_DATABASES, RocksDatabase, RocksIterator, RocksReadTransaction, RocksWriteBatch};
 
     pub struct NonTransactionalRocks<const N_DATABASES: usize> {
         databases: [DB; crate::N_DATABASES],
@@ -74,7 +76,9 @@ mod non_transactional_rocks {
         }
 
         fn open_read_tx(&self) -> impl RocksReadTransaction {
-            NonTransactionalTransaction{ database: self }
+            // TODO: Switch as you please
+            // NonTransactionalTransaction{ database: self }
+            IteratorPool::from_database(self)
         }
     }
 
@@ -98,20 +102,48 @@ mod non_transactional_rocks {
         }
     }
 
-    pub struct NonTransactionalTransaction<'this, const N_DATABASES: usize> {
-        database: &'this NonTransactionalRocks<N_DATABASES>,
-    }
 
-    impl<'this, const N_DATABASES: usize> RocksReadTransaction for  NonTransactionalTransaction<'this, N_DATABASES> {
-        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> NonTransactionalIterator {
+    impl<'this, const N_DATABASES: usize> RocksReadTransaction for NonTransactionalTransaction<'this, N_DATABASES> {
+        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> impl RocksIterator {
             let mut raw_iterator = self.database.databases[database_index].raw_iterator();
             raw_iterator.seek(&key);
             raw_iterator
         }
     }
 
-    pub type NonTransactionalIterator<'db> = rocksdb::DBRawIterator<'db>;
-    impl<'db> RocksIterator for NonTransactionalIterator<'db> {
+    pub struct NonTransactionalTransaction<'this, const N_DATABASES: usize> {
+        database: &'this NonTransactionalRocks<N_DATABASES>,
+    }
+
+    pub struct IteratorPool<'db, const N_DATABASES: usize> {
+        iterators: [Mutex<DBRawIterator<'db>>; N_DATABASES]
+    }
+
+    impl<'db, const N_DATABASES: usize> IteratorPool<'db, N_DATABASES> {
+        fn from_database(database: &'db NonTransactionalRocks<N_DATABASES>) -> Self {
+            Self {
+                iterators: std::array::from_fn(|i| Mutex::new(database.databases[i].raw_iterator()))
+            }
+        }
+    }
+
+    impl<'db, const N_DATABASES: usize> RocksReadTransaction for IteratorPool<'db, N_DATABASES> {
+        fn open_iter_at(&self, database_index: usize, key: &[u8]) -> impl RocksIterator {
+            let mut it = self.iterators[database_index].try_lock().unwrap();
+            it.seek(key);
+            it
+        }
+    }
+
+    impl<'a, 'db> RocksIterator for MutexGuard<'a, DBRawIterator<'db>> {
+        type Error = rocksdb::Error;
+
+        fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>> {
+            <DBRawIterator as RocksIterator>::next(self.deref_mut())
+        }
+    }
+
+    impl<'db> RocksIterator for rocksdb::DBRawIterator<'db>{
         type Error = rocksdb::Error;
 
         fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>> {
