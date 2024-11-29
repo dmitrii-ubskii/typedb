@@ -4,7 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{error::Error, fmt, fs, io, path::PathBuf};
+use std::{
+    error::Error,
+    fmt, fs, io,
+    path::{Path, PathBuf},
+};
 
 use database::{database_manager::DatabaseManager, DatabaseOpenError};
 use resource::constants::server::GRPC_CONNECTION_KEEPALIVE;
@@ -21,7 +25,8 @@ pub struct Server {
 impl Server {
     pub fn open(config: Config) -> Result<Self, ServerOpenError> {
         use ServerOpenError::{CouldNotCreateDataDirectory, NotADirectory};
-        let storage_directory = &config.storage.data;
+        let storage_directory = Path::new("/Users/dmitriiubskii/workspace/perf-workspace/typedb3-bytes/runtimedata");
+        // let storage_directory = &config.storage.data;
 
         if !storage_directory.exists() {
             fs::create_dir_all(storage_directory)

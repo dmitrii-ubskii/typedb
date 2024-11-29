@@ -6,7 +6,7 @@
 
 use std::{
     any::type_name_of_val,
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt,
 };
 
@@ -139,7 +139,7 @@ fn make_builder<'a>(
     plan_builder
 }
 
-#[derive(Clone, Copy, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct VariableVertexId(usize);
 
 impl fmt::Debug for VariableVertexId {
@@ -148,7 +148,7 @@ impl fmt::Debug for VariableVertexId {
     }
 }
 
-#[derive(Clone, Copy, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct PatternVertexId(usize);
 
 impl fmt::Debug for PatternVertexId {
@@ -157,7 +157,7 @@ impl fmt::Debug for PatternVertexId {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum VertexId {
     Variable(VariableVertexId),
     Pattern(PatternVertexId),
@@ -534,83 +534,146 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 
     fn initialise_greedy_ordering(&self) -> Vec<VertexId> {
-        let mut open_set: HashSet<VertexId> = chain!(
-            self.graph.variable_to_pattern.keys().map(|&variable_id| VertexId::Variable(variable_id)),
-            self.graph.pattern_to_variable.keys().map(|&pattern_id| VertexId::Pattern(pattern_id))
-        )
-        .collect();
+        let mut open_set: BTreeSet<_> = self.graph.pattern_to_variable.keys().copied().collect();
+        let mut candidates = BTreeSet::new();
 
         let mut ordering = Vec::with_capacity(self.graph.element_count());
         for v in self.input_variables() {
             ordering.push(VertexId::Variable(v));
-            open_set.remove(&VertexId::Variable(v));
         }
 
-        let mut produced_at_this_stage: HashSet<VariableVertexId> = HashSet::new();
-        let mut intersection_variable: Option<VariableVertexId> = None;
+        while let Some(&next) = open_set.iter().find(|&&elem| {
+            let graph_element = &self.graph.elements[&VertexId::Pattern(elem)];
+            matches!(graph_element, PlannerVertex::Constraint(ConstraintVertex::Iid(_) | ConstraintVertex::TypeList(_)))
+        }) {
+            ordering.push(VertexId::Pattern(next));
+            open_set.remove(&next);
+            candidates.remove(&next);
 
-        macro_rules! commit_variables {
-            () => {{
-                if let Some(var) = intersection_variable.take().map(VertexId::Variable) {
-                    ordering.push(var);
-                    open_set.remove(&var);
+            for v in self.graph.pattern_to_variable[&next].iter().map(|&v| VertexId::Variable(v)) {
+                if !ordering.contains(&v) {
+                    ordering.push(v);
                 }
-                for var in produced_at_this_stage.drain().map(VertexId::Variable) {
-                    if !ordering.contains(&var) {
-                        ordering.push(var);
-                        open_set.remove(&var);
+            }
+        }
+
+        while let Some(&next) = open_set.iter().find(|&&elem| {
+            let graph_element = &self.graph.elements[&VertexId::Pattern(elem)];
+            match graph_element {
+                PlannerVertex::Constraint(ConstraintVertex::Has(has)) => {
+                    self.graph.elements[&VertexId::Variable(has.attribute)].as_variable().unwrap().selectivity(&[])
+                        < 1.0
+                }
+                _ => false,
+            }
+        }) {
+            ordering.push(VertexId::Pattern(next));
+            open_set.remove(&next);
+            candidates.remove(&next);
+
+            let element = &self.graph.elements[&VertexId::Pattern(next)];
+            if let Some(constraint) = element.as_constraint() {
+                let sort_unbound = match constraint.unbound_direction(&self.graph) {
+                    Direction::Canonical => Some(VertexId::Variable(constraint.variables().next().unwrap())),
+                    Direction::Reverse => constraint.variables().nth(1).map(VertexId::Variable),
+                };
+                if let Some(sort_unbound) = sort_unbound {
+                    if !ordering.contains(&sort_unbound) {
+                        ordering.push(sort_unbound);
                     }
                 }
-            }};
+            }
+
+            for v in self.graph.pattern_to_variable[&next].iter().map(|&v| VertexId::Variable(v)) {
+                if !ordering.contains(&v) {
+                    ordering.push(v);
+                }
+            }
+
+            let adjacent = self.graph.pattern_to_variable[&next]
+                .iter()
+                .flat_map(|v| &self.graph.variable_to_pattern[v])
+                .sorted()
+                .dedup()
+                .filter(|&&elem| {
+                    self.graph.elements[&VertexId::Pattern(elem)].is_valid(
+                        VertexId::Pattern(elem),
+                        &ordering,
+                        &self.graph,
+                    )
+                });
+            for &pat in adjacent {
+                if !ordering.contains(&VertexId::Pattern(pat)) {
+                    candidates.insert(pat);
+                }
+            }
         }
 
         while !open_set.is_empty() {
-            let (next, _cost) = open_set
+            if candidates.is_empty() {
+                candidates = open_set
+                    .iter()
+                    .filter(|&&elem| {
+                        self.graph.elements[&VertexId::Pattern(elem)].is_valid(
+                            VertexId::Pattern(elem),
+                            &ordering,
+                            &self.graph,
+                        )
+                    })
+                    .copied()
+                    .collect();
+            }
+
+            let (next, _cost) = candidates
                 .iter()
-                .filter(|&&elem| self.graph.elements[&elem].is_valid(elem, &ordering, &self.graph))
                 .map(|&elem| {
-                    let cost = self.calculate_marginal_cost(&ordering, elem, intersection_variable);
+                    let cost = self.calculate_marginal_cost(&ordering, VertexId::Pattern(elem), None);
                     // useful when debugging
-                    let _graph_element = &self.graph.elements[&elem];
+                    let _graph_element = &self.graph.elements[&VertexId::Pattern(elem)];
                     (elem, cost)
                 })
                 .min_by(|(_, lhs_cost), (_, rhs_cost)| lhs_cost.total_cmp(rhs_cost))
                 .unwrap();
-            let element = &self.graph.elements[&next];
 
-            if element.is_variable() {
-                commit_variables!();
-            } else if element.is_constraint() {
-                if let Ok(var) = element.variables().filter(|var| produced_at_this_stage.contains(var)).exactly_one() {
-                    let prev = &self.graph.elements[ordering.last().unwrap()];
-                    let next_constraint = &element.as_constraint().unwrap();
-                    let prev_constraint = &prev.as_constraint().unwrap();
-                    if next_constraint.can_sort_on(var)
-                        && prev_constraint.can_sort_on(var)
-                        && (intersection_variable == Some(var) || intersection_variable.is_none())
-                    {
-                        intersection_variable = Some(var);
-                    } else {
-                        commit_variables!()
+            ordering.push(VertexId::Pattern(next));
+            open_set.remove(&next);
+            candidates.remove(&next);
+
+            let element = &self.graph.elements[&VertexId::Pattern(next)];
+
+            if let Some(constraint) = element.as_constraint() {
+                let sort_unbound = match constraint.unbound_direction(&self.graph) {
+                    Direction::Canonical => Some(VertexId::Variable(constraint.variables().next().unwrap())),
+                    Direction::Reverse => constraint.variables().nth(1).map(VertexId::Variable),
+                };
+                if let Some(sort_unbound) = sort_unbound {
+                    if !ordering.contains(&sort_unbound) {
+                        ordering.push(sort_unbound);
                     }
-                } else {
-                    commit_variables!()
                 }
+            }
 
-                produced_at_this_stage
-                    .extend(element.variables().filter(|&var| !ordering.contains(&VertexId::Variable(var))));
+            for v in self.graph.pattern_to_variable[&next].iter().map(|&v| VertexId::Variable(v)) {
+                if !ordering.contains(&v) {
+                    ordering.push(v);
+                }
+            }
 
-                ordering.push(next);
-                open_set.remove(&next);
-            } else {
-                commit_variables!();
-                ordering.push(next);
-                open_set.remove(&next);
-                for var in element.variables().map(VertexId::Variable) {
-                    if !ordering.contains(&var) {
-                        ordering.push(var);
-                        open_set.remove(&var);
-                    }
+            let adjacent = self.graph.pattern_to_variable[&next]
+                .iter()
+                .flat_map(|v| &self.graph.variable_to_pattern[v])
+                .sorted()
+                .dedup()
+                .filter(|&&elem| {
+                    self.graph.elements[&VertexId::Pattern(elem)].is_valid(
+                        VertexId::Pattern(elem),
+                        &ordering,
+                        &self.graph,
+                    )
+                });
+            for &pat in adjacent {
+                if !ordering.contains(&VertexId::Pattern(pat)) {
+                    candidates.insert(pat);
                 }
             }
         }
