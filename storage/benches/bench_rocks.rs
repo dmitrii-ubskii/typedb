@@ -6,6 +6,7 @@
 
 use std::{
     collections::HashMap,
+    marker::PhantomData,
     sync::{
         atomic::{AtomicUsize, Ordering},
         RwLock,
@@ -13,14 +14,15 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use std::marker::PhantomData;
 
 use itertools::Itertools;
 use rand::random;
 use rand_core::RngCore;
 use xoshiro::Xoshiro256Plus;
 
-use crate::bench_rocks_impl::rocks_database::{create_typedb, create_nontransactional_rocks, create_transactional_rocks};
+use crate::bench_rocks_impl::rocks_database::{
+    create_nontransactional_rocks, create_transactional_rocks, create_typedb,
+};
 
 pub mod bench_rocks_impl;
 
@@ -29,7 +31,7 @@ const N_DATABASES: usize = 1;
 const KEY_SIZE: usize = 40;
 const VALUE_SIZE: usize = 0;
 
-const N_FORWARDS_PER_SEEK: usize = 2;// TODO: Make arg
+const N_FORWARDS_PER_SEEK: usize = 2; // TODO: Make arg
 
 pub trait RocksDatabase: Sync + Send {
     fn open_batch(&self) -> impl RocksWriteBatch;
@@ -51,17 +53,19 @@ pub trait RocksIterator {
     fn next(&mut self) -> Option<Result<[u8; KEY_SIZE], Self::Error>>;
 }
 
-
 pub struct BenchmarkResult<Runner> {
     pub batch_timings: Vec<Duration>,
     pub total_time: Duration,
-    runner: PhantomData<Runner>
+    runner: PhantomData<Runner>,
 }
 
 impl BenchmarkResult<ReadBenchmarkRunner> {
     pub(crate) fn print_report(&self, args: &CLIArgs, runner: &ReadBenchmarkRunner) {
         println!("-- Report for ReadBenchmark: {} ---", args.database);
-        println!("threads = {}, n_txn={}, n_iterators/txn={}, n_forwards={} ---", runner.n_threads, runner.n_transactions, runner.n_seeks_per_transaction, N_FORWARDS_PER_SEEK);
+        println!(
+            "threads = {}, n_txn={}, n_iterators/txn={}, n_forwards={} ---",
+            runner.n_threads, runner.n_transactions, runner.n_seeks_per_transaction, N_FORWARDS_PER_SEEK
+        );
         println!("key-size: {KEY_SIZE}; value_size: {VALUE_SIZE}");
         // println!("cli_args: [{}]", args.for_report());
         // println!("- - - Batch timings (ns): - - -");
@@ -104,7 +108,6 @@ impl BenchmarkResult<WriteBenchmarkRunner> {
         println!("--- End Report ---\n");
     }
 }
-
 
 fn generate_key_value(rng: &mut Xoshiro256Plus) -> ([u8; KEY_SIZE], [u8; VALUE_SIZE]) {
     const VALUE_EMPTY: [u8; 0] = [];
@@ -157,7 +160,11 @@ impl WriteBenchmarkRunner {
         });
         assert!(batch_counter.load(Ordering::Relaxed) >= self.n_batches);
         let total_time = benchmark_start_instant.elapsed();
-        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time, runner: PhantomData }
+        BenchmarkResult {
+            batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(),
+            total_time,
+            runner: PhantomData,
+        }
     }
 }
 
@@ -191,8 +198,12 @@ impl ReadBenchmarkRunner {
                             let mut iter = tx.open_iter_at(0, &k);
                             for _ in 0..self.n_forwards_per_seek {
                                 match iter.next() {
-                                    None => { break; }
-                                    Some(k) => { std::hint::black_box(&k); }
+                                    None => {
+                                        break;
+                                    }
+                                    Some(k) => {
+                                        std::hint::black_box(&k);
+                                    }
                                 }
                             }
                         }
@@ -205,7 +216,11 @@ impl ReadBenchmarkRunner {
         });
         assert!(batch_counter.load(Ordering::Relaxed) >= self.n_transactions);
         let total_time = benchmark_start_instant.elapsed();
-        BenchmarkResult { batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(), total_time, runner: PhantomData }
+        BenchmarkResult {
+            batch_timings: batch_timings.iter().map(|x| *x.read().unwrap()).collect(),
+            total_time,
+            runner: PhantomData,
+        }
     }
 }
 
