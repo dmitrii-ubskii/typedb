@@ -55,5 +55,5 @@ logs/
 *.swp
 *.swo
 
-# Python cache
+# Python cache and venv
 __pycache__

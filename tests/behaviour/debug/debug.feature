@@ -22,4 +22,4 @@ $o links (customer: $c, district: $d), isa ORDER, has O_ID $o_id, has O_NEW_ORDE
 $c isa CUSTOMER, has C_ID $c_id;
 select $o_id, $c_id;
       """
-    Then answer size is: 5
+    Then answer size is: 6
