@@ -59,7 +59,7 @@ use crate::{
     ExecutorVariable, VariablePosition,
 };
 
-pub const MAX_BEAM_WIDTH: usize = 128;
+pub const MAX_BEAM_WIDTH: usize = 96;
 
 pub(crate) fn plan_conjunction<'a>(
     conjunction: &'a Conjunction,
@@ -543,8 +543,9 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     fn beam_search_plan(&self) -> (Vec<VertexId>, HashMap<PatternVertexId, CostMetaData>) {
         let num_patterns = self.graph.pattern_to_variable.len();
 
-        let beam_width = ((num_patterns.saturating_sub(10)) * 4).clamp(2, MAX_BEAM_WIDTH);
-        let extension_width = beam_width / 2;
+        let mut beam_width = (num_patterns * 2).clamp(2, MAX_BEAM_WIDTH);
+        let mut extension_width = (num_patterns / 2) + 2;
+        let reduction_cycle = 2;
 
         let all_patterns = self.graph.pattern_to_variable.keys().copied().collect();
         let mut best_partial_plans = Vec::with_capacity(beam_width);
@@ -552,6 +553,9 @@ impl<'a> ConjunctionPlanBuilder<'a> {
 
         for _ in 0..num_patterns {
             let mut new_plans_heap = BinaryHeap::with_capacity(beam_width);
+        for i in 0..num_patterns {
+            let mut new_plans_heap  = BinaryHeap::with_capacity(beam_width);
+            if i % reduction_cycle == 0 { extension_width -= 1; beam_width -= 1; }
             for plan in best_partial_plans.drain(..) {
                 let mut extension_heap = BinaryHeap::with_capacity(extension_width);
                 for extension in plan.extensions_iter(&self.graph) {

@@ -475,9 +475,8 @@ impl Costed for HasPlanner<'_> {
             if is_attribute_bound {
                 scan_size_canonical /= attribute_size; // accounts for bound prefix
             }
-        } else {
-            scan_size_canonical *= owner.restriction_based_selectivity(inputs); // account for restrictions (like iid)
         }
+        scan_size_canonical *= owner.restriction_based_selectivity(inputs); // account for restrictions (like iid)
         scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
 
         let mut scan_size_reverse = self.unbound_typed_expected_size_reverse;
@@ -486,10 +485,8 @@ impl Costed for HasPlanner<'_> {
             if is_owner_bound {
                 scan_size_reverse /= owner_size; // accounts for bound prefix
             }
-        } else {
-            // account for restrictions (like ==)
-            scan_size_reverse *= attribute.restriction_based_selectivity(inputs);
         }
+        scan_size_reverse *= attribute.restriction_based_selectivity(inputs); // account for restrictions (like ==)
         scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
 
         let mut io_ratio = self.unbound_typed_expected_size;
