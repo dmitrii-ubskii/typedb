@@ -42,6 +42,16 @@ impl VariableVertex {
         f64::max(unrestricted_size * self.restriction_based_selectivity(inputs), Self::OUTPUT_SIZE_MIN)
     }
 
+    pub(crate) fn unrestricted_expected_output_size(&self, inputs: &[VertexId]) -> f64 {
+        let unrestricted_size = match self {
+            Self::Input(_) => 1.0,
+            Self::Type(inner) => inner.unrestricted_expected_size,
+            Self::Thing(inner) => inner.unrestricted_expected_size,
+            Self::Value(_) => 1.0,
+        };
+        f64::max(unrestricted_size, Self::OUTPUT_SIZE_MIN)
+    }
+
     pub(crate) fn restriction_based_selectivity(&self, inputs: &[VertexId]) -> f64 {
         // the fraction of possible actual outputs (based on type information) when restricted (for example, by comparators)
         match self {
@@ -174,7 +184,7 @@ impl TypePlanner {
 pub(crate) struct ThingPlanner {
     variable: Variable,
     binding: Option<PatternVertexId>,
-    unrestricted_expected_size: f64,
+    pub unrestricted_expected_size: f64,
     unrestricted_expected_attribute_types: usize,
 
     restriction_exact: HashSet<VariableVertexId>, // IID or exact Type + Value
@@ -199,7 +209,7 @@ impl ThingPlanner {
         type_annotations: &TypeAnnotations,
         statistics: &Statistics,
     ) -> Self {
-        let mut unrestricted_expected_size: f64 = 0.0;
+        let mut unrestricted_expected_size: f64 = 1.0;
         let mut unrestricted_expected_attribute_types: usize = 0;
         for type_ in type_annotations
             .vertex_annotations_of(&Vertex::Variable(variable))

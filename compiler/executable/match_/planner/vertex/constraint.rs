@@ -9,7 +9,7 @@ use std::{
     fmt, iter,
     sync::Arc,
 };
-
+use std::fmt::Formatter;
 use answer::{variable::Variable, Type};
 use concept::thing::statistics::Statistics;
 use ir::pattern::constraint::{
@@ -90,6 +90,22 @@ impl ConstraintVertex<'_> {
         match self {
             Self::Links(inner) => inner.relation == var || inner.player == var,
             _ => self.variables().contains(&var),
+        }
+    }
+}
+
+impl<'a> fmt::Display for ConstraintVertex<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self {
+            ConstraintVertex::TypeList(_) => { write!(f, "|TypeId|") } //TODO
+            ConstraintVertex::Iid(_) => { write!(f, "|ThingId|") } //TODO
+            ConstraintVertex::Isa(p) => { write!(f, "|{:?} isa {:?}|", p.isa.thing, p.isa.type_ ) }
+            ConstraintVertex::Has(p) => { write!(f, "|{:?} has {:?}|", p.has.owner(), p.has.attribute()) }
+            ConstraintVertex::Links(p) => { write!(f, "|{:?} links {:?}|", p.links.relation(), p.links.player()) }
+            ConstraintVertex::Sub(_) => { write!(f, "|Sub|") } //TODO
+            ConstraintVertex::Owns(_) => { write!(f, "|Owns|") } //TODO
+            ConstraintVertex::Relates(_) => { write!(f, "|Relates|") } //TODO
+            ConstraintVertex::Plays(_) => { write!(f, "|Plays|") } //TODO
         }
     }
 }
@@ -272,7 +288,7 @@ pub(crate) struct IsaPlanner<'a> {
     isa: &'a Isa<Variable>,
     thing: VariableVertexId,
     type_: Input,
-    unrestricted_expected_size: f64,
+    pub(crate) unrestricted_expected_size: f64,
 }
 
 impl fmt::Debug for IsaPlanner<'_> {
@@ -361,9 +377,9 @@ pub(crate) struct HasPlanner<'a> {
     has: &'a Has<Variable>,
     pub owner: VariableVertexId,
     pub attribute: VariableVertexId,
-    unbound_typed_expected_size: f64,
-    unbound_typed_expected_size_canonical: f64,
-    unbound_typed_expected_size_reverse: f64,
+    pub unbound_typed_expected_size: f64,
+    pub unbound_typed_expected_size_canonical: f64,
+    pub unbound_typed_expected_size_reverse: f64,
 }
 
 impl fmt::Debug for HasPlanner<'_> {
@@ -472,8 +488,8 @@ impl Costed for HasPlanner<'_> {
         let is_owner_bound = inputs.contains(&owner_id);
         let is_attribute_bound = inputs.contains(&attribute_id);
 
-        let owner_size = owner.expected_output_size(inputs);
-        let attribute_size = attribute.expected_output_size(inputs);
+        let owner_size = owner.unrestricted_expected_output_size(inputs);
+        let attribute_size = attribute.unrestricted_expected_output_size(inputs);
 
         let mut scan_size_canonical = self.unbound_typed_expected_size_canonical;
         if is_owner_bound {
@@ -481,8 +497,9 @@ impl Costed for HasPlanner<'_> {
             if is_attribute_bound {
                 scan_size_canonical /= attribute_size; // accounts for bound prefix
             }
+        } else {
+            scan_size_canonical *= owner.restriction_based_selectivity(inputs); // account for restrictions (like iid), usable if still unbound
         }
-        scan_size_canonical *= owner.restriction_based_selectivity(inputs); // account for restrictions (like iid)
         scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
 
         let mut scan_size_reverse = self.unbound_typed_expected_size_reverse;
@@ -491,18 +508,24 @@ impl Costed for HasPlanner<'_> {
             if is_owner_bound {
                 scan_size_reverse /= owner_size; // accounts for bound prefix
             }
+        } else {
+            scan_size_reverse *= attribute.restriction_based_selectivity(inputs); // account for restrictions (like ==), usable if still unbound
         }
-        scan_size_reverse *= attribute.restriction_based_selectivity(inputs); // account for restrictions (like ==)
         scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
 
         let mut io_ratio = self.unbound_typed_expected_size;
+        // println!("                      Has costing: all {}, owner {}/{}, att {}/{}", io_ratio, owner_size, owner.restriction_based_selectivity(inputs), attribute_size, attribute.restriction_based_selectivity(inputs));
         if is_owner_bound {
             io_ratio /= owner_size;
+        } else {
+            io_ratio *= owner.restriction_based_selectivity(inputs)
         }
         if is_attribute_bound {
             io_ratio /= attribute_size;
+        } else {
+            io_ratio *= attribute.restriction_based_selectivity(inputs);
         }
-        io_ratio *= owner.restriction_based_selectivity(inputs) * attribute.restriction_based_selectivity(inputs);
+
 
         let cost: f64;
         let direction: Direction;
@@ -524,7 +547,7 @@ pub(crate) struct LinksPlanner<'a> {
     pub relation: VariableVertexId,
     pub player: VariableVertexId,
     pub role: VariableVertexId,
-    unbound_typed_expected_size: f64,
+    pub(crate) unbound_typed_expected_size: f64,
     unbound_typed_expected_size_canonical: f64,
     unbound_typed_expected_size_reverse: f64,
 }
@@ -665,8 +688,8 @@ impl Costed for LinksPlanner<'_> {
         let is_relation_bound = inputs.contains(&relation_id);
         let is_player_bound = inputs.contains(&player_id);
 
-        let relation_size = relation.expected_output_size(inputs);
-        let player_size = player.expected_output_size(inputs);
+        let relation_size = relation.unrestricted_expected_output_size(inputs);
+        let player_size = player.unrestricted_expected_output_size(inputs);
 
         let mut scan_size_canonical = self.unbound_typed_expected_size_canonical;
         if is_relation_bound {
@@ -675,8 +698,7 @@ impl Costed for LinksPlanner<'_> {
                 scan_size_canonical /= player_size;
             }
         } else {
-            scan_size_canonical *= relation.restriction_based_selectivity(inputs);
-            // account for restrictions (like iid)
+            scan_size_canonical *= relation.restriction_based_selectivity(inputs);  // restrictions (like iid) apply if var still unbound
         }
         scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
 
@@ -687,18 +709,23 @@ impl Costed for LinksPlanner<'_> {
                 scan_size_reverse /= relation_size;
             }
         } else {
-            scan_size_reverse *= player.restriction_based_selectivity(inputs); // account for restrictions (like iid)
+            scan_size_reverse *= player.restriction_based_selectivity(inputs); // restrictions (like iid) apply if var still unbound
         }
         scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
 
         let mut io_ratio = self.unbound_typed_expected_size;
+        // println!("                      Links costing: all {}, relation {}/{}, player {}/{}", io_ratio, relation_size, relation.restriction_based_selectivity(inputs), player_size, player.restriction_based_selectivity(inputs));
+
         if is_relation_bound {
             io_ratio /= relation_size;
+        } else {
+            io_ratio *= relation.restriction_based_selectivity(inputs);
         }
         if is_player_bound {
             io_ratio /= player_size;
+        } else {
+            io_ratio *= player.restriction_based_selectivity(inputs);
         }
-        io_ratio *= relation.restriction_based_selectivity(inputs) * player.restriction_based_selectivity(inputs);
 
         let cost: f64;
         let direction: Direction;
