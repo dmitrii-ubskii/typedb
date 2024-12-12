@@ -425,18 +425,11 @@ impl MatchExecutableBuilder {
             .into_iter()
             .map(|builder| builder.finish(&self.index, &named_variables, variable_registry))
             .collect();
-        let variable_positions_index = self
-            .reverse_index
-            .iter()
-            .filter(|(&var, _)| var.is_output())
-            .sorted_by_key(|(&k, _)| k)
-            .map(|(_, &v)| v)
-            .collect();
         MatchExecutable::new(
             next_executable_id(),
             steps,
             self.index.into_iter().filter_map(|(var, id)| Some((var, id.as_position()?))).collect(),
-            variable_positions_index,
+            self.reverse_index,
         )
     }
 }
