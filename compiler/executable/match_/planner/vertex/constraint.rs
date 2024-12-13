@@ -6,10 +6,12 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
-    fmt, iter,
+    fmt,
+    fmt::Formatter,
+    iter,
     sync::Arc,
 };
-use std::fmt::Formatter;
+
 use answer::{variable::Variable, Type};
 use concept::thing::statistics::Statistics;
 use ir::pattern::constraint::{
@@ -97,15 +99,33 @@ impl ConstraintVertex<'_> {
 impl<'a> fmt::Display for ConstraintVertex<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
-            ConstraintVertex::TypeList(_) => { write!(f, "|TypeId|") } //TODO
-            ConstraintVertex::Iid(_) => { write!(f, "|ThingId|") } //TODO
-            ConstraintVertex::Isa(p) => { write!(f, "|{:?} isa {:?}|", p.isa.thing, p.isa.type_ ) }
-            ConstraintVertex::Has(p) => { write!(f, "|{:?} has {:?}|", p.has.owner(), p.has.attribute()) }
-            ConstraintVertex::Links(p) => { write!(f, "|{:?} links {:?}|", p.links.relation(), p.links.player()) }
-            ConstraintVertex::Sub(_) => { write!(f, "|Sub|") } //TODO
-            ConstraintVertex::Owns(_) => { write!(f, "|Owns|") } //TODO
-            ConstraintVertex::Relates(_) => { write!(f, "|Relates|") } //TODO
-            ConstraintVertex::Plays(_) => { write!(f, "|Plays|") } //TODO
+            ConstraintVertex::TypeList(_) => {
+                write!(f, "|TypeId|")
+            } //TODO
+            ConstraintVertex::Iid(_) => {
+                write!(f, "|ThingId|")
+            } //TODO
+            ConstraintVertex::Isa(p) => {
+                write!(f, "|{:?} isa {:?}|", p.isa.thing, p.isa.type_)
+            }
+            ConstraintVertex::Has(p) => {
+                write!(f, "|{:?} has {:?}|", p.has.owner(), p.has.attribute())
+            }
+            ConstraintVertex::Links(p) => {
+                write!(f, "|{:?} links {:?}|", p.links.relation(), p.links.player())
+            }
+            ConstraintVertex::Sub(_) => {
+                write!(f, "|Sub|")
+            } //TODO
+            ConstraintVertex::Owns(_) => {
+                write!(f, "|Owns|")
+            } //TODO
+            ConstraintVertex::Relates(_) => {
+                write!(f, "|Relates|")
+            } //TODO
+            ConstraintVertex::Plays(_) => {
+                write!(f, "|Plays|")
+            } //TODO
         }
     }
 }
@@ -509,7 +529,8 @@ impl Costed for HasPlanner<'_> {
                 scan_size_reverse /= owner_size; // accounts for bound prefix
             }
         } else {
-            scan_size_reverse *= attribute.restriction_based_selectivity(inputs); // account for restrictions (like ==), usable if still unbound
+            scan_size_reverse *= attribute.restriction_based_selectivity(inputs);
+            // account for restrictions (like ==), usable if still unbound
         }
         scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
 
@@ -525,7 +546,6 @@ impl Costed for HasPlanner<'_> {
         } else {
             io_ratio *= attribute.restriction_based_selectivity(inputs);
         }
-
 
         let cost: f64;
         let direction: Direction;
@@ -615,7 +635,10 @@ impl<'a> LinksPlanner<'a> {
         let player = player.as_variable().unwrap();
         let role = role.as_variable().unwrap();
 
-        println!("    --> Links costing: all size {} canon. size {} rev. size {}", unbound_typed_expected_size, unbound_typed_expected_size_canonical, unbound_typed_expected_size_reverse);
+        println!(
+            "    --> Links costing: all size {} canon. size {} rev. size {}",
+            unbound_typed_expected_size, unbound_typed_expected_size_canonical, unbound_typed_expected_size_reverse
+        );
 
         Self {
             links,
@@ -700,7 +723,8 @@ impl Costed for LinksPlanner<'_> {
                 scan_size_canonical /= player_size;
             }
         } else {
-            scan_size_canonical *= relation.restriction_based_selectivity(inputs);  // restrictions (like iid) apply if var still unbound
+            scan_size_canonical *= relation.restriction_based_selectivity(inputs);
+            // restrictions (like iid) apply if var still unbound
         }
         scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
 

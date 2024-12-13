@@ -7,12 +7,12 @@
 use std::{
     any::type_name_of_val,
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet},
+    collections::{BinaryHeap, HashMap, HashSet},
     fmt,
+    hash::{DefaultHasher, Hash, Hasher},
     sync::Arc,
 };
-use std::collections::BTreeSet;
-use std::hash::{DefaultHasher, Hash, Hasher};
+
 use answer::variable::Variable;
 use concept::thing::statistics::Statistics;
 use ir::{
@@ -565,9 +565,12 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         best_partial_plans.push(PartialCostPlan::new(self.graph.elements.len(), all_patterns, self.input_variables()));
 
         for i in 0..num_patterns {
-            let mut new_plans_heap  = BinaryHeap::with_capacity(beam_width);
+            let mut new_plans_heap = BinaryHeap::with_capacity(beam_width);
             let mut new_plans_hashset: HashSet<PartialCostHash> = HashSet::with_capacity(beam_width);
-            if i % reduction_cycle == 0 { extension_width -= 1; beam_width -= 1; }
+            if i % reduction_cycle == 0 {
+                extension_width -= 1;
+                beam_width -= 1;
+            }
             for plan in best_partial_plans.drain(..) {
                 let mut extension_heap = BinaryHeap::with_capacity(extension_width);
                 for extension in plan.extensions_iter(&self.graph) {
