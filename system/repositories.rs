@@ -7,11 +7,11 @@
 pub const SCHEMA: &str = include_str!("schema.tql");
 
 pub mod user_repository {
-    use std::{collections::HashMap, fmt::format, sync::Arc};
+    use std::{collections::HashMap, sync::Arc};
 
     use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager, type_::type_manager::TypeManager};
-    use database::transaction::{TransactionRead, TransactionWrite};
+    use database::transaction::TransactionRead;
     use error::typedb_error;
     use function::function_manager::FunctionManager;
     use query::query_manager::QueryManager;
@@ -34,7 +34,7 @@ pub mod user_repository {
             .expect(unexpected_error_msg);
         let (tx, result) = execute_read_pipeline(tx, &query.into_pipeline());
         let rows = result.expect(unexpected_error_msg);
-        let users = rows.iter().map(|row| User::new(get_string(&tx, &row, "n"))).collect();
+        let users = rows.iter().map(|row| User::new(get_string(&tx, row, "n"))).collect();
         users
     }
 

@@ -32,7 +32,7 @@ fn define_schema(
       entity person owns name @card(0..), owns age, plays friendship:friend @card(0..);
     "#;
     let schema_query = typeql::parse_query(query_str).unwrap().into_schema();
-    query_manager.execute_schema(&mut snapshot, &type_manager, &thing_manager, function_manager, schema_query).unwrap();
+    query_manager.execute_schema(&mut snapshot, type_manager, thing_manager, function_manager, schema_query).unwrap();
     snapshot.commit().unwrap();
 }
 

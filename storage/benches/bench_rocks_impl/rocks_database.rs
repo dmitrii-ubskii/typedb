@@ -73,7 +73,7 @@ mod non_transactional_rocks {
         write_batches: [WriteBatch; N_DATABASES],
     }
 
-    impl<'this, const N_DATABASES: usize> RocksWriteBatch for NonTransactionalWriteBatch<'this, N_DATABASES> {
+    impl<const N_DATABASES: usize> RocksWriteBatch for NonTransactionalWriteBatch<'_, N_DATABASES> {
         type CommitError = rocksdb::Error;
         fn put(&mut self, database_index: usize, key: [u8; crate::KEY_SIZE]) {
             self.write_batches[database_index].put(key, [])

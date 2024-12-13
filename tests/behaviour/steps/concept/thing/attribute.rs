@@ -175,8 +175,8 @@ async fn delete_attributes_of_type(context: &mut Context, type_label: params::La
     with_write_tx!(context, |tx| {
         let attribute_type =
             tx.type_manager.get_attribute_type(tx.snapshot.as_ref(), &type_label.into_typedb()).unwrap().unwrap();
-        let mut attribute_iterator = tx.thing_manager.get_attributes_in(tx.snapshot.as_ref(), attribute_type).unwrap();
-        while let Some(attribute) = attribute_iterator.next() {
+        let attribute_iterator = tx.thing_manager.get_attributes_in(tx.snapshot.as_ref(), attribute_type).unwrap();
+        for attribute in attribute_iterator {
             attribute.unwrap().delete(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager).unwrap();
         }
     })

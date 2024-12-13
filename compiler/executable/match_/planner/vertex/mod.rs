@@ -120,7 +120,7 @@ pub(crate) struct Cost {
     pub io_ratio: f64,
 }
 
-impl<'a> fmt::Display for PlannerVertex<'a> {
+impl fmt::Display for PlannerVertex<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             PlannerVertex::Variable(v) => {

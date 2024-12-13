@@ -198,7 +198,7 @@ impl IntersectionStep {
         &'a self,
         map: &'a HashMap<ExecutorVariable, Variable>,
     ) -> VarMappedIntersectionStep<'a> {
-        VarMappedIntersectionStep { step: &self, map: map }
+        VarMappedIntersectionStep { step: self, map }
     }
 }
 

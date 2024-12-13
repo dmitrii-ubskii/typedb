@@ -96,7 +96,7 @@ impl ConstraintVertex<'_> {
     }
 }
 
-impl<'a> fmt::Display for ConstraintVertex<'a> {
+impl fmt::Display for ConstraintVertex<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             ConstraintVertex::TypeList(_) => {

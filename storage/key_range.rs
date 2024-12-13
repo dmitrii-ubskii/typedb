@@ -58,8 +58,8 @@ impl<T: Prefix> KeyRange<T> {
         prefix_mapper: impl Fn(&'a T) -> V,
         fixed_width_mapper: impl Fn(bool) -> bool,
     ) -> KeyRange<V> {
-        let start = (&self.start).map(&prefix_mapper);
-        let end = (&self.end).map(&prefix_mapper);
+        let start = self.start.map(&prefix_mapper);
+        let end = self.end.map(&prefix_mapper);
         let fixed_width = fixed_width_mapper(self.fixed_width_keys);
         match fixed_width {
             true => KeyRange::new_fixed_width(start, end),

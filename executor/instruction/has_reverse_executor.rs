@@ -247,13 +247,8 @@ impl HasReverseExecutor {
             .filter(|(attribute_type, owner_type_range)| {
                 attribute_type.get_value_type(snapshot, type_manager).is_ok_and(|vt| vt.is_some())
             })
-            .map(|(attribute_type, owner_types)| {
-                thing_manager.get_has_reverse_in_range(
-                    snapshot,
-                    attribute_type.clone(),
-                    &attribute_values_range,
-                    owner_types,
-                )
+            .map(|(&attribute_type, owner_types)| {
+                thing_manager.get_has_reverse_in_range(snapshot, attribute_type, &attribute_values_range, owner_types)
             })
             .try_collect()?;
         Ok(iterators.into_iter().flatten())
