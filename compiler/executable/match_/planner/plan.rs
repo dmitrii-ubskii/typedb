@@ -12,6 +12,7 @@ use std::{
 };
 use std::collections::BTreeSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::time::Instant;
 use answer::variable::Variable;
 use concept::thing::statistics::Statistics;
 use ir::{
@@ -59,8 +60,11 @@ use crate::{
     },
     ExecutorVariable, VariablePosition,
 };
+use crate::executable::match_::planner::vertex::ADVANCE_ITERATOR_RELATIVE_COST;
+use crate::executable::match_::planner::vertex::OPEN_ITERATOR_RELATIVE_COST;
 
 pub const MAX_BEAM_WIDTH: usize = 96;
+pub const MIN_BEAM_WIDTH: usize = 1;
 
 pub(crate) fn plan_conjunction<'a>(
     conjunction: &'a Conjunction,
@@ -545,7 +549,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         let num_patterns = self.graph.pattern_to_variable.len();
 
         let mut beam_width = (num_patterns * 2).clamp(2, MAX_BEAM_WIDTH);
-        let mut extension_width = (num_patterns / 2) + 2;
+        let mut extension_width = (num_patterns / 2) + 2; // ensure this is larger than (num_patterns / 2) or change narrowing logic
         let reduction_cycle = 2;
 
         let all_patterns = self.graph.pattern_to_variable.keys().copied().collect();
@@ -555,7 +559,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         for i in 0..num_patterns {
             let mut new_plans_heap  = BinaryHeap::with_capacity(beam_width);
             let mut new_plans_hashset: HashSet<PartialCostHash> = HashSet::with_capacity(beam_width);
-            if i % reduction_cycle == 0 { extension_width -= 1; beam_width -= 1; }
+            if i % reduction_cycle == 0 && beam_width > MIN_BEAM_WIDTH { extension_width -= 1; beam_width -= 1; } // Narrow the beam until it greedy at the tail (for large queries)
             for plan in best_partial_plans.drain(..) {
                 let mut extension_heap = BinaryHeap::with_capacity(extension_width);
                 for extension in plan.extensions_iter(&self.graph) {
@@ -770,8 +774,44 @@ impl PartialCostPlan {
         (updated_cost, extension_metadata)
     }
 
-    fn heuristic_plan_completion_cost(&self, _graph: &Graph<'_>, _pattern: PatternVertexId) -> Cost {
-        Cost::NOOP
+    fn heuristic_plan_completion_cost(&self, graph: &Graph<'_>, extension: PatternVertexId) -> Cost {
+        let mut bound_vars: HashSet<VariableVertexId> = self.vertex_ordering.iter().filter_map(|v| v.as_variable_id()).collect();
+        bound_vars.extend(&self.ongoing_step_produced_vars);
+        bound_vars.extend(graph.elements[&VertexId::Pattern(extension)].variables());
+        let mut join_probabilities_and_fractions = HashMap::new();
+        let mut remaining_patterns_scan_size = 1.0;
+        for var in graph.variable_to_pattern.keys() {
+            let var_vertex = graph.elements[&VertexId::Variable(*var)].as_variable();
+            let full_output = var_vertex.map(|v| v.unrestricted_expected_output_size()).unwrap_or(1.0);
+            if bound_vars.contains(&var) {
+                join_probabilities_and_fractions.insert(var, (1.0, 1.0/full_output));
+            } else {
+                let selectivity = var_vertex.map(|v| v.restriction_based_selectivity(&[])).unwrap_or(1.0);
+                let effective_vertex_size = full_output * selectivity;
+                join_probabilities_and_fractions.insert(var, (1.0 / effective_vertex_size, selectivity));
+                remaining_patterns_scan_size *= effective_vertex_size;
+            }
+        }
+        for pat in self.remaining_patterns.iter() {
+            let constraint_vertex = graph.elements[&VertexId::Pattern(*pat)].as_constraint();
+            match constraint_vertex {
+                Some(ConstraintVertex::Has(has)) => {
+                    let (owner_join_probability, owner_fraction) = join_probabilities_and_fractions[&has.owner];
+                    let (attribute_join_probability, attribute_fraction) = join_probabilities_and_fractions[&has.attribute];
+                    let has_effective_edge_size = has.unbound_typed_expected_size * attribute_fraction * owner_fraction;
+                    remaining_patterns_scan_size *= has_effective_edge_size * owner_join_probability * attribute_join_probability;
+                },
+                Some(ConstraintVertex::Links(links)) => {
+                    let (relation_join_probability, relation_fraction) = join_probabilities_and_fractions[&links.relation];
+                    let (player_join_probability, player_fraction) = join_probabilities_and_fractions[&links.player];
+                    let links_effective_edge_size = links.unbound_typed_expected_size * player_fraction * relation_fraction;
+                    remaining_patterns_scan_size *= links_effective_edge_size * relation_join_probability * player_join_probability;
+                }
+                _ => { }
+            }
+        }
+        Cost { cost: OPEN_ITERATOR_RELATIVE_COST * (self.remaining_patterns.len() as f64) + ADVANCE_ITERATOR_RELATIVE_COST * remaining_patterns_scan_size, io_ratio: remaining_patterns_scan_size }
+       // Cost::NOOP
     }
 
     fn clone_and_extend_with_continued_step(&self, extension: StepExtension, graph: &Graph<'_>) -> PartialCostPlan {

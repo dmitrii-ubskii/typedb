@@ -51,20 +51,6 @@ impl ConstraintVertex<'_> {
         true // always valid
     }
 
-    pub(crate) fn unbound_direction(&self, graph: &Graph<'_>) -> Direction {
-        match self {
-            Self::TypeList(_) => Direction::Canonical,
-            Self::Iid(_) => Direction::Canonical,
-            Self::Isa(_) => Direction::Canonical,
-            Self::Has(inner) => inner.unbound_direction(graph, &[]),
-            Self::Links(inner) => inner.unbound_direction(graph, &[]),
-            Self::Sub(inner) => inner.unbound_direction,
-            Self::Owns(inner) => inner.unbound_direction,
-            Self::Relates(inner) => inner.unbound_direction,
-            Self::Plays(inner) => inner.unbound_direction,
-        }
-    }
-
     pub(crate) fn variables(&self) -> Box<dyn Iterator<Item = VariableVertexId> + '_> {
         match self {
             Self::TypeList(inner) => Box::new(inner.variables()),
@@ -322,21 +308,22 @@ impl<'a> IsaPlanner<'a> {
         let thing_selectivity = thing.restriction_based_selectivity(inputs);
         f64::max(self.unrestricted_expected_size * thing_selectivity, VariableVertex::OUTPUT_SIZE_MIN)
     }
-}
 
-impl Costed for IsaPlanner<'_> {
-    fn cost_and_metadata(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (Cost, CostMetaData) {
+    pub(crate) fn thing_estimates(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64, f64) {
         let thing_id = VertexId::Variable(self.thing);
         let thing = graph.elements()[&thing_id].as_variable().unwrap();
-
         let is_thing_bound = inputs.contains(&thing_id);
+        let thing_size = thing.unrestricted_expected_output_size();
+        let thing_selectivity = thing.restriction_based_selectivity(inputs);
+        (is_thing_bound, thing_size, thing_selectivity)
+    }
+
+    pub(crate) fn type_estimate(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64) {
         let is_type_bound = match &self.type_ {
             Input::Fixed => true,
             Input::Variable(var) => inputs.contains(&VertexId::Variable(*var)),
         };
-
-        let thing_size = thing.expected_output_size(inputs);
-        let type_size = match &self.type_ {
+        let num_types = match &self.type_ {
             Input::Fixed => 1.0,
             Input::Variable(var) => {
                 let type_id = VertexId::Variable(*var);
@@ -344,24 +331,34 @@ impl Costed for IsaPlanner<'_> {
                 type_.expected_output_size(inputs)
             }
         };
+        (is_type_bound, num_types)
+    }
 
+    pub(crate) fn output_size_estimate(&self, is_thing_bound: bool, thing_size: f64, thing_selectivity: f64, is_type_bound: bool, num_types: f64) -> f64 {
         let mut scan_size = self.unrestricted_expected_size;
-        scan_size *= thing.restriction_based_selectivity(inputs); // account for restrictions (like iid), which (we assume) can be used to reduce scan size
-        scan_size = f64::max(scan_size, VariableVertex::OUTPUT_SIZE_MIN); // ???
         if is_type_bound {
-            scan_size /= type_size;
-        } // account for narrowed prefix
+            scan_size /= num_types; // account for narrowed prefix
+        }
         if is_thing_bound {
             scan_size /= thing_size;
-        } // account for narrowed prefix
+        } else {
+            scan_size *= thing_selectivity; // account for restrictions (like iid), which (we assume) can be used to reduce scan size
+        }
+        scan_size = f64::max(scan_size, VariableVertex::OUTPUT_SIZE_MIN); // TODO: verify if this is useful (part of previous model)
+        scan_size
+    }
+}
 
+impl Costed for IsaPlanner<'_> {
+    fn cost_and_metadata(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (Cost, CostMetaData) {
+        let (is_thing_bound, thing_size, thing_selectivity) = self.thing_estimates(inputs, graph);
+        let (is_type_bound, num_types) = self.type_estimate(inputs, graph);
+        let scan_size = self.output_size_estimate(is_thing_bound, thing_size, thing_selectivity, is_type_bound, num_types);
         let cost = match is_thing_bound {
             true => 0.0,
             false => OPEN_ITERATOR_RELATIVE_COST + ADVANCE_ITERATOR_RELATIVE_COST * scan_size,
         };
-
         let io_ratio = scan_size;
-
         (Cost { cost, io_ratio }, CostMetaData::Direction(Direction::Canonical))
     }
 }
@@ -433,94 +430,94 @@ impl<'a> HasPlanner<'a> {
         self.has
     }
 
-    fn unbound_direction(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> Direction {
-        if self.unbound_expected_scan_size_canonical(graph, inputs)
-            < self.unbound_expected_scan_size_reverse(graph, inputs)
-        {
-            Direction::Canonical
+    pub(crate) fn owner_estimates(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64, f64) {
+        let owner_id = VertexId::Variable(self.owner);
+        let owner = &graph.elements()[&owner_id].as_variable().unwrap();
+        let is_owner_bound = inputs.contains(&owner_id);
+        let owner_size = owner.unrestricted_expected_output_size();
+        let owner_selectivity = owner.restriction_based_selectivity(inputs);
+        (is_owner_bound, owner_size, owner_selectivity)
+    }
+
+    pub(crate) fn attribute_estimates(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64, f64) {
+        let attribute_id = VertexId::Variable(self.attribute);
+        let attribute = &graph.elements()[&attribute_id].as_variable().unwrap();
+        let is_attribute_bound = inputs.contains(&attribute_id);
+        let attribute_size = attribute.unrestricted_expected_output_size();
+        let attribute_selectivity = attribute.restriction_based_selectivity(inputs);
+        (is_attribute_bound, attribute_size, attribute_selectivity)
+    }
+
+    pub(crate) fn canonical_scan_size_estimate(&self,
+                                               is_owner_bound: bool,
+                                               owner_size: f64,
+                                               owner_selectivity: f64,
+                                               is_attribute_bound: bool,
+                                               attribute_size: f64,
+    ) -> f64 {
+        let mut scan_size_canonical = self.unbound_typed_expected_size_canonical;
+        if is_owner_bound {
+            scan_size_canonical /= owner_size;
+            if is_attribute_bound {
+                scan_size_canonical /= attribute_size;
+            }
         } else {
-            Direction::Reverse
+            scan_size_canonical *= owner_selectivity;  // restrictions (like iid) apply if var still unbound
         }
+        scan_size_canonical.max(MIN_SCAN_SIZE)
     }
 
-    fn unbound_expected_scan_size(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        f64::min(
-            self.unbound_expected_scan_size_canonical(graph, inputs),
-            self.unbound_expected_scan_size_reverse(graph, inputs),
-        )
+
+    pub(crate) fn reverse_scan_size_estimate(&self,
+                                             is_owner_bound: bool,
+                                             owner_size: f64,
+                                             is_attribute_bound: bool,
+                                             attribute_size: f64,
+                                             attribute_selectivity: f64
+    ) -> f64 {
+        let mut scan_size_reverse = self.unbound_typed_expected_size_reverse;
+        if is_attribute_bound {
+            scan_size_reverse /= attribute_size;
+            if is_owner_bound {
+                scan_size_reverse /= owner_size;
+            }
+        } else {
+            scan_size_reverse *= attribute_selectivity; // restrictions (like iid) apply if var still unbound
+        }
+        scan_size_reverse.max(MIN_SCAN_SIZE)
     }
 
-    fn unbound_expected_scan_size_canonical(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        let owner = &graph.elements()[&VertexId::Variable(self.attribute)].as_variable().unwrap();
-        self.unbound_typed_expected_size_canonical * owner.restriction_based_selectivity(inputs)
-    }
-
-    fn unbound_expected_scan_size_reverse(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        let attribute = &graph.elements()[&VertexId::Variable(self.attribute)].as_variable().unwrap();
-        self.unbound_typed_expected_size_reverse * attribute.restriction_based_selectivity(inputs)
-    }
-
-    fn expected_output_size(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        // get selectivity of attribute and multiply it by the expected size based on types
-        let attribute = &graph.elements()[&VertexId::Variable(self.attribute)].as_variable().unwrap();
-        let owner = &graph.elements()[&VertexId::Variable(self.owner)].as_variable().unwrap();
-        let expected_size = self.unbound_typed_expected_size
-            * attribute.restriction_based_selectivity(inputs)
-            * owner.restriction_based_selectivity(inputs);
-        f64::max(expected_size, VariableVertex::OUTPUT_SIZE_MIN)
+    pub(crate) fn output_size_estimate(&self,
+                                       is_owner_bound: bool,
+                                       owner_size: f64,
+                                       owner_selectivity: f64,
+                                       is_attribute_bound: bool,
+                                       attribute_size: f64,
+                                       attribute_selectivity: f64
+    ) -> f64 {
+        let mut scan_size = self.unbound_typed_expected_size;
+        if is_owner_bound {
+            scan_size /= owner_size;
+        } else {
+            scan_size *= owner_selectivity;
+        }
+        if is_attribute_bound {
+            scan_size /= attribute_size;
+        } else {
+            scan_size *= attribute_selectivity;
+        }
+        scan_size
     }
 }
 
 impl Costed for HasPlanner<'_> {
     fn cost_and_metadata(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (Cost, CostMetaData) {
-        let owner_id = VertexId::Variable(self.owner);
-        let owner = &graph.elements()[&owner_id].as_variable().unwrap();
+        let (is_owner_bound, owner_size, owner_selectivity) = self.owner_estimates(inputs, graph);
+        let (is_attribute_bound, attribute_size, attribute_selectivity) = self.attribute_estimates(inputs, graph);
 
-        let attribute_id = VertexId::Variable(self.attribute);
-        let attribute = &graph.elements()[&attribute_id].as_variable().unwrap();
-
-        let is_owner_bound = inputs.contains(&owner_id);
-        let is_attribute_bound = inputs.contains(&attribute_id);
-
-        let owner_size = owner.unrestricted_expected_output_size(inputs);
-        let attribute_size = attribute.unrestricted_expected_output_size(inputs);
-
-        let mut scan_size_canonical = self.unbound_typed_expected_size_canonical;
-        if is_owner_bound {
-            scan_size_canonical /= owner_size; // accounts for bound prefix
-            if is_attribute_bound {
-                scan_size_canonical /= attribute_size; // accounts for bound prefix
-            }
-        } else {
-            scan_size_canonical *= owner.restriction_based_selectivity(inputs); // account for restrictions (like iid), usable if still unbound
-        }
-        scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
-
-        let mut scan_size_reverse = self.unbound_typed_expected_size_reverse;
-        if is_attribute_bound {
-            scan_size_reverse /= attribute_size; // accounts for bound prefix
-            if is_owner_bound {
-                scan_size_reverse /= owner_size; // accounts for bound prefix
-            }
-        } else {
-            scan_size_reverse *= attribute.restriction_based_selectivity(inputs); // account for restrictions (like ==), usable if still unbound
-        }
-        scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
-
-        let mut io_ratio = self.unbound_typed_expected_size;
-        // println!("                      Has costing: all {}, owner {}/{}, att {}/{}", io_ratio, owner_size, owner.restriction_based_selectivity(inputs), attribute_size, attribute.restriction_based_selectivity(inputs));
-        if is_owner_bound {
-            io_ratio /= owner_size;
-        } else {
-            io_ratio *= owner.restriction_based_selectivity(inputs)
-        }
-        if is_attribute_bound {
-            io_ratio /= attribute_size;
-        } else {
-            io_ratio *= attribute.restriction_based_selectivity(inputs);
-        }
-
-
+        let scan_size_canonical = self.canonical_scan_size_estimate(is_owner_bound, owner_size, owner_selectivity, is_attribute_bound, attribute_size,);
+        let scan_size_reverse= self.reverse_scan_size_estimate(is_owner_bound, owner_size, is_attribute_bound, attribute_size, attribute_selectivity);
+        let mut io_ratio = self.output_size_estimate(is_owner_bound, owner_size, owner_selectivity, is_attribute_bound, attribute_size, attribute_selectivity);
         let cost: f64;
         let direction: Direction;
 
@@ -631,63 +628,31 @@ impl<'a> LinksPlanner<'a> {
         self.links
     }
 
-    pub(crate) fn unbound_direction(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> Direction {
-        if self.unbound_expected_scan_size_canonical(graph, inputs)
-            < self.unbound_expected_scan_size_reverse(graph, inputs)
-        {
-            Direction::Canonical
-        } else {
-            Direction::Reverse
-        }
-    }
-
-    fn unbound_expected_scan_size(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        f64::max(
-            f64::min(
-                self.unbound_expected_scan_size_canonical(graph, inputs),
-                self.unbound_expected_scan_size_reverse(graph, inputs),
-            ),
-            VariableVertex::OUTPUT_SIZE_MIN,
-        )
-    }
-
-    fn unbound_expected_scan_size_canonical(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        let relation = &graph.elements()[&VertexId::Variable(self.relation)].as_variable().unwrap();
-        self.unbound_typed_expected_size_canonical * relation.restriction_based_selectivity(inputs)
-    }
-
-    fn unbound_expected_scan_size_reverse(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        let player = &graph.elements()[&VertexId::Variable(self.player)].as_variable().unwrap();
-        self.unbound_typed_expected_size_reverse * player.restriction_based_selectivity(inputs)
-    }
-
-    fn expected_output_size(&self, graph: &Graph<'_>, inputs: &[VertexId]) -> f64 {
-        // get selectivity of attribute and multiply it by the expected size based on types
-        let player = &graph.elements()[&VertexId::Variable(self.player)].as_variable().unwrap();
-        let relation = &graph.elements()[&VertexId::Variable(self.relation)].as_variable().unwrap();
-        f64::max(
-            self.unbound_typed_expected_size
-                * player.restriction_based_selectivity(inputs)
-                * relation.restriction_based_selectivity(inputs),
-            VariableVertex::OUTPUT_SIZE_MIN,
-        )
-    }
-}
-
-impl Costed for LinksPlanner<'_> {
-    fn cost_and_metadata(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (Cost, CostMetaData) {
+    pub(crate) fn relation_estimates(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64, f64) {
         let relation_id = VertexId::Variable(self.relation);
         let relation = &graph.elements()[&relation_id].as_variable().unwrap();
+        let is_relation_bound = inputs.contains(&relation_id);
+        let relation_size = relation.unrestricted_expected_output_size();
+        let relation_selectivity = relation.restriction_based_selectivity(inputs);
+        (is_relation_bound, relation_size, relation_selectivity)
+    }
 
+    pub(crate) fn player_estimates(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (bool, f64, f64) {
         let player_id = VertexId::Variable(self.player);
         let player = &graph.elements()[&player_id].as_variable().unwrap();
-
-        let is_relation_bound = inputs.contains(&relation_id);
         let is_player_bound = inputs.contains(&player_id);
+        let player_size = player.unrestricted_expected_output_size();
+        let player_selectivity = player.restriction_based_selectivity(inputs);
+        (is_player_bound, player_size, player_selectivity)
+    }
 
-        let relation_size = relation.unrestricted_expected_output_size(inputs);
-        let player_size = player.unrestricted_expected_output_size(inputs);
-
+    pub(crate) fn canonical_scan_size_estimate(&self,
+                                               is_relation_bound: bool,
+                                               relation_size: f64,
+                                               relation_selectivity: f64,
+                                               is_player_bound: bool,
+                                               player_size: f64,
+    ) -> f64 {
         let mut scan_size_canonical = self.unbound_typed_expected_size_canonical;
         if is_relation_bound {
             scan_size_canonical /= relation_size;
@@ -695,10 +660,19 @@ impl Costed for LinksPlanner<'_> {
                 scan_size_canonical /= player_size;
             }
         } else {
-            scan_size_canonical *= relation.restriction_based_selectivity(inputs);  // restrictions (like iid) apply if var still unbound
+            scan_size_canonical *= relation_selectivity;  // restrictions (like iid) apply if var still unbound
         }
-        scan_size_canonical = scan_size_canonical.max(MIN_SCAN_SIZE);
+        scan_size_canonical.max(MIN_SCAN_SIZE)
+    }
 
+
+    pub(crate) fn reverse_scan_size_estimate(&self,
+                                               is_relation_bound: bool,
+                                               relation_size: f64,
+                                               is_player_bound: bool,
+                                               player_size: f64,
+                                               player_selectivity: f64
+    ) -> f64 {
         let mut scan_size_reverse = self.unbound_typed_expected_size_reverse;
         if is_player_bound {
             scan_size_reverse /= player_size;
@@ -706,24 +680,42 @@ impl Costed for LinksPlanner<'_> {
                 scan_size_reverse /= relation_size;
             }
         } else {
-            scan_size_reverse *= player.restriction_based_selectivity(inputs); // restrictions (like iid) apply if var still unbound
+            scan_size_reverse *= player_selectivity; // restrictions (like iid) apply if var still unbound
         }
-        scan_size_reverse = scan_size_reverse.max(MIN_SCAN_SIZE);
+        scan_size_reverse.max(MIN_SCAN_SIZE)
+    }
 
-        let mut io_ratio = self.unbound_typed_expected_size;
-        // println!("                      Links costing: all {}, relation {}/{}, player {}/{}", io_ratio, relation_size, relation.restriction_based_selectivity(inputs), player_size, player.restriction_based_selectivity(inputs));
-
+    pub(crate) fn output_size_estimate(&self,
+                                       is_relation_bound: bool,
+                                       relation_size: f64,
+                                       relation_selectivity: f64,
+                                       is_player_bound: bool,
+                                       player_size: f64,
+                                       player_selectivity: f64
+    ) -> f64 {
+        let mut scan_size = self.unbound_typed_expected_size;
         if is_relation_bound {
-            io_ratio /= relation_size;
+            scan_size /= relation_size;
         } else {
-            io_ratio *= relation.restriction_based_selectivity(inputs);
+            scan_size *= relation_selectivity;
         }
         if is_player_bound {
-            io_ratio /= player_size;
+            scan_size /= player_size;
         } else {
-            io_ratio *= player.restriction_based_selectivity(inputs);
+            scan_size *= player_selectivity;
         }
+        scan_size
+    }
+}
 
+impl Costed for LinksPlanner<'_> {
+    fn cost_and_metadata(&self, inputs: &[VertexId], graph: &Graph<'_>) -> (Cost, CostMetaData) {
+        let (is_relation_bound, relation_size, relation_selectivity) = self.relation_estimates(inputs, graph);
+        let (is_player_bound, player_size, player_selectivity) = self.player_estimates(inputs, graph);
+
+        let scan_size_canonical = self.canonical_scan_size_estimate(is_relation_bound, relation_size, relation_selectivity, is_player_bound, player_size,);
+        let scan_size_reverse= self.reverse_scan_size_estimate(is_relation_bound, relation_size, is_player_bound, player_size, player_selectivity);
+        let mut io_ratio = self.output_size_estimate(is_relation_bound, relation_size, relation_selectivity, is_player_bound, player_size, player_selectivity);
         let cost: f64;
         let direction: Direction;
 
@@ -743,7 +735,6 @@ pub(crate) struct SubPlanner<'a> {
     sub: &'a Sub<Variable>,
     type_: Input,
     supertype: Input,
-    unbound_direction: Direction,
 }
 
 impl<'a> SubPlanner<'a> {
@@ -756,7 +747,6 @@ impl<'a> SubPlanner<'a> {
             sub,
             type_: Input::from_vertex(sub.subtype(), variable_index),
             supertype: Input::from_vertex(sub.supertype(), variable_index),
-            unbound_direction: Direction::Reverse,
         }
     }
 
@@ -771,7 +761,7 @@ impl<'a> SubPlanner<'a> {
 
 impl Costed for SubPlanner<'_> {
     fn cost_and_metadata(&self, _: &[VertexId], _: &Graph<'_>) -> (Cost, CostMetaData) {
-        (Cost::in_mem_complex_with_ratio(1.0), CostMetaData::Direction(Direction::Canonical))
+        (Cost::in_mem_complex_with_ratio(1.0), CostMetaData::Direction(Direction::Reverse))
     }
 }
 
@@ -780,7 +770,6 @@ pub(crate) struct OwnsPlanner<'a> {
     owns: &'a Owns<Variable>,
     owner: Input,
     attribute: Input,
-    unbound_direction: Direction,
 }
 
 impl<'a> OwnsPlanner<'a> {
@@ -792,7 +781,7 @@ impl<'a> OwnsPlanner<'a> {
     ) -> Self {
         let owner = Input::from_vertex(owns.owner(), variable_index);
         let attribute = Input::from_vertex(owns.attribute(), variable_index);
-        Self { owns, owner, attribute, unbound_direction: Direction::Canonical }
+        Self { owns, owner, attribute }
     }
 
     fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
@@ -815,7 +804,6 @@ pub(crate) struct RelatesPlanner<'a> {
     relates: &'a Relates<Variable>,
     relation: Input,
     role_type: Input,
-    unbound_direction: Direction,
 }
 
 impl<'a> RelatesPlanner<'a> {
@@ -827,7 +815,7 @@ impl<'a> RelatesPlanner<'a> {
     ) -> Self {
         let relation = Input::from_vertex(relates.relation(), variable_index);
         let role_type = Input::from_vertex(relates.role_type(), variable_index);
-        Self { relates, relation, role_type, unbound_direction: Direction::Canonical }
+        Self { relates, relation, role_type }
     }
 
     fn variables(&self) -> impl Iterator<Item = VariableVertexId> {
@@ -850,7 +838,6 @@ pub(crate) struct PlaysPlanner<'a> {
     plays: &'a Plays<Variable>,
     player: Input,
     role_type: Input,
-    unbound_direction: Direction,
 }
 
 impl<'a> PlaysPlanner<'a> {
@@ -862,7 +849,7 @@ impl<'a> PlaysPlanner<'a> {
     ) -> Self {
         let player = Input::from_vertex(plays.player(), variable_index);
         let role_type = Input::from_vertex(plays.role_type(), variable_index);
-        Self { plays, player, role_type, unbound_direction: Direction::Canonical }
+        Self { plays, player, role_type }
     }
 
     fn variables(&self) -> impl Iterator<Item = VariableVertexId> {

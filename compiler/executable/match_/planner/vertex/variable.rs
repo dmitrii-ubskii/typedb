@@ -30,7 +30,7 @@ pub(crate) enum VariableVertex {
 impl VariableVertex {
     const RESTRICTION_NONE: f64 = 1.0;
     const SELECTIVITY_MIN: f64 = 0.000001;
-    pub(crate) const OUTPUT_SIZE_MIN: f64 = 1.0;
+    pub(crate) const OUTPUT_SIZE_MIN: f64 = 1.0; // TODO: investigate
 
     pub(crate) fn expected_output_size(&self, inputs: &[VertexId]) -> f64 {
         let unrestricted_size = match self {
@@ -42,7 +42,7 @@ impl VariableVertex {
         f64::max(unrestricted_size * self.restriction_based_selectivity(inputs), Self::OUTPUT_SIZE_MIN)
     }
 
-    pub(crate) fn unrestricted_expected_output_size(&self, inputs: &[VertexId]) -> f64 {
+    pub(crate) fn unrestricted_expected_output_size(&self) -> f64 {
         let unrestricted_size = match self {
             Self::Input(_) => 1.0,
             Self::Type(inner) => inner.unrestricted_expected_size,
