@@ -112,7 +112,7 @@ impl VariableModes {
     pub fn make_var_mapped(&self, mapping: &HashMap<ExecutorVariable, Variable>) -> VarMappedVariableModes {
         let mut var_mapped_modes = HashMap::new();
         for (var, mode) in &self.modes {
-            var_mapped_modes.insert(*mapping.get(var).unwrap_or(&Variable::new(33202)), *mode);
+            var_mapped_modes.insert(*mapping[&var], *mode);
         }
         VarMappedVariableModes { modes: var_mapped_modes }
     }
