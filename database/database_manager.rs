@@ -49,7 +49,7 @@ impl DatabaseManager {
         Ok(Self { data_directory: data_directory.to_owned(), databases: RwLock::new(databases) })
     }
 
-    pub fn create_database(&self, name: impl AsRef<str>) -> Result<(), DatabaseCreateError> {
+    pub fn create_database(&self, name: impl AsRef<str>) -> Result<Arc<Database<WALClient>>, DatabaseCreateError> {
         let name = name.as_ref();
         if Self::is_internal_database(name) {
             return Err(DatabaseCreateError::InternalDatabaseCreationProhibited {});
@@ -60,14 +60,18 @@ impl DatabaseManager {
         self.create_database_unrestricted(name)
     }
 
-    pub fn create_database_unrestricted(&self, name: impl AsRef<str>) -> Result<(), DatabaseCreateError> {
+    pub fn create_database_unrestricted(
+        &self,
+        name: impl AsRef<str>,
+    ) -> Result<Arc<Database<WALClient>>, DatabaseCreateError> {
         let name = name.as_ref();
-        self.databases
+        Ok(self
+            .databases
             .write()
             .unwrap()
             .entry(name.to_owned())
-            .or_insert_with(|| Arc::new(Database::<WALClient>::open(&self.data_directory.join(name)).unwrap()));
-        Ok(())
+            .or_insert_with(|| Arc::new(Database::<WALClient>::open(&self.data_directory.join(name)).unwrap()))
+            .clone())
     }
 
     pub fn delete_database(&self, name: impl AsRef<str>) -> Result<(), DatabaseDeleteError> {
@@ -121,14 +125,10 @@ impl DatabaseManager {
         };
 
         drop(databases);
-        match result {
-            Ok(_) => (),
-            Err(_) => {
-                self.delete_database(name.as_ref())
-                    .map_err(|typedb_source| DatabaseResetError::DatabaseDelete { typedb_source })?;
-                self.create_database(name)
-                    .map_err(|typedb_source| DatabaseResetError::DatabaseCreate { typedb_source })?
-            }
+        if result.is_err() {
+            self.delete_database(name.as_ref())
+                .map_err(|typedb_source| DatabaseResetError::DatabaseDelete { typedb_source })?;
+            self.create_database(name).map_err(|typedb_source| DatabaseResetError::DatabaseCreate { typedb_source })?;
         };
         Ok(())
     }
@@ -145,7 +145,7 @@ impl DatabaseManager {
     }
 
     pub fn database_names(&self) -> Vec<String> {
-        self.databases.read().unwrap().keys().cloned().filter(|db| Self::is_user_database(db)).collect()
+        self.databases.read().unwrap().keys().filter(|&db| Self::is_user_database(db)).cloned().collect()
     }
 
     pub fn is_user_database(name: &str) -> bool {
