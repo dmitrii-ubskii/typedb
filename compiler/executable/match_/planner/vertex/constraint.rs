@@ -615,6 +615,8 @@ impl<'a> LinksPlanner<'a> {
         let player = player.as_variable().unwrap();
         let role = role.as_variable().unwrap();
 
+        println!("    --> Links costing: all size {} canon. size {} rev. size {}", unbound_typed_expected_size, unbound_typed_expected_size_canonical, unbound_typed_expected_size_reverse);
+
         Self {
             links,
             relation: variable_index[&relation],

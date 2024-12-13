@@ -438,7 +438,9 @@ fn make_update_statistics_fn(
         if storage.snapshot_watermark() > (*schema).read().unwrap().thing_statistics.sequence_number {
             let _schema_txn_guard = schema_txn_lock.read().unwrap(); // prevent Schema txns from opening during statistics update
             let mut thing_statistics = (*schema.read().unwrap().thing_statistics).clone();
+            println!("... about to update stats...");
             thing_statistics.may_synchronise(&storage).ok();
+            println!("... updated stats...");
             let total_count = thing_statistics.total_count;
             query_cache.may_reset(total_count);
             schema.write().unwrap().thing_statistics = Arc::new(thing_statistics);
