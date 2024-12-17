@@ -60,7 +60,7 @@ impl<D: DurabilityClient> TransactionRead<D> {
             database.definition_key_generator.clone(),
             Some(schema.function_cache.clone()),
         ));
-        let query_manager = Arc::new(QueryManager::new(None));
+        let query_manager = Arc::new(QueryManager::new(Some(database.query_cache.clone())));
 
         drop(schema);
 
@@ -117,7 +117,7 @@ impl<D: DurabilityClient> TransactionWrite<D> {
             database.definition_key_generator.clone(),
             Some(schema.function_cache.clone()),
         ));
-        let query_manager = Arc::new(QueryManager::new(None));
+        let query_manager = Arc::new(QueryManager::new(Some(database.query_cache.clone())));
         drop(schema);
 
         Ok(Self {
