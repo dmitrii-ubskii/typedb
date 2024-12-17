@@ -178,6 +178,7 @@ pub(crate) fn compile_pipeline_stages(
     input_variables: impl Iterator<Item = Variable>,
     selected_variables: &[Variable],
 ) -> Result<(HashMap<Variable, VariablePosition>, Vec<ExecutableStage>), ExecutableCompilationError> {
+    println!("Statistics - overall count: {}. Total has: {}. Total links: {}", statistics.total_count, statistics.total_has_count, statistics.total_role_count);
     let mut executable_stages: Vec<ExecutableStage> = Vec::with_capacity(annotated_stages.len());
     let input_variable_positions =
         input_variables.enumerate().map(|(i, var)| (var, VariablePosition::new(i as u32))).collect();
