@@ -114,6 +114,9 @@ impl fmt::Display for ConstraintVertex<'_> {
             ConstraintVertex::Links(p) => {
                 write!(f, "|{:?} links {:?}|", p.links.relation(), p.links.player())
             }
+            ConstraintVertex::IndexedRelation(_) => {
+                write!(f, "|IndexedRelation|")
+            } // TODO
             ConstraintVertex::Sub(_) => {
                 write!(f, "|Sub|")
             } //TODO
