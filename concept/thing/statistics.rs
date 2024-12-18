@@ -26,7 +26,7 @@ use resource::constants::{database::STATISTICS_DURABLE_WRITE_CHANGE_PERCENT, sna
 use serde::{Deserialize, Serialize};
 use storage::{
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord, UnsequencedDurabilityRecord},
-    isolation_manager::CommitType,
+    isolation_manager::{CommitRecord, CommitType},
     iterator::MVCCReadError,
     key_value::{StorageKeyArray, StorageKeyReference},
     keyspace::IteratorPool,
@@ -79,6 +79,7 @@ pub struct Statistics {
     // TODO: adding role types is possible, but won't help with filtering before reading storage since roles are not in the prefix
     pub links_index_counts: HashMap<ObjectType, HashMap<ObjectType, u64>>,
     // future: attribute value distributions, attribute value ownership distributions, etc.
+    context: BTreeMap<DurabilitySequenceNumber, CommittedWrites>,
 }
 
 impl Statistics {
@@ -108,11 +109,12 @@ impl Statistics {
             relation_role_player_counts: HashMap::new(),
             player_role_relation_counts: HashMap::new(),
             links_index_counts: HashMap::new(),
+            context: BTreeMap::new(),
         }
     }
 
     pub fn may_synchronise(&mut self, storage: &MVCCStorage<impl DurabilityClient>) -> Result<(), StatisticsError> {
-        use StatisticsError::{DataRead, ReloadCommitData};
+        use StatisticsError::DataRead;
 
         let storage_watermark = storage.snapshot_watermark();
         debug_assert!(self.sequence_number <= storage_watermark);
@@ -120,15 +122,9 @@ impl Statistics {
             return Ok(());
         }
 
-        // make it a little more likely that we capture concurrent commits
-        let load_start = DurabilitySequenceNumber::new(
-            self.sequence_number.number().saturating_sub(Self::COMMIT_CONTEXT_SIZE).max(1),
-        );
+        let recent_commits = self.load_recent_commits(storage)?;
 
-        let mut data_commits = BTreeMap::new();
-        for (seq, status) in load_commit_data_from(load_start, storage.durability())
-            .map_err(|err| ReloadCommitData { typedb_source: err })?
-        {
+        for (seq, status) in recent_commits {
             if let RecoveryCommitStatus::Validated(record) = status {
                 match record.commit_type() {
                     CommitType::Data => {
@@ -136,27 +132,27 @@ impl Statistics {
                             open_sequence_number: record.open_sequence_number(),
                             operations: record.into_operations(),
                         };
-                        data_commits.insert(seq, writes);
+                        self.context.insert(seq, writes);
                     }
                     CommitType::Schema => {
-                        self.update_writes(&data_commits, storage).map_err(|err| DataRead { source: err })?;
+                        self.update_writes(storage).map_err(|err| DataRead { source: err })?;
                         self.durably_write(storage.durability())?;
 
-                        data_commits.clear();
+                        self.context.clear();
 
                         let writes = CommittedWrites {
                             open_sequence_number: record.open_sequence_number(),
                             operations: record.into_operations(),
                         };
-                        let mut commits = BTreeMap::new();
-                        commits.insert(seq, writes);
-                        self.update_writes(&commits, storage).map_err(|err| DataRead { source: err })?;
+                        self.context.clear();
+                        self.context.insert(seq, writes);
+                        self.update_writes(storage).map_err(|err| DataRead { source: err })?;
                     }
                 }
             }
         }
 
-        self.update_writes(&data_commits, storage).map_err(|err| DataRead { source: err })?;
+        self.update_writes(storage).map_err(|err| DataRead { source: err })?;
 
         let change_since_last_durable_write = self.total_count as f64 - self.last_durable_write_total_count as f64;
         if change_since_last_durable_write.abs() / self.last_durable_write_total_count as f64
@@ -168,6 +164,26 @@ impl Statistics {
         Ok(())
     }
 
+    fn load_recent_commits(
+        &mut self,
+        storage: &MVCCStorage<impl DurabilityClient>,
+    ) -> Result<BTreeMap<DurabilitySequenceNumber, RecoveryCommitStatus>, StatisticsError> {
+        use StatisticsError::ReloadCommitData;
+        if storage.recent_commits().contains_key(&self.sequence_number.next()) {
+            Ok(storage
+                .recent_commits()
+                .iter()
+                .map(|(&commit_sequence_number, result)| match result {
+                    None => (commit_sequence_number, RecoveryCommitStatus::Rejected),
+                    Some(record) => (commit_sequence_number, RecoveryCommitStatus::Validated(record.clone())),
+                })
+                .collect())
+        } else {
+            Ok(load_commit_data_from(self.sequence_number.next(), storage.durability())
+                .map_err(|err| ReloadCommitData { typedb_source: err })?)
+        }
+    }
+
     pub fn durably_write(&mut self, durability: &impl DurabilityClient) -> Result<(), StatisticsError> {
         use StatisticsError::DurablyWrite;
         durability.unsequenced_write(self).map_err(|err| DurablyWrite { typedb_source: err })?;
@@ -175,16 +191,14 @@ impl Statistics {
         Ok(())
     }
 
-    fn update_writes<D>(
-        &mut self,
-        commits: &BTreeMap<SequenceNumber, CommittedWrites>,
-        storage: &MVCCStorage<D>,
-    ) -> Result<(), MVCCReadError> {
+    fn update_writes<D>(&mut self, storage: &MVCCStorage<D>) -> Result<(), MVCCReadError> {
         let mut total_delta = 0;
-        for (sequence_number, writes) in commits.range(self.sequence_number.next()..) {
-            total_delta += self.update_write(*sequence_number, writes, commits, storage)?;
+        let mut sequence_number = self.sequence_number.next();
+        while self.context.contains_key(&sequence_number) {
+            total_delta += self.update_write(sequence_number, storage)?;
+            sequence_number = sequence_number.next();
         }
-        if let Some((&last_sequence_number, _)) = commits.last_key_value() {
+        if let Some((&last_sequence_number, _)) = self.context.last_key_value() {
             self.sequence_number = last_sequence_number;
         }
         self.total_count = self.total_count.checked_add_signed(total_delta).unwrap();
@@ -194,14 +208,20 @@ impl Statistics {
     fn update_write<D>(
         &mut self,
         commit_sequence_number: SequenceNumber,
-        writes: &CommittedWrites,
-        commits: &BTreeMap<SequenceNumber, CommittedWrites>,
         storage: &MVCCStorage<D>,
     ) -> Result<i64, MVCCReadError> {
+        let writes = self.context[&commit_sequence_number].clone();
+
         let mut total_delta = 0;
         for (key, write) in writes.operations.iterate_writes() {
-            let delta =
-                write_to_delta(&key, &write, writes.open_sequence_number, commit_sequence_number, commits, storage)?;
+            let delta = write_to_delta(
+                &key,
+                &write,
+                writes.open_sequence_number,
+                commit_sequence_number,
+                &self.context,
+                storage,
+            )?;
             if ObjectVertex::is_entity_vertex(StorageKeyReference::from(&key)) {
                 let type_ = Entity::new(ObjectVertex::decode(key.bytes())).type_();
                 self.update_entities(type_, delta);
@@ -451,6 +471,7 @@ fn write_to_delta<D>(
     }
 }
 
+#[derive(Debug, Clone)]
 struct CommittedWrites {
     open_sequence_number: SequenceNumber,
     operations: OperationsBuffer,
@@ -568,7 +589,10 @@ impl DurabilityRecord for Statistics {
 impl UnsequencedDurabilityRecord for Statistics {}
 
 mod serialise {
-    use std::{collections::HashMap, fmt};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        fmt,
+    };
 
     use serde::{
         de,
@@ -941,6 +965,7 @@ mod serialise {
                         relation_role_player_counts,
                         player_role_relation_counts,
                         links_index_counts,
+                        context: BTreeMap::new(),
                     })
                 }
 
@@ -1212,6 +1237,7 @@ mod serialise {
                             .ok_or_else(|| de::Error::missing_field(Field::PlayerRoleRelationCounts.name()))?,
                         links_index_counts: links_indexs_counts
                             .ok_or_else(|| de::Error::missing_field(Field::LinksIndexCounts.name()))?,
+                        context: BTreeMap::new(),
                     })
                 }
             }

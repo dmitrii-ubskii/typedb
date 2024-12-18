@@ -651,7 +651,7 @@ impl SlotMarker {
 }
 
 // TODO: move out of isolation manager
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommitRecord {
     // TODO: this could read-through to the WAL if we have to save memory?
     operations: OperationsBuffer,

@@ -9,16 +9,18 @@
 #![allow(clippy::module_inception)]
 
 use std::{
+    collections::BTreeMap,
     error::Error,
     fs, io,
     path::{Path, PathBuf},
-    sync::{atomic::Ordering, Arc},
+    sync::{atomic::Ordering, Arc, RwLock, RwLockReadGuard},
     thread::sleep,
     time::Duration,
 };
 
 use ::error::typedb_error;
 use bytes::{byte_array::ByteArray, Bytes};
+use durability::DurabilitySequenceNumber;
 use isolation_manager::IsolationConflict;
 use iterator::MVCCReadError;
 use keyspace::KeyspaceDeleteError;
@@ -42,7 +44,9 @@ use crate::{
         commit_recovery::{apply_recovered, load_commit_data_from, StorageRecoveryError},
     },
     sequence_number::SequenceNumber,
-    snapshot::{write::Write, CommittableSnapshot, ReadSnapshot, SchemaSnapshot, WriteSnapshot},
+    snapshot::{
+        buffer::OperationsBuffer, write::Write, CommittableSnapshot, ReadSnapshot, SchemaSnapshot, WriteSnapshot,
+    },
 };
 
 pub mod durability_client;
@@ -64,6 +68,7 @@ pub struct MVCCStorage<Durability> {
     keyspaces: Keyspaces,
     durability_client: Durability,
     isolation_manager: IsolationManager,
+    recent_commits: RwLock<BTreeMap<DurabilitySequenceNumber, Option<CommitRecord>>>,
 }
 
 impl<Durability> MVCCStorage<Durability> {
@@ -96,6 +101,7 @@ impl<Durability> MVCCStorage<Durability> {
             durability_client,
             keyspaces,
             isolation_manager,
+            recent_commits: RwLock::default(),
         })
     }
 
@@ -143,7 +149,14 @@ impl<Durability> MVCCStorage<Durability> {
         };
 
         let isolation_manager = IsolationManager::new(next_sequence_number);
-        Ok(Self { name: Arc::new(name.to_owned()), path: storage_dir, durability_client, keyspaces, isolation_manager })
+        Ok(Self {
+            name: Arc::new(name.to_owned()),
+            path: storage_dir,
+            durability_client,
+            keyspaces,
+            isolation_manager,
+            recent_commits: <_>::default(),
+        })
     }
 
     fn register_durability_record_types(durability_client: &mut impl DurabilityClient) {
@@ -228,6 +241,7 @@ impl<Durability> MVCCStorage<Durability> {
             .map_err(|error| Durability { name: self.name.clone(), typedb_source: error })?;
 
         let sync_notifier = self.durability_client.request_sync();
+        let x = commit_record.clone();
         let validate_result =
             self.isolation_manager.validate_commit(commit_sequence_number, commit_record, &self.durability_client);
 
@@ -247,16 +261,19 @@ impl<Durability> MVCCStorage<Durability> {
                 Self::persist_commit_status(true, commit_sequence_number, &self.durability_client)
                     .map_err(|error| Durability { name: self.name.clone(), typedb_source: error })?;
 
+                self.recent_commits.write().unwrap().insert(commit_sequence_number, Some(x));
                 Ok(commit_sequence_number)
             }
             Ok(ValidatedCommit::Conflict(conflict)) => {
                 sync_notifier.recv().unwrap();
                 Self::persist_commit_status(false, commit_sequence_number, &self.durability_client)
                     .map_err(|error| Durability { name: self.name.clone(), typedb_source: error })?;
+                self.recent_commits.write().unwrap().insert(commit_sequence_number, None);
                 Err(StorageCommitError::Isolation { name: self.name.clone(), conflict })
             }
             Err(error) => {
                 sync_notifier.recv().unwrap();
+                self.recent_commits.write().unwrap().insert(commit_sequence_number, None);
                 Err(Durability { name: self.name.clone(), typedb_source: error })
             }
         }
@@ -448,6 +465,10 @@ impl<Durability> MVCCStorage<Durability> {
             .reset()
             .map_err(|err| StorageResetError::Durability { name: self.name.clone(), typedb_source: err })?;
         Ok(())
+    }
+
+    pub fn recent_commits(&self) -> RwLockReadGuard<'_, BTreeMap<DurabilitySequenceNumber, Option<CommitRecord>>> {
+        self.recent_commits.read().unwrap()
     }
 }
 
