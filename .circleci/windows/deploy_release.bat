@@ -8,6 +8,7 @@ REM by Chocolatey in prepare.bat is accessible
 CALL refreshenv
 
 REM build typedb-all-windows archive
-bazel --output_user_root=C:/bzl run --enable_runfiles --jobs=8 --define version=$(git rev-parse HEAD) //:deploy-typedb-server --compilation_mode=opt -- snapshot
+bazel --output_user_root=C:/bzl run --enable_runfiles --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt --//server:mode=published -- release
+
 :error
 IF %errorlevel% NEQ 0 EXIT /b %errorlevel%
