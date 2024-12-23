@@ -69,17 +69,17 @@ alias(
 
 # The directory structure for distribution
 
-server_bin_path = select({
-    "@typedb_bazel_distribution//platform:is_linux_arm64" : "server/typedb_server_bin",
-    "@typedb_bazel_distribution//platform:is_linux_x86_64" : "server/typedb_server_bin",
-    "@typedb_bazel_distribution//platform:is_mac_arm64" : "server/typedb_server_bin",
-    "@typedb_bazel_distribution//platform:is_mac_x86_64" : "server/typedb_server_bin",
-    "@typedb_bazel_distribution//platform:is_windows_x86_64" : "server/typedb_server_bin"
+assembly_renames = select({
+    "@typedb_bazel_distribution//platform:is_linux_arm64" : {"//:typedb_server_bin" : "server/typedb_server_bin"},
+    "@typedb_bazel_distribution//platform:is_linux_x86_64" : {"//:typedb_server_bin" : "server/typedb_server_bin"},
+    "@typedb_bazel_distribution//platform:is_mac_arm64" : {"//:typedb_server_bin" : "server/typedb_server_bin"},
+    "@typedb_bazel_distribution//platform:is_mac_x86_64" : {"//:typedb_server_bin" : "server/typedb_server_bin"},
+    "@typedb_bazel_distribution//platform:is_windows_x86_64" : {"//:typedb_server_bin" : "server/typedb_server_bin"},
 })
 pkg_files(
     name = "package-layout-server",
     srcs = ["//:typedb_server_bin", "//binary:typedb"],
-    renames = {"//:typedb_server_bin" : server_bin_path},
+    renames = assembly_renames,
     attributes = binary_permissions,
 )
 
