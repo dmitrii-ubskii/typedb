@@ -9,7 +9,7 @@ CALL refreshenv
 
 REM build typedb-all-windows archive
 @REM TODO: re-enable test_assembly
-@REM bazel --output_user_root=C:/bzl test //test/assembly:assembly --test_output=streamed --enable_runfiles --test_env=PATH -- --snapshot
+@REM bazel --output_user_root=C:/bzl test --experimental_ui_max_stdouterr_bytes=-1 //test/assembly:assembly --test_output=streamed --enable_runfiles --test_env=PATH -- --snapshot
 
 :error
 IF %errorlevel% NEQ 0 EXIT /b %errorlevel%
