@@ -177,6 +177,15 @@ jobs:
       - test-assembly-unix
       - deploy-snapshot-unix
 
+  test-deploy-snapshot-windows-x86_64:
+    executor: win-x86_64
+    working_directory: ~/typedb-driver
+    steps:
+      - checkout
+      - run: .circleci\windows\prepare.bat
+      - run: .circleci\windows\test_assembly.bat
+      - run: .circleci\windows\deploy_snapshot.bat
+
   # per platform release deployment
   deploy-release-linux-x86_64:
     executor: linux-x86_64-amazonlinux-2

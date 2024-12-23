@@ -63,15 +63,23 @@ alias(
         "@typedb_bazel_distribution//platform:is_linux_x86_64" : "@typedb_console_artifact_linux-x86_64//file",
         "@typedb_bazel_distribution//platform:is_mac_arm64" : "@typedb_console_artifact_mac-arm64//file",
         "@typedb_bazel_distribution//platform:is_mac_x86_64" : "@typedb_console_artifact_mac-x86_64//file",
-        #"@typedb_bazel_distribution//platform:is_windows_x86_64" : "@typedb_console_artifact_windows-x86_64//file",
+        "@typedb_bazel_distribution//platform:is_windows_x86_64" : "@typedb_console_artifact_windows-x86_64//file",
     })
 )
 
 # The directory structure for distribution
+
+server_bin_path = select({
+    "@typedb_bazel_distribution//platform:is_linux_arm64" : "server/typedb_server_bin",
+    "@typedb_bazel_distribution//platform:is_linux_x86_64" : "server/typedb_server_bin",
+    "@typedb_bazel_distribution//platform:is_mac_arm64" : "server/typedb_server_bin",
+    "@typedb_bazel_distribution//platform:is_mac_x86_64" : "server/typedb_server_bin",
+    "@typedb_bazel_distribution//platform:is_windows_x86_64" : "server/typedb_server_bin"
+})
 pkg_files(
     name = "package-layout-server",
     srcs = ["//:typedb_server_bin", "//binary:typedb"],
-    renames = {"//:typedb_server_bin" : "server/typedb_server_bin"},
+    renames = {"//:typedb_server_bin" : server_bin_path},
     attributes = binary_permissions,
 )
 
@@ -122,6 +130,17 @@ assemble_targz(
     targets = ["//:package-typedb-server-only"],
     visibility = ["//tests/assembly:__subpackages__"],
     target_compatible_with = constraint_linux_arm64,
+)
+
+assemble_zip(
+    name = "assemble-server-windows-x86_64-zip",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-server-windows-x86_64",
+    permissions = other_permissions,
+    targets = ["//:package-typedb-server-only"],
+    visibility = ["//tests/assembly:__subpackages__"],
+    target_compatible_with = constraint_win_x86_64,
 )
 
 # Package TypeDB & console together
@@ -181,6 +200,17 @@ assemble_targz(
     target_compatible_with = constraint_linux_arm64,
 )
 
+assemble_zip(
+    name = "assemble-all-windows-x86_64-zip",
+    additional_files = assemble_files,
+    empty_directories = empty_directories,
+    output_filename = "typedb-all-windows-x86_64",
+    permissions = other_permissions,
+    targets = ["//:package-typedb-all"],
+    visibility = ["//tests/assembly:__subpackages__"],
+    target_compatible_with = constraint_win_x86_64,
+)
+
 deploy_artifact(
     name = "deploy-mac-x86_64-zip",
     artifact_group = "typedb-all-mac-x86_64",
@@ -215,6 +245,15 @@ deploy_artifact(
     release = deployment["artifact"]["release"]["upload"],
     snapshot = deployment["artifact"]["snapshot"]["upload"],
     target = ":assemble-all-linux-arm64-targz",
+)
+
+deploy_artifact(
+    name = "deploy-windows-x86_64-zip",
+    artifact_group = "typedb-all-windows-x86_64",
+    artifact_name = "typedb-all-windows-x86_64-{version}.zip",
+    release = deployment["artifact"]["release"]["upload"],
+    snapshot = deployment["artifact"]["snapshot"]["upload"],
+    target = ":assemble-all-windows-x86_64-zip",
 )
 
 # Convenience
