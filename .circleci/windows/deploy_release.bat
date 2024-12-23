@@ -7,8 +7,10 @@ REM needs to be called such that software installed
 REM by Chocolatey in prepare.bat is accessible
 CALL refreshenv
 
+SET /p VER=<VERSION
+
 REM build typedb-all-windows archive
-bazel --output_user_root=C:/bzl run --enable_runfiles --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt --//server:mode=published -- release
+bazel --output_user_root=C:/bzl run --enable_runfiles --jobs=8 --define version=%VER% //:deploy-typedb-server --compilation_mode=opt --//server:mode=published -- release
 
 :error
 IF %errorlevel% NEQ 0 EXIT /b %errorlevel%
