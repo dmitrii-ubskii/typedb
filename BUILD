@@ -264,7 +264,7 @@ alias(
         "@typedb_bazel_distribution//platform:is_linux_x86_64" : ":assemble-all-linux-x86_64-targz",
         "@typedb_bazel_distribution//platform:is_mac_arm64" : ":assemble-all-mac-arm64-zip",
         "@typedb_bazel_distribution//platform:is_mac_x86_64" : ":assemble-all-mac-x86_64-zip",
-#        "@typedb_bazel_distribution//platform:is_windows_x86_64" : ":assemble-windows-x86_64-zip"
+        "@typedb_bazel_distribution//platform:is_windows_x86_64" : ":assemble-windows-x86_64-zip"
     }),
     visibility = ["//tests/assembly:__subpackages__"],
 )
@@ -275,7 +275,7 @@ alias(
         "@typedb_bazel_distribution//platform:is_linux_x86_64" : ":deploy-linux-x86_64-targz",
         "@typedb_bazel_distribution//platform:is_mac_arm64" : ":deploy-mac-arm64-zip",
         "@typedb_bazel_distribution//platform:is_mac_x86_64" : ":deploy-mac-x86_64-zip",
-#        "@typedb_bazel_distribution//platform:is_windows_x86_64" : ":deploy-windows-x86_64-zip"
+        "@typedb_bazel_distribution//platform:is_windows_x86_64" : ":deploy-windows-x86_64-zip"
     })
 )
 
