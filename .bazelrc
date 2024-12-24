@@ -3,7 +3,9 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 try-import ./.bazel-remote-cache.rc
+startup --windows_enable_symlinks
 
+build --enable_runfiles
 build --incompatible_strict_action_env --@io_bazel_rules_docker//transitions:enable=false
 run --incompatible_strict_action_env
 test --incompatible_strict_action_env --test_env=PATH
