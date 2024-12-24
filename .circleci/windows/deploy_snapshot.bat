@@ -11,6 +11,7 @@ git rev-parse HEAD > version_snapshot.txt
 set /p VER=<version_snapshot.txt
 
 REM build typedb-all-windows archive
-bazel --output_user_root=C:/bzl run --experimental_ui_max_stdouterr_bytes=-1 --enable_runfiles --jobs=8 --define version=%VER% //:deploy-typedb-server --compilation_mode=opt -- snapshot
+echo "ADD: --compilation_mode=opt"
+bazel --output_user_root=C:/bzl run --experimental_ui_max_stdouterr_bytes=-1 --enable_runfiles --jobs=8 --define version=%VER% //:deploy-typedb-server -- snapshot
 :error
 IF %errorlevel% NEQ 0 EXIT /b %errorlevel%
