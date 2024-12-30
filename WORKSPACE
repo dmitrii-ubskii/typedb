@@ -39,10 +39,19 @@ load("@rules_proto_grpc//:repositories.bzl", "rules_proto_grpc_repos", "rules_pr
 rules_proto_grpc_toolchains()
 rules_proto_grpc_repos()
 
+# Load //builder/python
+load("@vaticle_dependencies//builder/python:deps.bzl", python_deps = "deps")
+python_deps()
+load("@rules_python//python:repositories.bzl", "py_repositories", "python_register_toolchains")
+py_repositories()
+load("//docker:python_versions.bzl", "register_all_toolchains", "create_interpreter_symlinks")
+register_all_toolchains()
+create_interpreter_symlinks({"python39_symlink" : "python39"})
+
 # Load //tool/common
 load("@typedb_dependencies//tool/common:deps.bzl", "typedb_dependencies_ci_pip",
     typedb_dependencies_tool_maven_artifacts = "maven_artifacts")
-typedb_dependencies_ci_pip()
+typedb_dependencies_ci_pip("@python39_symlink//:python")
 
 # Load //tool/checkstyle
 load("@typedb_dependencies//tool/checkstyle:deps.bzl", checkstyle_deps = "deps")

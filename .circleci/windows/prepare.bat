@@ -18,6 +18,6 @@ C:\ProgramData\chocolatey\lib\python\python3.exe -m pip install wheel
 
 REM permanently set variables for Bazel build
 SETX BAZEL_SH "C:\Program Files\Git\usr\bin\bash.exe"
-SETX BAZEL_PYTHON C:\ProgramData\chocolatey\lib\python\python.exe
+SETX BAZEL_PYTHON "C:\ProgramData\chocolatey\lib\python\python.exe"
 @REM TODO: Update?
 @REM SETX BAZEL_VC "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC"
