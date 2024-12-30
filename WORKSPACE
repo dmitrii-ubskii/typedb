@@ -40,7 +40,7 @@ rules_proto_grpc_toolchains()
 rules_proto_grpc_repos()
 
 # Load //builder/python
-load("@vaticle_dependencies//builder/python:deps.bzl", python_deps = "deps")
+load("@typedb_dependencies//builder/python:deps.bzl", python_deps = "deps")
 python_deps()
 load("@rules_python//python:repositories.bzl", "py_repositories", "python_register_toolchains")
 py_repositories()
