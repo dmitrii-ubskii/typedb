@@ -44,14 +44,11 @@ load("@typedb_dependencies//builder/python:deps.bzl", rules_python_dep = "rules_
 rules_python_dep()
 load("@rules_python//python:repositories.bzl", "py_repositories", "python_register_toolchains")
 py_repositories()
-load("//docker:python_versions.bzl", "register_all_toolchains", "create_interpreter_symlinks")
-register_all_toolchains()
-create_interpreter_symlinks({"python39_symlink" : "python39"})
 
 # Load //tool/common
 load("@typedb_dependencies//tool/common:deps.bzl", "typedb_dependencies_ci_pip",
     typedb_dependencies_tool_maven_artifacts = "maven_artifacts")
-typedb_dependencies_ci_pip("@python39_symlink//:python")
+typedb_dependencies_ci_pip()
 
 # Load //tool/checkstyle
 load("@typedb_dependencies//tool/checkstyle:deps.bzl", checkstyle_deps = "deps")
@@ -102,7 +99,7 @@ typedb_bazel_distribution()
 
 # Load @typedb_bazel_distribution_uploader
 load("@typedb_bazel_distribution//common/uploader:deps.bzl", uploader_deps = "typedb_bazel_distribution_uploader")
-uploader_deps("@python39_symlink//:python")
+uploader_deps()
 load("@typedb_bazel_distribution_uploader//:requirements.bzl", install_uploader_deps = "install_deps")
 install_uploader_deps()
 
