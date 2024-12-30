@@ -7,18 +7,17 @@ REM uninstall Java 12 installed by CircleCI
 choco uninstall openjdk --limit-output --yes --no-progress
 
 REM install dependencies needed for build
-choco install .circleci\windows\dependencies.config  --limit-output --yes --no-progress --allow-downgrade
+choco install .circleci\windows\dependencies.config  --limit-output --yes --no-progress
 
 REM create a symlink python3.exe and make it available in %PATH%
-mkdir python37
-curl -L https://www.python.org/ftp/python/3.7.8/python-3.7.8-embed-amd64.zip --output python37.zip
-tar -xf python37.zip -C python37
+mklink C:\ProgramData\chocolatey\lib\python\python3.exe C:\ProgramData\chocolatey\lib\python\python.exe
+set PATH=%PATH%;C:\ProgramData\chocolatey\lib\python\
 
 REM install runtime dependency for the build
-python37\python.exe -m pip install wheel
+C:\ProgramData\chocolatey\lib\python\python3.exe -m pip install wheel
 
 REM permanently set variables for Bazel build
-@REM SETX BAZEL_SH "C:\Program Files\Git\usr\bin\bash.exe"
-SETX BAZEL_PYTHON %cd%\python37\python3.exe
+SETX BAZEL_SH "C:\Program Files\Git\usr\bin\bash.exe"
+SETX BAZEL_PYTHON C:\ProgramData\chocolatey\lib\python\python.exe
 @REM TODO: Update?
 @REM SETX BAZEL_VC "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC"
