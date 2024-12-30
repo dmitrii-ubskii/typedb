@@ -38,7 +38,7 @@ executors:
     resource_class: windows.xlarge
     machine:
       image: windows-server-2019-vs2019:2024.01.1
-    shell: cmd.exe
+    shell: bash.exe
 
 
 commands:
