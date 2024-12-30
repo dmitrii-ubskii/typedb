@@ -69,7 +69,7 @@ PYTHON_INTERPRETER_SUFFIXES = {
     (MAC, X64) : "x86_64-apple-darwin",
     (LINUX, ARM64): "aarch64-unknown-linux-gnu",
     (LINUX, X64): "x86_64-unknown-linux-gnu",
-    (WIN, X64) : "x86_64-pc-windows-msvc",
+    (WIN, "amd64") : "x86_64-pc-windows-msvc",
 }
 
 def _python_interpreter_symlink_impl(rctx):
