@@ -13,6 +13,6 @@ set /p VER=<version_snapshot.txt
 REM build typedb-all-windows archive
 echo "ADD: --compilation_mode=opt"
 @REM bazel --output_user_root=C:/bzl run --experimental_ui_max_stdouterr_bytes=-1 --enable_runfiles --jobs=8 --define version=%VER% //:deploy-typedb-server -- snapshot
-bazel --output_user_root=C:/bzl build --jobs=8 --define version=%VER% //:assemble-all-windows-x86_64-zip
+bazel --output_user_root=C:/bzl build --jobs=8  --experimental_ui_max_stdouterr_bytes=-1 --define version=%VER% //:assemble-all-windows-x86_64-zip
 :error
 IF %errorlevel% NEQ 0 EXIT /b %errorlevel%
