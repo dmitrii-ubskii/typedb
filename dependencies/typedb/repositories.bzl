@@ -7,8 +7,8 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 def typedb_bazel_distribution():
     git_repository(
         name = "typedb_bazel_distribution",
-        remote = "https://github.com/typedb/bazel-distribution",
-        commit = "94c4f7b1dda39bf187f73c6ea035971c4c91528b",
+        remote = "https://github.com/krishnangovindraj/bazel-distribution",
+        commit = "4ff61df4513918a11cb7d27be1c50c462f19614d",
     )
 
 def typedb_dependencies():
