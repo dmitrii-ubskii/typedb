@@ -359,6 +359,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
         &mut self,
         conjunction: &'a Conjunction,
         expressions: &'a HashMap<Variable, ExecutableExpression<Variable>>,
+        per_call_costs: &impl FunctionCallCostProvider,
     ) {
         for constraint in conjunction.constraints() {
             match constraint {
@@ -379,7 +380,9 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Constraint::IndexedRelation(indexed_relation) => self.register_indexed_relation(indexed_relation),
 
                 Constraint::ExpressionBinding(expression) => self.register_expression_binding(expression, expressions),
-                Constraint::FunctionCallBinding(call) => self.register_function_call_binding(call),
+                Constraint::FunctionCallBinding(call) => {
+                    self.register_function_call_binding(call, per_call_costs)
+                }
 
                 Constraint::Is(is) => self.register_is(is),
                 Constraint::Comparison(comparison) => self.register_comparison(comparison),
