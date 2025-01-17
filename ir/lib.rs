@@ -179,7 +179,10 @@ typedb_error! {
             "A reserved keyword \"{identifier}\" was used as identifier",
             identifier: typeql::Identifier,
         ),
-
+        DeleteVariableUnavailable(28,
+            "The variable '{variable}' referenced in the delete stage is unavailable:",
+            variable: String,
+        ),
         UnimplementedOptionalType(
             255,
             "Optional types are not yet implemented.\nSource:\n{declaration}",
