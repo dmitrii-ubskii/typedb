@@ -384,7 +384,6 @@ fn add_typeql_isa(
                 constraints.add_comparison(Vertex::Variable(thing), assigned_to, Comparator::Equal)?;
             }
             IsaInstanceConstraint::Comparison(comparison) => {
-                add_typeql_isa(function_index, constraints, thing, isa)?;
                 let rhs_var = add_typeql_expression(function_index, constraints, &comparison.rhs)?;
                 constraints.add_comparison(Vertex::Variable(thing), rhs_var, comparison.comparator.into())?;
             }
