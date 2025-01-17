@@ -273,20 +273,23 @@ alias(
 )
 
 # docker
-container_layer(
-    name = "ca_certificates_layer",
-    base = "@ubuntu-22.04-x86_64//image",
-    commands = [
-        "apt-get update",
-        "apt-get install -y ca-certificates",
-    ],
+load("@io_bazel_rules_docker//docker:docker.bzl", "docker_build")
+
+docker_build(
+    name = "extended_image",
+    dockerfile = ":Dockerfile",
+    args = {
+        "BASE_IMAGE": "@ubuntu-22.04-arm64//image",
+    },
+    tars = [":assemble-server-linux-arm64-targz"],
+    visibility = ["//test:__subpackages__"],
 )
 
 docker_container_image(
     name = "assemble-docker-x86_64",
     operating_system = "linux",
     architecture = "amd64",
-    base = ":ca_certificates_layer",
+    base = ":extended_image",
     cmd = ["/opt/typedb-server-linux-x86_64/typedb", "server"],
     directory = "opt",
     env = {
@@ -305,7 +308,7 @@ docker_container_image(
     name = "assemble-docker-arm64",
     operating_system = "linux",
     architecture = "arm64",
-    base = "@ubuntu-22.04-arm64//image",
+    base = "extended_image",
     cmd = ["/opt/typedb-server-linux-arm64/typedb", "server"],
     directory = "opt",
     env = {
