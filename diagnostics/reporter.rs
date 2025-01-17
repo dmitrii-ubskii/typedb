@@ -87,7 +87,7 @@ impl Reporter {
                 }
             },
             REPORT_INTERVAL,
-            self.calculate_initial_delay(),
+            Duration::from_secs(10), // TODO: Temp
             true,
         );
         *self._reporting_job.lock().expect("Expected reporting job exclusive lock acquisition") = Some(reporting_job);
@@ -225,7 +225,10 @@ impl Reporter {
     fn new_https_client() -> Result<Client<HttpsConnector<HttpConnector>>, DiagnosticsReporterError> {
         let https = HttpsConnectorBuilder::new()
             .with_native_roots()
-            .map_err(|source| DiagnosticsReporterError::HttpsClientBuilding { source: Arc::new(source) })?
+            .map_err(|source| {
+                println!("TEST: Cannot build an https client:");
+                DiagnosticsReporterError::HttpsClientBuilding { source: Arc::new(source) }
+            })?
             .https_only()
             .enable_http1()
             .build();
@@ -276,10 +279,12 @@ impl Reporter {
     }
 
     fn report_inner_error_message_critical(message: &str) {
+        println!("Cannot send reporting: critical");
         sentry::capture_message(message, sentry::Level::Error);
     }
 
     fn report_inner_error_message_warning(message: &str) {
+        println!("Cannot send reporting: warning");
         sentry::capture_message(message, sentry::Level::Warning);
     }
 }

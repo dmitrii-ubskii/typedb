@@ -273,11 +273,20 @@ alias(
 )
 
 # docker
+container_run_and_commit(
+    name = "assemble-docker-x86_64-prepped",
+    commands = [
+        "apt-get update",
+        "apt-get install -y ca-certificates",
+    ],
+    base = "@ubuntu-22.04-x86_64//image",
+)
+
 docker_container_image(
     name = "assemble-docker-x86_64",
     operating_system = "linux",
     architecture = "amd64",
-    base = "@ubuntu-22.04-x86_64//image",
+    base = "assemble-docker-x86_64-prepped",
     cmd = ["/opt/typedb-server-linux-x86_64/typedb", "server"],
     directory = "opt",
     env = {
@@ -308,7 +317,6 @@ docker_container_image(
     visibility = ["//test:__subpackages__"],
     volumes = ["/opt/typedb-server-linux-arm64/server/data/"],
     workdir = "/opt/typedb-server-linux-arm64",
-    target_compatible_with = constraint_linux_arm64,
 )
 
 docker_container_push(
