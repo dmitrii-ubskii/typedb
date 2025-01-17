@@ -275,14 +275,23 @@ alias(
 # docker
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_build")
 
-docker_build(
+docker_container_image(
     name = "extended_image",
-    dockerfile = ":Dockerfile",
-    args = {
-        "BASE_IMAGE": "@ubuntu-22.04-arm64//image",
+    operating_system = "linux",
+    architecture = "amd64",
+    base = "@ubuntu-22.04-arm64//image",
+    cmd = ["apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*"],
+    directory = "opt",
+    env = {
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
     },
-    tars = [":assemble-server-linux-arm64-targz"],
+    ports = ["1729"],
+    tars = [":assemble-server-linux-x86_64-targz"],
     visibility = ["//test:__subpackages__"],
+    volumes = ["/opt/typedb-server-linux-x86_64/server/data/"],
+    workdir = "/opt/typedb-server-linux-x86_64",
+    target_compatible_with = constraint_linux_x86_64,
 )
 
 docker_container_image(
