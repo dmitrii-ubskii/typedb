@@ -226,7 +226,7 @@ impl Reporter {
         let https = HttpsConnectorBuilder::new()
             .with_native_roots()
             .map_err(|source| {
-                println!("TEST: Cannot build an https client:");
+                println!("TEST: Cannot build an https client: {source:?}");
                 DiagnosticsReporterError::HttpsClientBuilding { source: Arc::new(source) }
             })?
             .https_only()
