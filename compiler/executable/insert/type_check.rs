@@ -26,9 +26,9 @@ pub fn check_annotations(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     block: &Block,
-    input_annotations_variables: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
-    input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
-    insert_annotations: &TypeAnnotations,
+    matched_and_inserted_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
+    matched_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
+    possible_inserted_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>,
 ) -> Result<(), TypeInferenceError> {
     for constraint in block.conjunction().constraints() {
         match constraint {
@@ -39,9 +39,9 @@ pub fn check_annotations(
                     snapshot,
                     type_manager,
                     has,
-                    input_annotations_variables,
-                    input_annotations_constraints,
-                    insert_annotations.constraint_annotations_of(constraint.clone()).unwrap().as_left_right(),
+                    matched_and_inserted_variable_annotations,
+                    matched_constraint_annotations,
+                    possible_inserted_constraint_annotations.get(constraint).unwrap().as_left_right(),
                 )?;
             }
             Constraint::Links(links) => {
@@ -49,9 +49,9 @@ pub fn check_annotations(
                     snapshot,
                     type_manager,
                     links,
-                    input_annotations_variables,
-                    input_annotations_constraints,
-                    insert_annotations.constraint_annotations_of(constraint.clone()).unwrap().as_links(),
+                    matched_and_inserted_variable_annotations,
+                    matched_constraint_annotations,
+                    possible_inserted_constraint_annotations.get(constraint).unwrap().as_links(),
                 )?;
             }
             | Constraint::Kind(_)
@@ -76,20 +76,22 @@ fn validate_has_insertable(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     has: &Has<Variable>,
-    input_annotations_variables: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
-    input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
-    left_right: &LeftRightAnnotations,
+    matched_and_inserted_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
+    matched_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
+    inserted_left_right_annotations: &LeftRightAnnotations,
 ) -> Result<(), TypeInferenceError> {
     // TODO: Improve. This is extremely coarse and likely to rule out many valid combinations
     // Esp when doing queries using type variables.
     // TODO: These should be safe to unwrap
-    let Some(input_owner_types) = input_annotations_variables.get(&has.owner().as_variable().unwrap()) else {
+    let Some(input_owner_types) = matched_and_inserted_variable_annotations.get(&has.owner().as_variable().unwrap())
+    else {
         return Err(TypeInferenceError::AnnotationsUnavailableForVariableInInsert {
             variable: has.owner().as_variable().unwrap(),
             constraint: Constraint::Has(has.clone()),
         });
     };
-    let Some(input_attr_types) = input_annotations_variables.get(&has.attribute().as_variable().unwrap()) else {
+    let Some(input_attr_types) = matched_and_inserted_variable_annotations.get(&has.attribute().as_variable().unwrap())
+    else {
         return Err(TypeInferenceError::AnnotationsUnavailableForVariableInInsert {
             variable: has.attribute().as_variable().unwrap(),
             constraint: Constraint::Has(has.clone()),
@@ -100,7 +102,7 @@ fn validate_has_insertable(
         input_attr_types
             .iter()
             .filter(|right_type| {
-                !left_right
+                !inserted_left_right_annotations
                     .left_to_right()
                     .get(left_type)
                     .map(|valid_right_types| valid_right_types.contains(right_type))
@@ -132,28 +134,34 @@ fn validate_links_insertable(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     links: &Links<Variable>,
-    input_annotations_variables: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
-    input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
-    left_right_filtered: &LinksAnnotations,
+    matched_and_inserted_variable_annotations: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
+    matched_constraint_annotations: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
+    inserted_links_annotations: &LinksAnnotations,
 ) -> Result<(), TypeInferenceError> {
     // TODO: Should we check uniqueness of inferred role-types here instead of at compilation?
     // TODO: Improve. This is extremely coarse and likely to rule out many valid combinations
     // Esp when doing queries using type variables.
 
     // TODO: These should be safe to unwrap
-    let Some(input_relation_types) = input_annotations_variables.get(&links.relation().as_variable().unwrap()) else {
+    let Some(input_relation_types) =
+        matched_and_inserted_variable_annotations.get(&links.relation().as_variable().unwrap())
+    else {
         return Err(TypeInferenceError::AnnotationsUnavailableForVariableInInsert {
             variable: links.relation().as_variable().unwrap(),
             constraint: Constraint::Links(links.clone()),
         });
     };
-    let Some(input_player_types) = input_annotations_variables.get(&links.player().as_variable().unwrap()) else {
+    let Some(input_player_types) =
+        matched_and_inserted_variable_annotations.get(&links.player().as_variable().unwrap())
+    else {
         return Err(TypeInferenceError::AnnotationsUnavailableForVariableInInsert {
             variable: links.player().as_variable().unwrap(),
             constraint: Constraint::Links(links.clone()),
         });
     };
-    let Some(input_role_types) = input_annotations_variables.get(&links.role_type().as_variable().unwrap()) else {
+    let Some(input_role_types) =
+        matched_and_inserted_variable_annotations.get(&links.role_type().as_variable().unwrap())
+    else {
         return Err(TypeInferenceError::AnnotationsUnavailableForVariableInInsert {
             variable: links.role_type().as_variable().unwrap(),
             constraint: Constraint::Links(links.clone()),
@@ -164,7 +172,7 @@ fn validate_links_insertable(
         input_role_types
             .iter()
             .filter(|role_type| {
-                !left_right_filtered
+                !inserted_links_annotations
                     .relation_to_role()
                     .get(relation_type)
                     .map(|valid_role_types| valid_role_types.contains(role_type))
@@ -176,7 +184,7 @@ fn validate_links_insertable(
         input_role_types
             .iter()
             .filter(|role_type| {
-                !left_right_filtered
+                !inserted_links_annotations
                     .player_to_role()
                     .get(player_type)
                     .map(|valid_role_types| valid_role_types.contains(role_type))

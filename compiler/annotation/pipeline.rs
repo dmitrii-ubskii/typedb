@@ -310,7 +310,7 @@ fn annotate_stage(
                 &block,
                 running_variable_annotations,
                 running_constraint_annotations,
-                &insert_annotations,
+                &insert_annotations.constraint_annotations(),
             )
             .map_err(|typedb_source| AnnotationError::TypeInference { typedb_source })?;
             Ok(AnnotatedStage::Insert { block, annotations: insert_annotations })
