@@ -279,8 +279,8 @@ docker_container_image(
     name = "extended_image",
     operating_system = "linux",
     architecture = "amd64",
-    base = "@ubuntu-22.04-arm64//image",
-    cmd = ["apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*"],
+    base = "@ubuntu-22.04-x86_64//image",
+    cmd = ["apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* && echo 'updated certificates'"],
     directory = "opt",
     env = {
         "LANG": "C.UTF-8",
@@ -298,8 +298,8 @@ docker_container_image(
     name = "assemble-docker-x86_64",
     operating_system = "linux",
     architecture = "amd64",
-    base = ":extended_image",
-    cmd = ["/opt/typedb-server-linux-x86_64/typedb", "server"],
+    base = "@ubuntu-22.04-x86_64//image",
+    cmd = ["/bin/sh", "-c", "apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* && /opt/typedb-server-linux-x86_64/typedb server"],
     directory = "opt",
     env = {
         "LANG": "C.UTF-8",
@@ -338,7 +338,7 @@ docker_container_push(
     registry = deployment_docker["docker.index"],
     repository = "{}/{}".format(
         deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
+        "typedb-snapshot",
     ),
     tag_file = "//docker:version-x86_64",
     target_compatible_with = constraint_linux_x86_64,
