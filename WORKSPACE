@@ -152,6 +152,10 @@ typedb_protocol()
 load("//dependencies/typedb:artifacts.bzl", "typedb_console_artifact")
 typedb_console_artifact()
 
+load("//:docker.bzl", docker_base_images = "base_images")
+docker_base_images()
+register_toolchains(
+    "@io_bazel_rules_docker//toolchains/docker:default_linux_toolchain")
 ############################
 # Load @maven dependencies #
 ############################

@@ -141,6 +141,7 @@ impl Reporter {
 
         // The request is sent once, so it's fine to take a snapshot lossy with a small delay
         if is_reported {
+            println!("Reported successfully to service!");
             trace!("Service reporting is successful. Taking a snapshot...");
             diagnostics.take_service_snapshot();
         }
@@ -172,7 +173,7 @@ impl Reporter {
         if !is_reported {
             trace!("PostHog reporting is not successful. Restoring the snapshot...");
             diagnostics.restore_posthog_snapshot();
-        }
+        } else {println!("reported successfully to posthog!");}
         is_reported
     }
 
@@ -205,21 +206,22 @@ impl Reporter {
             .body(Body::from(body))
             .map_err(|source| DiagnosticsReporterError::HttpRequestBuilding { source: Arc::new(source) })?;
 
-        match Self::new_https_client()?.request(request).await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    trace!("Successfully sent diagnostics data to {}", uri);
-                    Ok(true)
-                } else {
-                    trace!("Failed to send diagnostics data to {}: {}", uri, response.status());
-                    Ok(false)
-                }
-            }
-            Err(e) => {
-                trace!("Failed to send diagnostics data to {}: {}", uri, e);
-                Ok(false)
-            }
-        }
+        let _ = Self::new_https_client()?;
+        //match Self::new_https_client()?.request(request).await {
+        //    Ok(response) => {
+        //        if response.status().is_success() {
+        //            trace!("Successfully sent diagnostics data to {}", uri);
+                     Ok(true)
+        //        } else {
+        //            trace!("Failed to send diagnostics data to {}: {}", uri, response.status());
+        //            Ok(false)
+        //        }
+        //    }
+        //    Err(e) => {
+        //        trace!("Failed to send diagnostics data to {}: {}", uri, e);
+        //        Ok(false)
+        //    }
+        //}
     }
 
     fn new_https_client() -> Result<Client<HttpsConnector<HttpConnector>>, DiagnosticsReporterError> {

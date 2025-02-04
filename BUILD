@@ -273,14 +273,14 @@ alias(
 )
 
 # docker
-load("@io_bazel_rules_docker//docker:docker.bzl", "docker_build")
+load("@io_bazel_rules_docker//docker/util:run.bzl", "container_run_and_commit")
 
 docker_container_image(
     name = "extended_image",
     operating_system = "linux",
     architecture = "amd64",
     base = "@ubuntu-22.04-x86_64//image",
-    cmd = ["apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* && echo 'updated certificates'"],
+    cmd = ["apt-get update && apt-get install -y ca-certificates"],
     directory = "opt",
     env = {
         "LANG": "C.UTF-8",
@@ -293,13 +293,17 @@ docker_container_image(
     workdir = "/opt/typedb-server-linux-x86_64",
     target_compatible_with = constraint_linux_x86_64,
 )
-
+container_run_and_commit(
+    name = "ubuntu-with-ca",
+    image = "@ubuntu-22.04-x86_64//image",
+    commands = ["apt-get update", "apt-get install -y ca-certificates", "rm -rf /var/lib/apt/lists/*"],
+)
 docker_container_image(
     name = "assemble-docker-x86_64",
     operating_system = "linux",
     architecture = "amd64",
-    base = "@ubuntu-22.04-x86_64//image",
-    cmd = ["/bin/sh", "-c", "apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* && /opt/typedb-server-linux-x86_64/typedb server"],
+    base = ":ubuntu-with-ca",
+    cmd = ["/opt/typedb-server-linux-x86_64/typedb", "server"],
     directory = "opt",
     env = {
         "LANG": "C.UTF-8",
