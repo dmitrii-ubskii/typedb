@@ -387,12 +387,12 @@ workflows:
       - deploy-release-linux-x86_64:
           filters:
             branches:
-              only: [ release, brew-apt-test-circleci ]
+              only: [ release ]
 
       - deploy-release-linux-arm64:
           filters:
             branches:
-              only: [ release, brew-apt-test-circleci ]
+              only: [ release ]
 
       - deploy-release-mac-x86_64:
           filters:
@@ -420,7 +420,7 @@ workflows:
       - deploy-release-apt-x86_64:
           filters:
             branches:
-              only: [ release, brew-apt-test-circleci ]
+              only: [ release ]
           requires:
             - deploy-release-linux-x86_64
             - deploy-release-linux-arm64
@@ -428,7 +428,7 @@ workflows:
       - deploy-release-apt-arm64:
           filters:
             branches:
-              only: [ release, brew-apt-test-circleci ]
+              only: [ release ]
           requires:
             - deploy-release-linux-x86_64
             - deploy-release-linux-arm64
