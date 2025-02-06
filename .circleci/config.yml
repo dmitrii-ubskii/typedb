@@ -111,7 +111,7 @@ commands:
           export DEPLOY_ARTIFACT_USERNAME=$REPO_TYPEDB_USERNAME
           export DEPLOY_ARTIFACT_PASSWORD=$REPO_TYPEDB_PASSWORD
           bazel run @typedb_dependencies//tool/bazelinstall:remote_cache_setup.sh
-          bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt --//server:mode=published -- release
+          bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-typedb-server --compilation_mode=opt --//server:mode=published -- snapshot
 
   deploy-release-apt:
     steps:
@@ -119,7 +119,7 @@ commands:
           export DEPLOY_APT_USERNAME=$REPO_TYPEDB_USERNAME
           export DEPLOY_APT_PASSWORD=$REPO_TYPEDB_PASSWORD
           bazel run @typedb_dependencies//tool/bazelinstall:remote_cache_setup.sh
-          bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-apt --compilation_mode=opt --//server:mode=published -- release
+          bazel run --jobs=8 --define version=$(cat VERSION) //:deploy-apt --compilation_mode=opt --//server:mode=published -- snapshot
 
   deploy-docker-for-arch:
     parameters:
@@ -387,22 +387,22 @@ workflows:
       - deploy-release-linux-x86_64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
 
       - deploy-release-linux-arm64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
 
       - deploy-release-mac-x86_64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
 
       - deploy-release-mac-arm64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
 
       - deploy-release-windows-x86_64:
           filters:
@@ -412,7 +412,7 @@ workflows:
       - deploy-release-brew:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
           requires:
             - deploy-release-mac-arm64
             - deploy-release-mac-x86_64
@@ -420,7 +420,7 @@ workflows:
       - deploy-release-apt-x86_64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
           requires:
             - deploy-release-linux-x86_64
             - deploy-release-linux-arm64
@@ -428,7 +428,7 @@ workflows:
       - deploy-release-apt-arm64:
           filters:
             branches:
-              only: [ release ]
+              only: [ release, brew-apt-test-circleci ]
           requires:
             - deploy-release-linux-x86_64
             - deploy-release-linux-arm64
