@@ -5,6 +5,10 @@
  */
 
 use std::{collections::HashMap, sync::Arc};
+use std::collections::BTreeMap;
+use compiler::annotation::function::EmptyAnnotatedFunctionSignatures;
+use compiler::annotation::match_inference::infer_types;
+use compiler::transformation::transform::apply_transformations;
 
 use compiler::VariablePosition;
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
@@ -15,6 +19,10 @@ use executor::{
     ExecutionInterrupt,
 };
 use function::function_manager::FunctionManager;
+use ir::pipeline::function_signature::HashMapFunctionSignatureIndex;
+use ir::pipeline::ParameterRegistry;
+use ir::translation::match_::translate_match;
+use ir::translation::TranslationContext;
 use lending_iterator::LendingIterator;
 use query::{query_cache::QueryCache, query_manager::QueryManager};
 use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};

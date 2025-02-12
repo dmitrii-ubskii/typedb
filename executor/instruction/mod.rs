@@ -896,6 +896,8 @@ impl<T> Checker<T> {
                         }
                     }));
                 }
+
+                CheckInstruction::Fail => filters.push(Box::new(|value| Ok(false)))
             }
         }
 

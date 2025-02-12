@@ -31,6 +31,7 @@ use ir::{
 };
 use itertools::{chain, Itertools};
 use tracing::{event, Level};
+use ir::pattern::constraint::OptimisedAway;
 
 use crate::{
     annotation::{expression::compiled_expression::ExecutableExpression, type_annotations::TypeAnnotations},
@@ -65,6 +66,7 @@ use crate::{
     },
     ExecutorVariable, VariablePosition,
 };
+use crate::executable::match_::planner::vertex::OptimisedAwayPlanner;
 
 pub const MAX_BEAM_WIDTH: usize = 96;
 pub const MIN_BEAM_WIDTH: usize = 1;
@@ -405,6 +407,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Constraint::Is(is) => self.register_is(is),
                 Constraint::Comparison(comparison) => self.register_comparison(comparison),
                 Constraint::LinksDeduplication(dedup) => self.register_links_deduplication(dedup),
+                Constraint::OptimisedAway(optimised_away) => self.register_optimised_to_fail(optimised_away)
             }
         }
     }
@@ -580,6 +583,11 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             self.type_annotations,
             self.statistics,
         ));
+    }
+
+    fn register_optimised_to_fail(&mut self, optimised_away: &'a OptimisedAway) {
+        let planner = OptimisedAwayPlanner::from_constraint(optimised_away, &self.graph.variable_index, self.type_annotations, self.statistics);
+        self.graph.push_optimised_to_fail(planner);
     }
 
     fn register_disjunctions(&mut self, disjunctions: Vec<DisjunctionPlanBuilder<'a>>) {
@@ -1391,6 +1399,7 @@ impl ConjunctionPlan<'_> {
                     match_builder.push_instruction(variable, instruction);
                 }
                 PlannerVertex::Comparison(_) => unreachable!("encountered comparison registered as producing variable"),
+                PlannerVertex::OptimisedAway(_) => unreachable!("encountered optimised-away registered as producing variable"),
                 PlannerVertex::Constraint(constraint) => {
                     let inputs =
                         self.inputs_of_pattern(producer).map(|var| self.graph.index_to_variable[&var]).collect_vec();
@@ -1561,6 +1570,9 @@ impl ConjunctionPlan<'_> {
 
                 let vars = [lhs_var, rhs_var].into_iter().flatten().collect_vec();
                 match_builder.push_check(&vars, check);
+            }
+            PlannerVertex::OptimisedAway(_) => {
+                match_builder.push_check(&Vec::new(), CheckInstruction::Fail);
             }
             PlannerVertex::Constraint(constraint) => {
                 self.lower_constraint_check(match_builder, constraint);
@@ -2018,6 +2030,12 @@ impl<'a> Graph<'a> {
             self.variable_to_pattern.entry(var).or_default().insert(pattern_index);
         }
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Comparison(comparison));
+    }
+
+    fn push_optimised_to_fail(&mut self, optimised_away: OptimisedAwayPlanner<'a>) {
+        let pattern_index = self.next_pattern_index();
+        self.pattern_to_variable.entry(pattern_index).or_default();
+        self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::OptimisedAway(optimised_away));
     }
 
     fn push_expression(&mut self, output: VariableVertexId, expression: ExpressionPlanner<'a>) {

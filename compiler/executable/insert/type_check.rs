@@ -70,6 +70,9 @@ pub fn check_annotations(
             | Constraint::IndexedRelation(_) => {
                 unreachable!("Indexed relations can only appear after type inference")
             }
+            Constraint::OptimisedAway(_) => {
+                unreachable!("Optimised away can only appear after type inference")
+            }
         }
     }
     Ok(())
