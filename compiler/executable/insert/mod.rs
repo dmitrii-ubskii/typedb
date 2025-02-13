@@ -41,7 +41,7 @@ pub enum ValueSource {
     Parameter(ParameterID),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ThingPosition(pub VariablePosition);
 
 pub(crate) fn get_thing_input_position(
@@ -100,10 +100,12 @@ typedb_error! {
             comparator: Comparator,
             source_span: Option<Span>,
         ),
-        MultipleInsertsForSameVariable(
+        ConflcitingTypesForInsertOfSameVariable(
             6,
-            "Found multiple insert statements for the variable '{variable}'.",
+            "Found conflicting types for inserting the variable '{variable}'.",
             variable: String,
+            first: TypeSource,
+            second: TypeSource,
         ),
         MissingExpectedInput(
             10,
