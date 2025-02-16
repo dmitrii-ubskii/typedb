@@ -9,6 +9,7 @@ use std::{
     fmt,
     sync::Arc,
 };
+use itertools::Itertools;
 
 use answer::{variable::Variable, Type};
 use concept::type_::role_type::RoleType;
@@ -95,7 +96,10 @@ impl<ID: IrID> IsaInstruction<ID> {
 
 impl<ID: IrID> fmt::Display for IsaInstruction<ID> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] filter {}", &self.isa, DisplayVec::new(&self.checks))
+        let isa_types = self.instance_type_to_types.values().flat_map(|types| types.iter())
+            .map(|t| format!("{}", t))
+            .join(", ");
+        write!(f, "[{}] with types: {}, filter {}", &self.isa, isa_types, DisplayVec::new(&self.checks))
     }
 }
 
@@ -135,7 +139,10 @@ impl<ID: IrID> IsaReverseInstruction<ID> {
 
 impl<ID: IrID> fmt::Display for IsaReverseInstruction<ID> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Reverse[{}] filter {}", &self.isa, DisplayVec::new(&self.checks))
+        let isa_types = self.type_to_instance_types.keys()
+            .map(|t| format!("{}", t))
+            .join(", ");
+        write!(f, "Reverse[{}] with types: {}, filter {}", &self.isa, isa_types, DisplayVec::new(&self.checks))
     }
 }
 

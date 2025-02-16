@@ -31,6 +31,11 @@ use ir::{
 };
 use itertools::{chain, Itertools};
 use tracing::{event, Level};
+use concept::type_::attribute_type::AttributeType;
+use concept::type_::entity_type::EntityType;
+use concept::type_::relation_type::RelationType;
+use concept::type_::TypeAPI;
+use storage::sequence_number::SequenceNumber;
 
 use crate::{
     annotation::{expression::compiled_expression::ExecutableExpression, type_annotations::TypeAnnotations},
@@ -251,7 +256,7 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             graph: Graph::default(),
             type_annotations,
             statistics,
-            planner_statistics: PlannerStatistics::new(),
+            planner_statistics: PlannerStatistics::new(statistics),
             required_inputs,
         }
     }
@@ -769,22 +774,30 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlannerStatistics {
     links_count: (f64, f64), // vertex count, key count
     has_count: (f64, f64),
     var_count: (f64, f64),
     pub(crate) query_cost: Cost,
     // TODO: pass info about individual steps
+
+    pub attribute_counts: HashMap<AttributeType, u64>,
+    pub relation_counts: HashMap<RelationType, u64>,
+    pub entity_counts: HashMap<EntityType, u64>,
 }
 
 impl PlannerStatistics {
-    pub fn new() -> PlannerStatistics {
+    pub fn new(statistics: &Statistics) -> PlannerStatistics {
         PlannerStatistics {
             links_count: (0.0, 0.0),
             has_count: (0.0, 0.0),
             var_count: (0.0, 0.0),
             query_cost: Cost::NOOP,
+
+            entity_counts: statistics.entity_counts.clone(),
+            relation_counts: statistics.relation_counts.clone(),
+            attribute_counts: statistics.attribute_counts.clone(),
         }
     }
 
@@ -810,7 +823,7 @@ impl PlannerStatistics {
 
 impl Default for PlannerStatistics {
     fn default() -> Self {
-        Self::new()
+        Self::new(&Statistics::new(SequenceNumber::MIN))
     }
 }
 
@@ -818,7 +831,10 @@ impl fmt::Display for PlannerStatistics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Cost: {:.2} Size: {:.2} (stats: links {:.2} / {:.2}, has {:.2} / {:.2}, vars {:.2} / {:.2})",
+            "Entities: {}\n Relations: {}\n, Attributes: {}\nCost: {:.2} Size: {:.2} (stats: links {:.2} / {:.2}, has {:.2} / {:.2}, vars {:.2} / {:.2})",
+            &format_map(&self.entity_counts),
+            &format_map(&self.relation_counts),
+            &format_map(&self.attribute_counts),
             self.query_cost.cost,
             self.query_cost.io_ratio,
             self.links_count.0,
@@ -829,6 +845,12 @@ impl fmt::Display for PlannerStatistics {
             self.var_count.1,
         )
     }
+}
+
+fn format_map<T: fmt::Display>(map: &HashMap<T, u64>) -> String {
+    map.iter()
+        .map(|(type_, count)| format!("    Type {} : {}", type_, count))
+        .join("\n")
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -1285,7 +1307,7 @@ impl ConjunctionPlan<'_> {
             already_assigned_positions,
             selected_variables.clone().into_iter().collect(),
             input_variables.into_iter().collect(),
-            self.planner_statistics,
+            self.planner_statistics.clone(),
         );
 
         for &index in &self.ordering {

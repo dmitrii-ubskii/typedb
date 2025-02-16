@@ -69,7 +69,7 @@ impl MatchExecutable {
 
 impl fmt::Display for MatchExecutable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Match executable plan:")?;
+        writeln!(f, "Match executable plan:")?;
         for (i, step) in self.steps().iter().enumerate() {
             write!(f, "\n  {i}: {step}")?;
         }
