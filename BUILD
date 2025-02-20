@@ -4,7 +4,8 @@
 
 load("@typedb_dependencies//distribution:deployment.bzl", "deployment")
 load("@typedb_dependencies//distribution/artifact:rules.bzl", "artifact_repackage")
-load("//:deployment.bzl", deployment_docker = "deployment", deployment_github = "deployment")
+# TODO: Merge //:deployment.bzl with @typedb_dependencies//distribution:deployment.bzl?
+load("//:deployment.bzl", deployment_local = "deployment")
 load("@typedb_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@typedb_dependencies//tool/release/deps:rules.bzl", "release_validate_deps")
 
@@ -317,10 +318,10 @@ docker_container_push(
     name = "deploy-docker-snapshot-x86_64",
     format = "Docker",
     image = ":assemble-docker-x86_64",
-    registry = deployment_docker["docker.index"],
+    registry = deployment_local["docker"]["snapshot"]["index"],
     repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.snapshot.repository"],
+        deployment_local["docker"]["organisation"],
+        deployment_local["docker"]["snapshot"]["repository"],
     ),
     # using $(version) propagates to `assemble-docker` and breaks the image so it doesn't boot
     tag = "$(container-version)",
@@ -332,10 +333,10 @@ docker_container_push(
     name = "deploy-docker-snapshot-arm64",
     format = "Docker",
     image = ":assemble-docker-arm64",
-    registry = deployment_docker["docker.index"],
+    registry = deployment_local["docker"]["snapshot"]["index"],
     repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.snapshot.repository"],
+        deployment_local["docker"]["organisation"],
+        deployment_local["docker"]["snapshot"]["repository"],
     ),
     tag = "$(container-version)",
     target_compatible_with = constraint_linux_arm64,
@@ -346,10 +347,10 @@ docker_container_push(
     name = "deploy-docker-release-x86_64",
     format = "Docker",
     image = ":assemble-docker-x86_64",
-    registry = deployment_docker["docker.index"],
+    registry = deployment_local["docker"]["release"]["index"],
     repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
+        deployment_local["docker"]["organisation"],
+        deployment_local["docker"]["release"]["repository"],
     ),
     tag_file = "//docker:version-x86_64",
     target_compatible_with = constraint_linux_x86_64,
@@ -359,10 +360,10 @@ docker_container_push(
     name = "deploy-docker-release-arm64",
     format = "Docker",
     image = ":assemble-docker-arm64",
-    registry = deployment_docker["docker.index"],
+    registry = deployment_local["docker"]["release"]["index"],
     repository = "{}/{}".format(
-        deployment_docker["docker.organisation"],
-        deployment_docker["docker.release.repository"],
+        deployment_local["docker"]["organisation"],
+        deployment_local["docker"]["release"]["repository"],
     ),
     tag_file = "//docker:version-arm64",
     target_compatible_with = constraint_linux_arm64,

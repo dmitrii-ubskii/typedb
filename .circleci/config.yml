@@ -128,7 +128,7 @@ commands:
         type: string
     steps:
       - run: |
-          docker login -u $REPO_DOCKER_USERNAME -p $REPO_DOCKER_PASSWORD
+          docker login docker.cloudsmith.io -u $REPO_TYPEDB_USERNAME -p $REPO_TYPEDB_PASSWORD
           export VERSION=$(git rev-parse HEAD)
           bazel run @typedb_dependencies//tool/bazelinstall:remote_cache_setup.sh
           bazel run --jobs=8 --@io_bazel_rules_docker//transitions:enable=false --platforms=//docker:linux-<<parameters.image-arch>> \
@@ -139,10 +139,10 @@ commands:
   deploy-docker-snapshot-multiarch:
     steps:
       - run: |
-          docker login -u $REPO_DOCKER_USERNAME -p $REPO_DOCKER_PASSWORD
+          docker login docker.cloudsmith.io -u $REPO_TYPEDB_USERNAME -p $REPO_TYPEDB_PASSWORD
           export VERSION=$(git rev-parse HEAD)
           export DOCKER_ORG="typedb"
-          export DOCKER_REPO="typedb-snapshot"
+          export DOCKER_REPO="public-snapshot"
           docker manifest create $DOCKER_ORG/$DOCKER_REPO:$VERSION --amend $DOCKER_ORG/$DOCKER_REPO:$VERSION-x86_64 --amend $DOCKER_ORG/$DOCKER_REPO:$VERSION-arm64
           docker manifest push $DOCKER_ORG/$DOCKER_REPO:$VERSION
           docker manifest create $DOCKER_ORG/$DOCKER_REPO:latest --amend $DOCKER_ORG/$DOCKER_REPO:$VERSION-x86_64 --amend $DOCKER_ORG/$DOCKER_REPO:$VERSION-arm64

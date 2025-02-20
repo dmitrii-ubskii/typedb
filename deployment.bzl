@@ -3,10 +3,19 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 deployment = {
-  'docker.index': 'index.docker.io',
-  'docker.organisation': 'typedb',
-  'docker.snapshot.repository': 'typedb-snapshot',
-  'docker.release.repository': 'typedb',
-  'github.organisation': 'typedb',
-  'github.repository': 'typedb'
+  'docker': {
+    'organisation': 'typedb',
+    'snapshot': {
+      'index': 'docker.cloudsmith.io',
+      'repository': 'public-snapshot',
+    },
+    'release': {
+      'index': 'index.docker.io',
+      'repository': 'typedb',
+    }
+  },
+  'github': {
+      'organisation': 'typedb',
+      'repository': 'typedb',
+  }
 }
