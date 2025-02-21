@@ -20,10 +20,11 @@ use typeql::common::Span;
 
 use crate::{
     pattern::{
+        conjunction::Conjunction,
         expression::{ExpressionRepresentationError, ExpressionTree},
         function_call::FunctionCall,
         variable_category::VariableCategory,
-        IrID, ParameterID, ScopeId, ValueType, Vertex,
+        IrID, ParameterID, Scope, ScopeId, ValueType, Vertex,
     },
     pipeline::{block::BlockBuilderContext, function_signature::FunctionSignature, ParameterRegistry},
     LiteralParseError, RepresentationError,
@@ -510,6 +511,7 @@ pub enum Constraint<ID> {
     Plays(Plays<ID>),
     Value(Value<ID>),
     LinksDeduplication(LinksDeduplication<ID>),
+    OptimisedToUnsatisfiable(OptimisedToUnsatisfiable),
 }
 
 impl<ID: IrID> Constraint<ID> {
@@ -534,6 +536,7 @@ impl<ID: IrID> Constraint<ID> {
 
             Constraint::RoleName(_) => "role-name",
             Constraint::LinksDeduplication(_) => "role-player-deduplication",
+            Constraint::OptimisedToUnsatisfiable(_) => "optimised-away",
         }
     }
 
@@ -557,6 +560,7 @@ impl<ID: IrID> Constraint<ID> {
             Constraint::Plays(plays) => Box::new(plays.ids()),
             Constraint::Value(value) => Box::new(value.ids()),
             Constraint::LinksDeduplication(dedup) => Box::new(dedup.ids()),
+            Constraint::OptimisedToUnsatisfiable(inner) => Box::new(inner.ids()),
         }
     }
 
@@ -580,6 +584,7 @@ impl<ID: IrID> Constraint<ID> {
             Constraint::Plays(plays) => Box::new(plays.ids()),
             Constraint::Value(value) => Box::new(value.ids()),
             Constraint::LinksDeduplication(dedup) => Box::new(dedup.ids()),
+            Constraint::OptimisedToUnsatisfiable(inner) => Box::new(inner.ids()),
         }
     }
 
@@ -603,6 +608,7 @@ impl<ID: IrID> Constraint<ID> {
             Constraint::Plays(plays) => Box::new(plays.vertices()),
             Constraint::Value(value) => Box::new(value.vertices()),
             Constraint::LinksDeduplication(dedup) => Box::new(dedup.vertices()),
+            Constraint::OptimisedToUnsatisfiable(inner) => Box::new(inner.vertices()),
         }
     }
 
@@ -629,6 +635,7 @@ impl<ID: IrID> Constraint<ID> {
             Self::Plays(plays) => plays.ids_foreach(function),
             Self::Value(value) => value.ids_foreach(function),
             Self::LinksDeduplication(dedup) => dedup.ids_foreach(function),
+            Self::OptimisedToUnsatisfiable(inner) => inner.ids_foreach(function),
         }
     }
 
@@ -652,6 +659,7 @@ impl<ID: IrID> Constraint<ID> {
             Self::Plays(inner) => Constraint::Plays(inner.map(mapping)),
             Self::Value(inner) => Constraint::Value(inner.map(mapping)),
             Self::LinksDeduplication(inner) => Constraint::LinksDeduplication(inner.map(mapping)),
+            Self::OptimisedToUnsatisfiable(inner) => Constraint::OptimisedToUnsatisfiable(inner.map(mapping)),
         }
     }
 
@@ -804,6 +812,7 @@ impl<ID: StructuralEquality + Ord> StructuralEquality for Constraint<ID> {
                 Self::Plays(inner) => inner.hash(),
                 Self::Value(inner) => inner.hash(),
                 Self::LinksDeduplication(inner) => inner.hash(),
+                Self::OptimisedToUnsatisfiable(inner) => StructuralEquality::hash(&inner),
             }
     }
 
@@ -827,6 +836,9 @@ impl<ID: StructuralEquality + Ord> StructuralEquality for Constraint<ID> {
             (Self::Plays(inner), Self::Plays(other_inner)) => inner.equals(other_inner),
             (Self::Value(inner), Self::Value(other_inner)) => inner.equals(other_inner),
             (Self::LinksDeduplication(inner), Self::LinksDeduplication(other_inner)) => inner.equals(other_inner),
+            (Self::OptimisedToUnsatisfiable(inner), Self::OptimisedToUnsatisfiable(other_inner)) => {
+                inner.equals(other_inner)
+            }
             // note: this style forces updating the match when the variants change
             (Self::Is { .. }, _)
             | (Self::Kind { .. }, _)
@@ -845,7 +857,8 @@ impl<ID: StructuralEquality + Ord> StructuralEquality for Constraint<ID> {
             | (Self::Relates { .. }, _)
             | (Self::Plays { .. }, _)
             | (Self::Value { .. }, _)
-            | (Self::LinksDeduplication { .. }, _) => false,
+            | (Self::LinksDeduplication { .. }, _)
+            | (Self::OptimisedToUnsatisfiable(_), _) => false,
         }
     }
 }
@@ -871,6 +884,7 @@ impl<ID: IrID> fmt::Display for Constraint<ID> {
             Self::Plays(constraint) => fmt::Display::fmt(constraint, f),
             Self::Value(constraint) => fmt::Display::fmt(constraint, f),
             Self::LinksDeduplication(constraint) => fmt::Display::fmt(constraint, f),
+            Self::OptimisedToUnsatisfiable(constraint) => fmt::Display::fmt(constraint, f),
         }
     }
 }
@@ -2694,5 +2708,64 @@ impl<ID: StructuralEquality> StructuralEquality for LinksDeduplication<ID> {
 impl<ID: IrID> fmt::Display for LinksDeduplication<ID> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "LinksDeduplication({}, {}))", self.links1, self.links2)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimisedToUnsatisfiable {
+    conjunction: Conjunction,
+}
+
+impl OptimisedToUnsatisfiable {
+    pub(crate) fn new(conjunction: Conjunction) -> OptimisedToUnsatisfiable {
+        Self { conjunction }
+    }
+
+    pub fn ids<ID: IrID>(&self) -> impl Iterator<Item = ID> {
+        [].into_iter()
+    }
+
+    pub fn vertices<ID: IrID>(&self) -> impl Iterator<Item = &Vertex<ID>> {
+        [].into_iter()
+    }
+
+    pub fn ids_foreach<F, ID: IrID>(&self, mut function: F)
+    where
+        F: FnMut(ID),
+    {
+    }
+
+    pub fn map<ID: IrID, T: Clone>(self, mapping: &HashMap<ID, T>) -> OptimisedToUnsatisfiable {
+        self
+    }
+}
+
+impl PartialEq<Self> for OptimisedToUnsatisfiable {
+    fn eq(&self, other: &Self) -> bool {
+        self.conjunction.scope_id() == other.conjunction.scope_id()
+    }
+}
+
+impl Eq for OptimisedToUnsatisfiable {}
+
+impl Hash for OptimisedToUnsatisfiable {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(&self.conjunction.scope_id(), state)
+    }
+}
+
+impl StructuralEquality for OptimisedToUnsatisfiable {
+    fn hash(&self) -> u64 {
+        self.conjunction.scope_id().id as u64
+    }
+
+    fn equals(&self, other: &Self) -> bool {
+        self.conjunction.scope_id() == other.conjunction.scope_id()
+    }
+}
+
+impl fmt::Display for OptimisedToUnsatisfiable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "optimised-away")
     }
 }

@@ -5,13 +5,13 @@
  */
 
 use concept::type_::type_manager::TypeManager;
-use ir::pattern::{conjunction::Conjunction, constraint::Constraint};
+use ir::pattern::{conjunction::Conjunction, constraint::Constraint, nested_pattern::NestedPattern, Scope};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     annotation::{
         pipeline::{AnnotatedPipeline, AnnotatedStage},
-        type_annotations::TypeAnnotations,
+        type_annotations::{ConstraintTypeAnnotations, TypeAnnotations},
     },
     transformation::{relation_index::relation_index_transformation, StaticOptimiserError},
 };
@@ -23,6 +23,7 @@ pub fn apply_transformations(
 ) -> Result<(), StaticOptimiserError> {
     for stage in &mut pipeline.annotated_stages {
         if let AnnotatedStage::Match { block, block_annotations, .. } = stage {
+            optimize_away_statically_unsatisfiable_conjunctions(block.conjunction_mut(), block_annotations);
             prune_redundant_roleplayer_deduplication(block.conjunction_mut(), block_annotations);
             relation_index_transformation(block.conjunction_mut(), block_annotations, type_manager, snapshot)?;
         }
@@ -60,4 +61,61 @@ fn prune_redundant_roleplayer_deduplication(conjunction: &mut Conjunction, block
             true
         }
     });
+}
+
+pub fn optimize_away_statically_unsatisfiable_conjunctions(
+    conjunction: &mut Conjunction,
+    block_annotations: &TypeAnnotations,
+) {
+    optimize_away_statically_unsatisfiable_conjunctions_impl(conjunction, block_annotations);
+}
+
+fn optimize_away_statically_unsatisfiable_conjunctions_impl(
+    conjunction: &mut Conjunction,
+    block_annotations: &TypeAnnotations,
+) -> bool {
+    let mut must_optimise_away = false;
+    for nested in conjunction.nested_patterns_mut() {
+        match nested {
+            NestedPattern::Disjunction(disjunction) => {
+                let mut optimised_unsatisfiable_branch_ids = Vec::new();
+                for branch in disjunction.conjunctions_mut().iter_mut() {
+                    if optimize_away_statically_unsatisfiable_conjunctions_impl(branch, block_annotations) {
+                        optimised_unsatisfiable_branch_ids.push(branch.scope_id())
+                    }
+                }
+                disjunction.optimise_away_failing_branches(optimised_unsatisfiable_branch_ids);
+                must_optimise_away = must_optimise_away || disjunction.conjunctions().is_empty();
+            }
+            NestedPattern::Negation(negation) => {
+                optimize_away_statically_unsatisfiable_conjunctions_impl(negation.conjunction_mut(), block_annotations);
+            }
+            NestedPattern::Optional(optional) => {
+                optimize_away_statically_unsatisfiable_conjunctions_impl(optional.conjunction_mut(), block_annotations);
+            }
+        }
+    }
+    let must_optimise_away = must_optimise_away
+        || conjunction.constraints().iter().any(|constraint| {
+            if let Some(constraint_annotation) = block_annotations.constraint_annotations_of(constraint.clone()) {
+                match constraint_annotation {
+                    ConstraintTypeAnnotations::LeftRight(lr) => {
+                        debug_assert!(lr.left_to_right().is_empty() == lr.right_to_left().is_empty());
+                        lr.left_to_right().is_empty()
+                    }
+                    ConstraintTypeAnnotations::Links(links) => {
+                        links.player_to_role.is_empty() || links.relation_to_role.is_empty()
+                    }
+                    ConstraintTypeAnnotations::IndexedRelation(_) => {
+                        unreachable!("This is called before IndexedRelations are inserted")
+                    }
+                }
+            } else {
+                false
+            }
+        });
+    if must_optimise_away {
+        conjunction.optimise_away();
+    }
+    must_optimise_away
 }

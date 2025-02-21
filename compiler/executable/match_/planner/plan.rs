@@ -21,7 +21,8 @@ use ir::{
         conjunction::Conjunction,
         constraint::{
             Comparator, Comparison, Constraint, ExpressionBinding, FunctionCallBinding, Has, Iid, IndexedRelation, Is,
-            Isa, Kind, Label, Links, LinksDeduplication, Owns, Plays, Relates, RoleName, Sub, Value,
+            Isa, Kind, Label, Links, LinksDeduplication, OptimisedToUnsatisfiable, Owns, Plays, Relates, RoleName, Sub,
+            Value,
         },
         nested_pattern::NestedPattern,
         variable_category::VariableCategory,
@@ -56,7 +57,8 @@ use crate::{
                     },
                     variable::{InputPlanner, ThingPlanner, TypePlanner, ValuePlanner, VariableVertex},
                     ComparisonPlanner, Cost, CostMetaData, Costed, Direction, DisjunctionPlanner, ExpressionPlanner,
-                    FunctionCallPlanner, Input, IsPlanner, LinksDeduplicationPlanner, NegationPlanner, PlannerVertex,
+                    FunctionCallPlanner, Input, IsPlanner, LinksDeduplicationPlanner, NegationPlanner,
+                    OptimisedToUnsatisfiablePlanner, PlannerVertex,
                 },
                 DisjunctionBuilder, ExpressionBuilder, FunctionCallBuilder, IntersectionBuilder,
                 MatchExecutableBuilder, NegationBuilder, StepBuilder, StepInstructionsBuilder,
@@ -411,6 +413,9 @@ impl<'a> ConjunctionPlanBuilder<'a> {
                 Constraint::Is(is) => self.register_is(is),
                 Constraint::Comparison(comparison) => self.register_comparison(comparison),
                 Constraint::LinksDeduplication(dedup) => self.register_links_deduplication(dedup),
+                Constraint::OptimisedToUnsatisfiable(optimised_unsatisfiable) => {
+                    self.register_optimised_to_unsatisfiable(optimised_unsatisfiable)
+                }
             }
         }
     }
@@ -586,6 +591,16 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             self.type_annotations,
             self.statistics,
         ));
+    }
+
+    fn register_optimised_to_unsatisfiable(&mut self, optimised_unsatisfiable: &'a OptimisedToUnsatisfiable) {
+        let planner = OptimisedToUnsatisfiablePlanner::from_constraint(
+            optimised_unsatisfiable,
+            &self.graph.variable_index,
+            self.type_annotations,
+            self.statistics,
+        );
+        self.graph.push_optimised_to_unsatisfiable(planner);
     }
 
     fn register_disjunctions(&mut self, disjunctions: Vec<DisjunctionPlanBuilder<'a>>) {
@@ -1403,6 +1418,9 @@ impl ConjunctionPlan<'_> {
                     match_builder.push_instruction(variable, instruction);
                 }
                 PlannerVertex::Comparison(_) => unreachable!("encountered comparison registered as producing variable"),
+                PlannerVertex::OptimisedToUnsatisfiable(_) => {
+                    unreachable!("encountered optimised-away registered as producing variable")
+                }
                 PlannerVertex::Constraint(constraint) => {
                     let inputs =
                         self.inputs_of_pattern(producer).map(|var| self.graph.index_to_variable[&var]).collect_vec();
@@ -1573,6 +1591,9 @@ impl ConjunctionPlan<'_> {
 
                 let vars = [lhs_var, rhs_var].into_iter().flatten().collect_vec();
                 Ok(match_builder.push_check(&vars, check))
+            }
+            PlannerVertex::OptimisedToUnsatisfiable(_) => {
+                Ok(match_builder.push_check(&Vec::new(), CheckInstruction::Unsatisfiable))
             }
             PlannerVertex::Constraint(constraint) => Ok(self.lower_constraint_check(match_builder, constraint)),
             PlannerVertex::Expression(_) => {
@@ -2035,6 +2056,13 @@ impl<'a> Graph<'a> {
             self.variable_to_pattern.entry(var).or_default().insert(pattern_index);
         }
         self.elements.insert(VertexId::Pattern(pattern_index), PlannerVertex::Comparison(comparison));
+    }
+
+    fn push_optimised_to_unsatisfiable(&mut self, optimised_unsatisfiable: OptimisedToUnsatisfiablePlanner<'a>) {
+        let pattern_index = self.next_pattern_index();
+        self.pattern_to_variable.entry(pattern_index).or_default();
+        self.elements
+            .insert(VertexId::Pattern(pattern_index), PlannerVertex::OptimisedToUnsatisfiable(optimised_unsatisfiable));
     }
 
     fn push_expression(&mut self, output: VariableVertexId, expression: ExpressionPlanner<'a>) {
