@@ -3478,6 +3478,7 @@ dependencies = [
  "ir",
  "itertools 0.10.5",
  "lending_iterator",
+ "logger",
  "macro_rules_attribute",
  "options",
  "primitive",
