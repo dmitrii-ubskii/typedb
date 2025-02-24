@@ -9,7 +9,10 @@ use std::collections::{hash_map, HashMap, HashSet};
 use answer::variable::Variable;
 use concept::thing::statistics::Statistics;
 use error::typedb_error;
-use ir::pipeline::{block::Block, function_signature::FunctionID, VariableRegistry};
+use ir::{
+    pattern::ScopeId,
+    pipeline::{block::Block, function_signature::FunctionID, VariableRegistry},
+};
 use itertools::Itertools;
 
 use crate::{
@@ -57,8 +60,9 @@ pub fn compile(
     let assigned_identities =
         input_variables.iter().map(|(&var, &position)| (var, ExecutorVariable::RowPosition(position))).collect();
 
-    let mut selected_variables: HashSet<_> = selected_variables.iter().copied().collect();
-    selected_variables.extend(variable_registry.variable_names().keys().copied());
+    let mut selected_variables: HashSet<_> =
+        selected_variables.iter().copied().filter(Variable::is_anonymous).collect();
+    selected_variables.extend(block_context.visible_variables(ScopeId::ROOT).filter(Variable::is_named));
 
     Ok(plan_conjunction(
         conjunction,
