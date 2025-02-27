@@ -126,7 +126,7 @@ impl<'a, FIDType: FunctionIDAPI> FunctionCompiler<'a, FIDType> {
         if let Some(plan) = self.precompiled.get(function_id) {
             Some(plan)
         } else if let Ok(key) = &FIDType::try_from(function_id.clone()) {
-            self.compiled.get(&key)
+            self.compiled.get(key)
         } else {
             None
         }
@@ -137,10 +137,10 @@ impl<'a, FIDType: FunctionIDAPI> FunctionCompiler<'a, FIDType> {
     }
 }
 
-impl<'a, FIDType: FunctionIDAPI> FunctionCallCostProvider for FunctionCompiler<'a, FIDType> {
+impl<FIDType: FunctionIDAPI> FunctionCallCostProvider for FunctionCompiler<'_, FIDType> {
     fn get_call_cost(&self, function_id: &FunctionID) -> Cost {
         if let Some(function) = self.get_executable_function(function_id) {
-            function.single_call_cost.clone()
+            function.single_call_cost
         } else {
             debug_assert!(matches!(
                 FIDType::try_from(function_id.clone()).map(|id| self.must_table.contains(&id)),
@@ -154,7 +154,7 @@ impl<'a, FIDType: FunctionIDAPI> FunctionCallCostProvider for FunctionCompiler<'
 pub(crate) fn compile_functions<FIDType: FunctionIDAPI>(
     statistics: &Statistics,
     cached_plans: &ExecutableFunctionRegistry,
-    mut to_compile: HashMap<FIDType, AnnotatedFunction>,
+    to_compile: HashMap<FIDType, AnnotatedFunction>,
 ) -> Result<HashMap<FIDType, ExecutableFunction>, ExecutableCompilationError> {
     // TODO: Cache compiled schema functions?
     let mut planner = FunctionCompiler::new(cached_plans, to_compile);
@@ -167,9 +167,9 @@ pub(crate) fn compile_functions<FIDType: FunctionIDAPI>(
     Ok(planner.compiled)
 }
 
-fn compile_functions_impl<'a, FIDType: FunctionIDAPI>(
+fn compile_functions_impl<FIDType: FunctionIDAPI>(
     statistics: &Statistics,
-    planner: &mut FunctionCompiler<'a, FIDType>,
+    planner: &mut FunctionCompiler<'_, FIDType>,
     cycle_detection: &mut HashSet<FIDType>,
     current: FIDType,
 ) -> Result<(), ExecutableCompilationError> {
