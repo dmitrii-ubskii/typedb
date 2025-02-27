@@ -243,7 +243,13 @@ impl StepBuilder {
                 assigned,
                 output_width,
                 ..
-            }) => ExecutionStep::FunctionCall(FunctionCallStep { function_id, arguments, assigned, output_width }),
+            }) => ExecutionStep::FunctionCall(FunctionCallStep {
+                function_id,
+                arguments,
+                assigned,
+                selected_variables,
+                output_width,
+            }),
         }
     }
 }
