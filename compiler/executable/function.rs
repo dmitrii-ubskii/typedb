@@ -227,7 +227,7 @@ pub(crate) fn compile_function(
         call_cost_provider,
         stages,
         arguments.into_iter(),
-        &return_.referenced_variables(),
+        Some(&return_.referenced_variables()),
     )?;
 
     let returns = compile_return_operation(&executable_stages, return_)?;
