@@ -214,9 +214,11 @@ impl StepBuilder {
                     output_width,
                 ))
             }
+
             StepInstructionsBuilder::Check(CheckBuilder { instructions }) => {
                 ExecutionStep::Check(CheckStep::new(instructions, selected_variables, output_width))
             }
+
             StepInstructionsBuilder::Expression(ExpressionBuilder { executable_expression, output }) => {
                 let input_positions = executable_expression.variables.iter().copied().unique().collect_vec();
                 ExecutionStep::Assignment(AssignmentStep::new(
@@ -227,9 +229,11 @@ impl StepBuilder {
                     output_width,
                 ))
             }
+
             StepInstructionsBuilder::Negation(NegationBuilder { negation }) => ExecutionStep::Negation(
                 NegationStep::new(negation.finish(variable_registry), selected_variables, output_width),
             ),
+
             StepInstructionsBuilder::Disjunction(DisjunctionBuilder { branches }) => {
                 ExecutionStep::Disjunction(DisjunctionStep::new(
                     branches.into_iter().map(|builder| builder.finish(variable_registry)).collect(),
@@ -237,6 +241,7 @@ impl StepBuilder {
                     output_width,
                 ))
             }
+
             StepInstructionsBuilder::FunctionCall(FunctionCallBuilder {
                 function_id,
                 arguments,
