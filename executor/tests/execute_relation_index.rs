@@ -9,6 +9,8 @@ use std::{
     sync::Arc,
 };
 
+use typeql::common::Span;
+
 use answer::variable::Variable;
 use compiler::{
     annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
@@ -16,9 +18,9 @@ use compiler::{
         function::ExecutableFunctionRegistry,
         match_::{
             instructions::{
-                thing::{HasReverseInstruction, IndexedRelationInstruction},
-                type_::TypeListInstruction,
-                CheckInstruction, CheckVertex, ConstraintInstruction, Inputs,
+                CheckInstruction,
+                CheckVertex,
+                ConstraintInstruction, Inputs, thing::{HasReverseInstruction, IndexedRelationInstruction}, type_::TypeListInstruction,
             },
             planner::{
                 match_executable::{CheckStep, ExecutionStep, IntersectionStep, MatchExecutable},
@@ -31,12 +33,12 @@ use compiler::{
 };
 use concept::{
     thing::object::ObjectAPI,
-    type_::{annotation::AnnotationCardinality, relates::RelatesAnnotation, Ordering, OwnerAPI, PlayerAPI},
+    type_::{annotation::AnnotationCardinality, Ordering, OwnerAPI, PlayerAPI, relates::RelatesAnnotation},
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
-    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile,
-    row::MaybeOwnedRow, ExecutionInterrupt,
+    error::ReadExecutionError, ExecutionInterrupt, match_executor::MatchExecutor,
+    pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
 };
 use ir::{
     pattern::{
@@ -47,10 +49,10 @@ use ir::{
     translation::TranslationContext,
 };
 use lending_iterator::LendingIterator;
-use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
+use resource::profile::QueryProfile;
+use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
-use typeql::common::Span;
 
 const PERSON_LABEL: Label = Label::new_static("person");
 const MOVIE_LABEL: Label = Label::new_static("group");

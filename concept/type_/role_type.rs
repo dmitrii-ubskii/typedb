@@ -14,15 +14,16 @@ use encoding::{
     error::{EncodingError, EncodingError::UnexpectedPrefix},
     graph::{
         type_::{
-            vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
             Kind,
+            vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
         Typed,
     },
     layout::prefix::Prefix,
-    value::label::Label,
     Prefixed,
+    value::label::Label,
 };
+use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
@@ -31,23 +32,24 @@ use storage::{
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 
-use super::{Capability, Ordering};
 use crate::{
     concept_iterator,
+    ConceptAPI,
     error::{ConceptReadError, ConceptWriteError},
     thing::thing_manager::ThingManager,
     type_::{
         annotation::{Annotation, AnnotationError},
         constraint::{CapabilityConstraint, TypeConstraint},
+        KindAPI,
         object_type::ObjectType,
         plays::Plays,
         relates::Relates,
         relation_type::RelationType,
-        type_manager::TypeManager,
-        KindAPI, TypeAPI,
+        type_manager::TypeManager, TypeAPI,
     },
-    ConceptAPI,
 };
+
+use super::{Capability, Ordering};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RoleType {
@@ -62,6 +64,12 @@ impl fmt::Debug for RoleType {
 
 impl Hkt for RoleType {
     type HktSelf<'a> = Self;
+}
+
+impl RoleType {
+    const fn new_const_(vertex: TypeVertex) -> Self {
+        Self { vertex }
+    }
 }
 
 impl ConceptAPI for RoleType {}
@@ -90,6 +98,7 @@ impl TypeVertexEncoding for RoleType {
 }
 
 impl TypeAPI for RoleType {
+    const MIN: Self = Self::new_const_(TypeVertex::new(Prefix::VertexRoleType.prefix_id(), TypeID::MIN));
     fn new(vertex: TypeVertex) -> RoleType {
         Self::from_vertex(vertex).unwrap()
     }

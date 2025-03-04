@@ -20,6 +20,7 @@ rust_library(
         "//compiler:compiler",
         "//concept:concept",
         "//database:database",
+        "//durability:durability",
         "//executor:executor",
         "//encoding:encoding",
         "//function",
@@ -27,7 +28,7 @@ rust_library(
         "//query:query",
         "//server:server",
         "//storage:storage",
-        "//durability:durability",
+        "//resource:resource",
         "//util/test:test_utils",
 
         "@typeql//rust:typeql",

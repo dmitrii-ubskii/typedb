@@ -17,8 +17,8 @@ use compiler::{
         function::ExecutableFunctionRegistry,
         match_::{
             instructions::{
-                thing::{HasInstruction, HasReverseInstruction, IsaInstruction},
-                ConstraintInstruction, Inputs,
+                ConstraintInstruction,
+                Inputs, thing::{HasInstruction, HasReverseInstruction, IsaInstruction},
             },
             planner::{
                 match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
@@ -31,12 +31,12 @@ use compiler::{
 };
 use concept::{
     thing::object::ObjectAPI,
-    type_::{annotation::AnnotationCardinality, owns::OwnsAnnotation, Ordering, OwnerAPI},
+    type_::{annotation::AnnotationCardinality, Ordering, OwnerAPI, owns::OwnsAnnotation},
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
-    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile,
-    row::MaybeOwnedRow, ExecutionInterrupt,
+    error::ReadExecutionError, ExecutionInterrupt, match_executor::MatchExecutor,
+    pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
 };
 use ir::{
     pattern::constraint::IsaKind,
@@ -44,10 +44,11 @@ use ir::{
     translation::TranslationContext,
 };
 use lending_iterator::LendingIterator;
+use resource::profile::QueryProfile;
 use storage::{
     durability_client::WALClient,
-    snapshot::{CommittableSnapshot, ReadSnapshot},
     MVCCStorage,
+    snapshot::{CommittableSnapshot, ReadSnapshot},
 };
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;

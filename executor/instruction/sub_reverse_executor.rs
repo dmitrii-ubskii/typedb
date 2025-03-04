@@ -11,23 +11,27 @@ use std::{
     vec,
 };
 
+use itertools::Itertools;
+use typeql::parser::Rule::annotation_subkey;
+
 use answer::Type;
 use compiler::{executable::match_::instructions::type_::SubReverseInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
 use error::UnimplementedFeature;
-use itertools::Itertools;
+use lending_iterator::{AsLendingIterator, Peekable};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        BinaryIterateMode,
+        Checker,
         iterator::{SortedTupleIterator, TupleIterator},
-        sub_executor::{SubExecutor, SubFilterFn, SubFilterMapFn, SubTupleIterator, EXTRACT_SUB, EXTRACT_SUPER},
-        tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
+        sub_executor::{EXTRACT_SUB, EXTRACT_SUPER, SubExecutor, SubFilterFn, SubFilterMapFn, SubTupleIterator}, tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, TuplePositions}, type_from_row_or_annotations, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct SubReverseExecutor {
     sub: ir::pattern::constraint::Sub<ExecutorVariable>,
@@ -122,10 +126,10 @@ impl SubReverseExecutor {
                     .iter()
                     .flat_map(|(sup, subs)| subs.iter().map(|sub| Ok((*sub, *sup))))
                     .collect_vec();
-                let as_tuples: SubReverseUnboundedSortedSuper =
-                    sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_super_sub);
+                let as_tuples  = sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_super_sub as _);
+                let lending_tuples =  NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::SubReverseUnbounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))
@@ -142,10 +146,10 @@ impl SubReverseExecutor {
                 let supertype = type_from_row_or_annotations(self.sub.supertype(), row, self.super_to_subtypes.keys());
                 let subtypes = self.super_to_subtypes.get(&supertype).unwrap_or(const { &Vec::new() });
                 let sub_with_super = subtypes.iter().map(|sub| Ok((*sub, supertype))).collect_vec(); // TODO cache this
-                let as_tuples: SubReverseBoundedSortedSub =
-                    sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_sub_super);
+                let as_tuples  = sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_sub_super as _);
+                let lending_tuples =  NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::SubReverseBounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))

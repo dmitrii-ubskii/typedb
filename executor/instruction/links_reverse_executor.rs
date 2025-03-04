@@ -10,6 +10,9 @@ use std::{
     ops::Bound,
     sync::Arc,
 };
+use std::cmp::Ordering;
+
+use itertools::Itertools;
 
 use answer::Type;
 use compiler::{executable::match_::instructions::thing::LinksReverseInstruction, ExecutorVariable};
@@ -17,34 +20,38 @@ use concept::{
     error::ConceptReadError,
     thing::{
         object::Object,
-        relation::{LinksIterator, Relation, RolePlayer},
+        relation::LinksReverseIterator,
         thing_manager::ThingManager,
     },
     type_::{object_type::ObjectType, relation_type::RelationType},
 };
-use itertools::{kmerge_by, Itertools, KMergeBy};
+use concept::thing::relation::Links;
+use lending_iterator::kmerge::KMergeBy;
 use primitive::Bounds;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        Checker,
         iterator::{SortedTupleIterator, TupleIterator},
         links_executor::{
-            may_get_role, verify_role, LinksFilterFn, LinksFilterMapFn, LinksOrderingFn, LinksTupleIteratorMerged,
-            LinksTupleIteratorSingle, EXTRACT_PLAYER, EXTRACT_RELATION, EXTRACT_ROLE,
-        },
-        min_max_types,
-        owns_executor::OwnsExecutor,
-        tuple::{
+            EXTRACT_PLAYER, EXTRACT_RELATION, EXTRACT_ROLE, LinksFilterFn, LinksFilterMapFn
+            , LinksOrderingFn, may_get_role, verify_role,
+        }
+        ,
+        LinksIterateMode,
+        min_max_types, tuple::{
             links_to_tuple_player_relation_role, links_to_tuple_relation_player_role,
             links_to_tuple_role_relation_player, TuplePositions,
-        },
-        Checker, LinksIterateMode, VariableModes,
+        }, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::links_executor::{FixedLinksBounds, LinksTupleIterator};
+use crate::instruction::tuple::{tuple_player_relation_role_to_links_reverse, tuple_relation_player_role_to_links_reverse, tuple_role_relation_player_to_links_reverse, TupleOrderingFn, unsafe_compare_result_tuple};
 
 pub(crate) struct LinksReverseExecutor {
     links: ir::pattern::constraint::Links<ExecutorVariable>,
@@ -61,7 +68,7 @@ pub(crate) struct LinksReverseExecutor {
     filter_fn: Arc<LinksFilterFn>,
     player_cache: Option<Vec<Object>>,
 
-    checker: Checker<(Relation, RolePlayer, u64)>,
+    checker: Checker<(Links, u64)>,
 }
 
 impl fmt::Debug for LinksReverseExecutor {
@@ -69,6 +76,9 @@ impl fmt::Debug for LinksReverseExecutor {
         write!(f, "LinksReverseExecutor")
     }
 }
+
+pub(crate) type LinksReverseTupleIteratorSingle = LinksTupleIterator<LinksReverseIterator>;
+pub(crate) type LinksReverseTupleIteratorMerged = KMergeBy<LinksTupleIterator<LinksReverseIterator>, TupleOrderingFn>;
 
 impl LinksReverseExecutor {
     pub(crate) fn new(
@@ -102,7 +112,7 @@ impl LinksReverseExecutor {
             }
         };
 
-        let checker = Checker::<(Relation, RolePlayer, _)>::new(
+        let checker = Checker::<(Links, _)>::new(
             checks,
             HashMap::from([(relation, EXTRACT_RELATION), (player, EXTRACT_PLAYER), (role_type, EXTRACT_ROLE)]),
         );
@@ -122,7 +132,7 @@ impl LinksReverseExecutor {
             let mut cache = Vec::new();
             for type_ in player_relation_types.keys() {
                 let instances: Vec<Object> =
-                    thing_manager.get_objects_in(snapshot, type_.as_object_type()).try_collect()?;
+                    Itertools::try_collect(thing_manager.get_objects_in(snapshot, type_.as_object_type(), StorageCounters::DISABLED))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -152,12 +162,13 @@ impl LinksReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let filter = self.filter_fn.clone();
         let check = self.checker.filter_for_row(context, &row);
 
         let existing_role = may_get_role(self.links.role_type().as_variable().unwrap(), row.as_reference());
-        let filter_for_row: Box<LinksFilterMapFn> = Box::new(move |item| match filter(&item) {
+        let filter_for_row: Arc<LinksFilterMapFn> = Arc::new(move |item| match filter(&item) {
             Ok(true) => match check(&item) {
                 Ok(true) => match verify_role(&item, existing_role) {
                     Ok(true) | Err(_) => Some(item),
@@ -176,9 +187,14 @@ impl LinksReverseExecutor {
         match self.iterate_mode {
             LinksIterateMode::Unbound => {
                 // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-                let iterator = thing_manager.get_links_reverse_by_player_type_range(snapshot, &self.player_type_range);
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_player_relation_role);
+                let iterator = thing_manager.get_links_reverse_by_player_type_range(snapshot, &self.player_type_range, storage_counters);
+                let as_tuples = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_player_relation_role,
+                    tuple_player_relation_role_to_links_reverse,
+                    FixedLinksBounds::None,
+                );
                 Ok(TupleIterator::LinksReverseSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -195,9 +211,15 @@ impl LinksReverseExecutor {
                         *player,
                         // TODO: this should be just the types owned by the one instance's type in the cache!
                         &self.relation_type_range,
+                        storage_counters,
                     );
-                    let as_tuples: LinksTupleIteratorSingle =
-                        filtered.filter_map(filter_for_row).map(links_to_tuple_relation_player_role);
+                    let as_tuples = LinksTupleIterator::new(
+                        filtered,
+                        filter_for_row,
+                        links_to_tuple_relation_player_role,
+                        tuple_relation_player_role_to_links_reverse,
+                        FixedLinksBounds::Player(*player),
+                    );
                     Ok(TupleIterator::LinksReverseSingle(SortedTupleIterator::new(
                         as_tuples,
                         self.tuple_positions.clone(),
@@ -206,24 +228,30 @@ impl LinksReverseExecutor {
                 } else {
                     // TODO: we could create a reusable space for these temporarily held iterators
                     //       so we don't have allocate again before the merging iterator
-                    let relations = self.player_cache.as_ref().unwrap().iter();
-                    let iterators = relations
-                        .map(|&relation| {
-                            thing_manager.get_links_reverse_by_player_and_relation_type_range(
+                    let players = self.player_cache.as_ref().unwrap().iter();
+                    let tuple_iterators = players
+                        .map(|&player| {
+                            let iterator = thing_manager.get_links_reverse_by_player_and_relation_type_range(
                                 snapshot,
-                                relation,
+                                player,
                                 &self.relation_type_range,
+                                storage_counters.clone(),
+                            );
+                            LinksTupleIterator::new(
+                                iterator,
+                                filter_for_row.clone(),
+                                links_to_tuple_relation_player_role,
+                                tuple_relation_player_role_to_links_reverse,
+                                FixedLinksBounds::Player(player),
                             )
                         })
                         .collect_vec();
 
                     // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
-                    let merged: KMergeBy<LinksIterator, LinksOrderingFn> =
-                        kmerge_by(iterators, compare_by_relation_then_player);
-                    let as_tuples: LinksTupleIteratorMerged =
-                        merged.filter_map(filter_for_row).map(links_to_tuple_relation_player_role);
+                    let merged_tuples: KMergeBy<LinksTupleIterator<LinksReverseIterator>, TupleOrderingFn> =
+                        KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::LinksReverseMerged(SortedTupleIterator::new(
-                        as_tuples,
+                        merged_tuples,
                         self.tuple_positions.clone(),
                         &self.variable_modes,
                     )))
@@ -237,16 +265,21 @@ impl LinksReverseExecutor {
                     snapshot,
                     row.get(player).as_thing().as_object(),
                     &self.relation_type_range,
+                    storage_counters,
                 );
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_relation_player_role);
+                let as_tuples = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_relation_player_role,
+                    tuple_relation_player_role_to_links_reverse,
+                    FixedLinksBounds::Player(row.get(player).as_thing().as_object()),
+                );
                 Ok(TupleIterator::LinksReverseSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))
             }
-
             LinksIterateMode::BoundFromBoundTo => {
                 let relation = self.links.relation().as_variable().unwrap().as_position().unwrap();
                 let player = self.links.player().as_variable().unwrap().as_position().unwrap();
@@ -254,10 +287,16 @@ impl LinksReverseExecutor {
                 debug_assert!(row.len() > relation.as_usize());
                 let relation = row.get(relation).as_thing().as_relation();
                 let player = row.get(player).as_thing().as_object();
-                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player); // NOTE: not reverse, no difference
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_role_relation_player);
-                Ok(TupleIterator::LinksReverseSingle(SortedTupleIterator::new(
+                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
+                let as_tuples = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_role_relation_player,
+                    tuple_role_relation_player_to_links_reverse,
+                    FixedLinksBounds::RelationAndPlayer(relation, player),
+                );
+                // NOTE: not reverse, no difference!!
+                Ok(TupleIterator::LinksSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
@@ -278,27 +317,27 @@ fn create_links_filter_relations_players_roles(
     relation_to_role: Arc<BTreeMap<Type, BTreeSet<Type>>>,
 ) -> Arc<LinksFilterFn> {
     Arc::new(move |result| {
-        let (rel, rp) = match result {
-            Ok((rel, rp, _)) => (rel, rp),
+        let (links) = match result {
+            Ok((links, _)) => links,
             Err(err) => return Err(err.clone()),
         };
-        let Some(relation_types) = player_to_relation.get(&Type::from(rp.player().type_())) else {
+        let Some(relation_types) = player_to_relation.get(&Type::from(links.player().type_())) else {
             return Ok(false);
         };
-        let relation_type = Type::from(rel.type_());
-        let role_type = Type::from(rp.role_type());
+        let relation_type = Type::from(links.relation().type_());
+        let role_type = Type::from(links.role_type());
         Ok(relation_types.contains(&relation_type)
             && relation_to_role.get(&relation_type).is_some_and(|role_types| role_types.contains(&role_type)))
     })
 }
 
 fn compare_by_relation_then_player(
-    left: &Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-    right: &Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-) -> bool {
-    if let (Ok((rel_1, rp_1, _)), Ok((rel_2, rp_2, _))) = (left, right) {
-        (rel_1, rp_1.player()) < (rel_2, rp_2.player())
+    (left, right): (&Result<(Links, u64), Box<ConceptReadError>>, &Result<(Links, u64), Box<ConceptReadError>>),
+) -> Ordering {
+    if let (Ok((links_1, _)), Ok((links_2, _))) = (left, right) {
+        (links_1.relation(), links_1.player()).cmp(&(links_2.relation(), links_2.player()))
     } else {
-        false
+        // arbitrary
+        Ordering::Equal
     }
 }

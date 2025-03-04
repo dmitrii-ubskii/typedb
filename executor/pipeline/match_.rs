@@ -6,20 +6,21 @@
 
 use std::{iter::Peekable, sync::Arc};
 
-use compiler::executable::{function::ExecutableFunctionRegistry, match_::planner::match_executable::MatchExecutable};
 use itertools::{Itertools, UniqueBy};
+
+use compiler::executable::{function::ExecutableFunctionRegistry, match_::planner::match_executable::MatchExecutable};
 use lending_iterator::{adaptors::Map, IntoIter, LendingIterator};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     error::ReadExecutionError,
+    ExecutionInterrupt,
     match_executor::{MatchExecutor, PatternIterator},
     pipeline::{
-        stage::{ExecutionContext, StageAPI},
-        PipelineExecutionError, StageIterator,
+        PipelineExecutionError,
+        stage::{ExecutionContext, StageAPI}, StageIterator,
     },
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 pub struct MatchStageExecutor<PreviousStage> {

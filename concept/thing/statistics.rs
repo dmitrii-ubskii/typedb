@@ -13,33 +13,34 @@ use std::{
     time::Instant,
 };
 
+use serde::{Deserialize, Serialize};
+use tracing::{event, Level};
+
 use bytes::Bytes;
 use durability::{DurabilityRecordType, DurabilitySequenceNumber};
 use encoding::graph::{
     thing::{
         edge::{ThingEdgeHas, ThingEdgeIndexedRelation, ThingEdgeLinks},
+        ThingVertex,
         vertex_attribute::AttributeVertex,
         vertex_object::ObjectVertex,
-        ThingVertex,
     },
     type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeIDUInt, TypeVertexEncoding},
     Typed,
 };
 use error::typedb_error;
 use resource::constants::{database::STATISTICS_DURABLE_WRITE_CHANGE_PERCENT, snapshot::BUFFER_KEY_INLINE};
-use serde::{Deserialize, Serialize};
 use storage::{
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord, UnsequencedDurabilityRecord},
     isolation_manager::CommitType,
     iterator::MVCCReadError,
     key_value::{StorageKeyArray, StorageKeyReference},
     keyspace::IteratorPool,
+    MVCCStorage,
     recovery::commit_recovery::{load_commit_data_from, RecoveryCommitStatus, StorageRecoveryError},
     sequence_number::SequenceNumber,
     snapshot::{buffer::OperationsBuffer, write::Write},
-    MVCCStorage,
 };
-use tracing::{event, Level};
 
 use crate::{
     thing::{attribute::Attribute, entity::Entity, object::Object, relation::Relation, ThingAPI},
@@ -233,7 +234,7 @@ impl Statistics {
                 self.update_has(Object::new(edge.from()).type_(), Attribute::new(edge.to()).type_(), delta);
                 total_delta += delta;
             } else if ThingEdgeLinks::is_links(&key) {
-                let edge = ThingEdgeLinks::new(Bytes::Reference(key.bytes()));
+                let edge = ThingEdgeLinks::decode(Bytes::Reference(key.bytes()));
                 let role_type = RoleType::build_from_type_id(edge.role_id());
                 self.update_role_player(
                     Object::new(edge.to()).type_(),
@@ -748,8 +749,8 @@ mod serialise {
     use serde::{
         de,
         de::{MapAccess, SeqAccess, Visitor},
-        ser::SerializeStruct,
-        Deserialize, Deserializer, Serialize, Serializer,
+        Deserialize,
+        Deserializer, ser::SerializeStruct, Serialize, Serializer,
     };
 
     use crate::{

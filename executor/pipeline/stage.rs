@@ -6,14 +6,17 @@
 
 use std::sync::Arc;
 
+use tracing::Level;
+
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use ir::pipeline::ParameterRegistry;
 use lending_iterator::LendingIterator;
+use resource::profile::QueryProfile;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
-use tracing::Level;
 
 use crate::{
     batch::Batch,
+    ExecutionInterrupt,
     pipeline::{
         delete::DeleteStageExecutor,
         initial::{InitialIterator, InitialStage},
@@ -24,13 +27,10 @@ use crate::{
             OffsetStageIterator, RequireStageExecutor, RequireStageIterator, SelectStageExecutor, SelectStageIterator,
             SortStageExecutor, SortStageIterator,
         },
-        reduce::ReduceStageExecutor,
         update::UpdateStageExecutor,
         PipelineExecutionError, WrittenRowsIterator,
     },
-    profile::QueryProfile,
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 #[derive(Debug)]

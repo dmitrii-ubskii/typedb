@@ -13,6 +13,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
+    ExecutionInterrupt,
     pipeline::stage::ExecutionContext,
     read::{
         control_instruction::{
@@ -21,17 +22,16 @@ use crate::{
             RestoreSuspension, StreamCollected, TabledCall, Yield,
         },
         nested_pattern_executor::{Disjunction, InlinedFunction, Negation, NestedPatternExecutor},
+        NestedPatternSuspension,
+        PatternSuspension,
+        QueryPatternSuspensions,
         step_executor::StepExecutors,
         stream_modifier::{
             DistinctMapper, LastMapper, LimitMapper, OffsetMapper, SelectMapper, StreamModifierExecutor,
             StreamModifierResultMapper,
-        },
-        tabled_call_executor::TabledCallResult,
-        tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions},
-        NestedPatternSuspension, PatternSuspension, QueryPatternSuspensions, TabledCallSuspension,
+        }, tabled_call_executor::TabledCallResult, tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions}, TabledCallSuspension,
     },
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 #[derive(Debug, Copy, Clone)]

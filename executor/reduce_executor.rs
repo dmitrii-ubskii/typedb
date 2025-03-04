@@ -6,7 +6,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use answer::{variable_value::VariableValue, Thing};
+use answer::{Thing, variable_value::VariableValue};
 use compiler::{
     executable::reduce::{ReduceInstruction, ReduceRowsExecutable},
     VariablePosition,
@@ -16,7 +16,7 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::Batch,
-    pipeline::{stage::ExecutionContext, PipelineExecutionError},
+    pipeline::{PipelineExecutionError, stage::ExecutionContext},
     row::MaybeOwnedRow,
 };
 

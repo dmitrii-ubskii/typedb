@@ -23,6 +23,7 @@ use encoding::{
     value::{label::Label, value_type::ValueType},
     Prefixed,
 };
+use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
@@ -55,7 +56,12 @@ impl fmt::Debug for AttributeType {
     }
 }
 
-impl AttributeType {}
+impl AttributeType {
+    const fn new_const_(vertex: TypeVertex) -> Self {
+        // note: unchecked!
+        Self { vertex }
+    }
+}
 
 impl Hkt for AttributeType {
     type HktSelf<'a> = AttributeType;
@@ -97,6 +103,7 @@ impl primitive::prefix::Prefix for AttributeType {
 }
 
 impl TypeAPI for AttributeType {
+    const MIN: Self = Self::new_const_(TypeVertex::new(Prefix::VertexAttributeType.prefix_id(), TypeID::MIN));
     fn new(vertex: TypeVertex) -> AttributeType {
         Self::from_vertex(vertex).unwrap()
     }

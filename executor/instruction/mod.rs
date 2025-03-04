@@ -6,8 +6,10 @@
 
 use std::{collections::HashMap, fmt, marker::PhantomData, ops::Bound};
 
+use itertools::{Itertools, MinMaxResult};
+
 use ::iterator::minmax_or;
-use answer::{variable_value::VariableValue, Thing, Type};
+use answer::{Thing, Type, variable_value::VariableValue};
 use compiler::{
     executable::match_::instructions::{
         CheckInstruction, CheckVertex, ConstraintInstruction, VariableMode, VariableModes,
@@ -20,8 +22,8 @@ use concept::{
     type_::{OwnerAPI, PlayerAPI},
 };
 use encoding::{
-    value::{value::Value, ValueEncodable},
     AsBytes,
+    value::{value::Value, ValueEncodable},
 };
 use error::unimplemented_feature;
 use ir::{
@@ -31,7 +33,7 @@ use ir::{
     },
     pipeline::ParameterRegistry,
 };
-use itertools::{Itertools, MinMaxResult};
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -168,6 +170,7 @@ impl InstructionExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         match self {
             Self::Is(executor) => executor.get_iterator(context, row),
@@ -181,13 +184,13 @@ impl InstructionExecutor {
             Self::RelatesReverse(executor) => executor.get_iterator(context, row),
             Self::Plays(executor) => executor.get_iterator(context, row),
             Self::PlaysReverse(executor) => executor.get_iterator(context, row),
-            Self::Isa(executor) => executor.get_iterator(context, row),
-            Self::IsaReverse(executor) => executor.get_iterator(context, row),
-            Self::Has(executor) => executor.get_iterator(context, row),
-            Self::HasReverse(executor) => executor.get_iterator(context, row),
-            Self::Links(executor) => executor.get_iterator(context, row),
-            Self::LinksReverse(executor) => executor.get_iterator(context, row),
-            Self::IndexedRelation(executor) => executor.get_iterator(context, row),
+            Self::Isa(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::IsaReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Has(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::HasReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Links(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::LinksReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::IndexedRelation(executor) => executor.get_iterator(context, row, storage_counters),
         }
     }
 
@@ -539,7 +542,7 @@ impl<T> Checker<T> {
                         None => make_const_extractor(&CheckVertex::Variable(type_var), row, context),
                     };
                     let types = types.clone();
-                    filters.push(Box::new(move |value| Ok(types.contains(type_(value).as_type()))));
+                    filters.push(Box::new(move |value| Ok(types.contains(&type_(value).as_type()))));
                 }
 
                 &CheckInstruction::Sub { sub_kind, ref subtype, ref supertype } => {
@@ -561,12 +564,12 @@ impl<T> Checker<T> {
                             let supertype = supertype(value);
                             match sub_kind {
                                 SubKind::Subtype => subtype.as_type().is_transitive_subtype_of(
-                                    supertype.as_type(),
+                                    &supertype.as_type(),
                                     &*snapshot,
                                     thing_manager.type_manager(),
                                 ),
                                 SubKind::Exact => subtype.as_type().is_direct_subtype_of(
-                                    supertype.as_type(),
+                                    &supertype.as_type(),
                                     &*snapshot,
                                     thing_manager.type_manager(),
                                 ),
@@ -670,7 +673,7 @@ impl<T> Checker<T> {
                         move |value| {
                             let actual = thing(value).as_thing().type_();
                             let expected = type_(value);
-                            if isa_kind == IsaKind::Exact && &actual != expected.as_type() {
+                            if isa_kind == IsaKind::Exact && actual != *expected.as_type() {
                                 Ok(false)
                             } else {
                                 actual.is_transitive_subtype_of(

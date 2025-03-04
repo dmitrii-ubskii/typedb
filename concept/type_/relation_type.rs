@@ -19,6 +19,7 @@ use encoding::{
     value::label::Label,
     Prefixed,
 };
+use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
@@ -59,7 +60,11 @@ impl fmt::Debug for RelationType {
     }
 }
 
-impl RelationType {}
+impl RelationType {
+    const fn new_const_(vertex: TypeVertex) -> Self {
+        Self { vertex }
+    }
+}
 
 impl Hkt for RelationType {
     type HktSelf<'a> = RelationType;
@@ -91,6 +96,7 @@ impl PrefixedTypeVertexEncoding for RelationType {
 }
 
 impl TypeAPI for RelationType {
+    const MIN: Self = Self::new_const_(TypeVertex::new(Prefix::VertexRelationType.prefix_id(), TypeID::MIN));
     fn new(vertex: TypeVertex) -> RelationType {
         Self::from_vertex(vertex).unwrap()
     }

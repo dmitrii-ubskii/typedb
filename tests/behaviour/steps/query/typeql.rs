@@ -25,6 +25,8 @@ use executor::{
 use itertools::Itertools;
 use lending_iterator::LendingIterator;
 use macro_rules_attribute::apply;
+use concept::error::ConceptReadError;
+use concept::thing::attribute::Attribute;
 use query::error::QueryError;
 use test_utils::assert_matches;
 
@@ -38,6 +40,7 @@ use crate::{
     util::{iter_table_map, list_contains_json, parse_json},
     BehaviourTestExecutionError, Context,
 };
+use resource::profile::StorageCounters;
 
 fn row_batch_result_to_answer(
     batch: Batch,
@@ -373,13 +376,12 @@ fn does_key_match(var: &str, id: &str, var_value: &VariableValue<'_>, context: &
                 .unwrap()
                 .unwrap_or_else(|| panic!("expected the key type {key_label} to have a value type")),
         );
-        let mut has_iter = match thing {
-            Thing::Entity(entity) => entity.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type),
-            Thing::Relation(relation) => relation.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type),
+        let mut attr_iter: Box<dyn Iterator<Item=Result<(Attribute, u64), Box<ConceptReadError>>>> = match thing {
+            Thing::Entity(entity) => Box::new(entity.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, StorageCounters::DISABLED)),
+            Thing::Relation(relation) => Box::new(relation.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, StorageCounters::DISABLED)),
             Thing::Attribute(_) => return false,
         };
-        let (attr, count) = has_iter
-            .next()
+        let (attr, count) = Iterator::next(&mut attr_iter)
             .unwrap_or_else(|| panic!("no attributes of type {key_label} found for {var}: {thing}"))
             .unwrap();
         assert_eq!(count, 1, "expected exactly one {key_label} for {var}, found {count}");
@@ -387,7 +389,7 @@ fn does_key_match(var: &str, id: &str, var_value: &VariableValue<'_>, context: &
         if actual.unwrap() != expected {
             return false;
         }
-        assert_matches!(has_iter.next(), None, "multiple keys found for {}", var);
+        assert_matches!(attr_iter.next(), None, "multiple keys found for {}", var);
     });
     true
 }

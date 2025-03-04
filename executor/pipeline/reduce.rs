@@ -11,12 +11,12 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::Batch,
+    ExecutionInterrupt,
     pipeline::{
-        stage::{ExecutionContext, StageAPI, StageIterator},
-        PipelineExecutionError, WrittenRowsIterator,
+        PipelineExecutionError,
+        stage::{ExecutionContext, StageAPI, StageIterator}, WrittenRowsIterator,
     },
     reduce_executor::GroupedReducer,
-    ExecutionInterrupt,
 };
 
 pub struct ReduceStageExecutor<PreviousStage> {

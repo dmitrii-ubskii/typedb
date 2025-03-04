@@ -6,6 +6,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use itertools::Itertools;
+
 use encoding::{
     graph::{
         definition::definition_key::DefinitionKey,
@@ -13,8 +15,8 @@ use encoding::{
     },
     value::{label::Label, value_type::ValueType},
 };
-use itertools::Itertools;
 use primitive::maybe_owns::MaybeOwns;
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -22,8 +24,8 @@ use crate::{
     thing::{
         object::ObjectAPI,
         thing_manager::{
-            validation::{validation::DataValidation, DataValidationError},
             ThingManager,
+            validation::{DataValidationError, validation::DataValidation},
         },
     },
     type_::{
@@ -32,33 +34,33 @@ use crate::{
             AnnotationRegex, AnnotationUnique, AnnotationValues,
         },
         attribute_type::{AttributeType, AttributeTypeAnnotation},
+        Capability,
         constraint::{
-            filter_by_constraint_category, filter_by_scope, filter_out_operation_time_unchecked_constraints,
-            get_abstract_constraints, get_distinct_constraints, get_operation_time_checked_constraints,
-            get_range_constraints, get_regex_constraints, get_values_constraints, type_get_constraints_closest_source,
-            CapabilityConstraint, Constraint, ConstraintDescription, ConstraintScope, TypeConstraint,
+            CapabilityConstraint, Constraint, ConstraintDescription,
+            ConstraintScope, filter_by_constraint_category, filter_by_scope,
+            filter_out_operation_time_unchecked_constraints, get_abstract_constraints, get_distinct_constraints, get_operation_time_checked_constraints,
+            get_range_constraints, get_regex_constraints, get_values_constraints, type_get_constraints_closest_source, TypeConstraint,
         },
         entity_type::EntityType,
+        KindAPI,
         object_type::ObjectType,
+        Ordering,
+        OwnerAPI,
         owns::{Owns, OwnsAnnotation},
-        plays::Plays,
-        relates::{Relates, RelatesAnnotation},
-        relation_type::RelationType,
-        role_type::RoleType,
-        type_manager::{
+        PlayerAPI,
+        plays::Plays, relates::{Relates, RelatesAnnotation}, relation_type::RelationType, role_type::RoleType, type_manager::{
             type_reader::TypeReader,
+            TypeManager,
             validation::{
+                SchemaValidationError,
                 validation::{
                     get_label_or_schema_err, get_opt_label_or_schema_err, validate_role_name_uniqueness_non_transitive,
                     validate_role_type_supertype_ordering_match, validate_sibling_owns_ordering_match_for_type,
                     validate_type_declared_constraints_narrowing_of_supertype_constraints,
                     validate_type_supertype_abstractness,
                 },
-                SchemaValidationError,
             },
-            TypeManager,
-        },
-        Capability, KindAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI,
+        }, TypeAPI,
     },
 };
 
@@ -2732,7 +2734,7 @@ impl OperationTimeValidation {
         match T::KIND {
             Kind::Entity => {
                 let entity_type = EntityType::new(type_.vertex());
-                let mut iterator = thing_manager.get_entities_in(snapshot, entity_type);
+                let mut iterator = thing_manager.get_entities_in(snapshot, entity_type, StorageCounters::DISABLED);
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2740,7 +2742,7 @@ impl OperationTimeValidation {
             }
             Kind::Attribute => {
                 let attribute_type = AttributeType::new(type_.vertex());
-                let mut iterator = thing_manager.get_attributes_in(snapshot, attribute_type)?;
+                let mut iterator = thing_manager.get_attributes_in(snapshot, attribute_type, StorageCounters::DISABLED)?;
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2748,7 +2750,7 @@ impl OperationTimeValidation {
             }
             Kind::Relation => {
                 let relation_type = RelationType::new(type_.vertex());
-                let mut iterator = thing_manager.get_relations_in(snapshot, relation_type);
+                let mut iterator = thing_manager.get_relations_in(snapshot, relation_type, StorageCounters::DISABLED);
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2770,9 +2772,9 @@ impl OperationTimeValidation {
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut owner_iterator = thing_manager.get_objects_in(snapshot, owner_type);
+        let mut owner_iterator = thing_manager.get_objects_in(snapshot, owner_type, StorageCounters::DISABLED);
         while let Some(instance) = owner_iterator.next().transpose()? {
-            let mut iterator = instance.get_has_type_unordered(snapshot, thing_manager, attribute_type);
+            let mut iterator = instance.get_has_type_unordered(snapshot, thing_manager, attribute_type, StorageCounters::DISABLED);
 
             if iterator.next().is_some() {
                 has_instances = true;
@@ -2791,9 +2793,9 @@ impl OperationTimeValidation {
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut player_iterator = thing_manager.get_objects_in(snapshot, player_type);
+        let mut player_iterator = thing_manager.get_objects_in(snapshot, player_type, StorageCounters::DISABLED);
         while let Some(instance) = player_iterator.next().transpose()? {
-            let mut iterator = instance.get_relations_by_role(snapshot, thing_manager, role_type);
+            let mut iterator = instance.get_relations_by_role(snapshot, thing_manager, role_type, StorageCounters::DISABLED);
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2812,9 +2814,9 @@ impl OperationTimeValidation {
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut relation_iterator = thing_manager.get_relations_in(snapshot, relation_type);
+        let mut relation_iterator = thing_manager.get_relations_in(snapshot, relation_type, StorageCounters::DISABLED);
         while let Some(instance) = relation_iterator.next().transpose()? {
-            let mut iterator = instance.get_players_role_type(snapshot, thing_manager, role_type);
+            let mut iterator = instance.get_players_role_type(snapshot, thing_manager, role_type, StorageCounters::DISABLED);
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2844,7 +2846,7 @@ impl OperationTimeValidation {
         );
 
         for entity_type in entity_types {
-            let mut entity_iterator = thing_manager.get_entities_in(snapshot, *entity_type);
+            let mut entity_iterator = thing_manager.get_entities_in(snapshot, *entity_type, StorageCounters::DISABLED);
             if let Some(res) = entity_iterator.next() {
                 if let Err(source) = res {
                     return Err(Box::new(DataValidationError::ConceptRead { typedb_source: source }));
@@ -2889,7 +2891,7 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type);
+            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, StorageCounters::DISABLED);
             if let Some(res) = relation_iterator.next() {
                 if let Err(source) = res {
                     return Err(Box::new(DataValidationError::ConceptRead { typedb_source: source }));
@@ -2941,7 +2943,7 @@ impl OperationTimeValidation {
 
         for attribute_type in attribute_types {
             let attribute_iterator = thing_manager
-                .get_attributes_in(snapshot, *attribute_type)
+                .get_attributes_in(snapshot, *attribute_type, StorageCounters::DISABLED)
                 .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
             for attribute in attribute_iterator {
                 let attribute =
@@ -3138,7 +3140,7 @@ impl OperationTimeValidation {
         let mut unique_values = HashMap::new();
 
         for object_type in object_types {
-            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type);
+            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, StorageCounters::DISABLED);
             while let Some(object) = object_iterator
                 .next()
                 .transpose()
@@ -3149,7 +3151,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let has_attribute_iterator = object.get_has_unordered(snapshot, thing_manager);
+                let has_attribute_iterator = object.get_has_unordered(snapshot, thing_manager, StorageCounters::DISABLED);
                 for has_count in has_attribute_iterator {
                     let (has, count) = has_count
                         .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
@@ -3388,7 +3390,7 @@ impl OperationTimeValidation {
         );
 
         for object_type in object_types {
-            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type);
+            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, StorageCounters::DISABLED);
             while let Some(object) = object_iterator
                 .next()
                 .transpose()
@@ -3399,7 +3401,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let relations_iterator = object.get_relations_roles(snapshot, thing_manager);
+                let relations_iterator = object.get_relations_roles(snapshot, thing_manager, StorageCounters::DISABLED);
                 for relation in relations_iterator {
                     let (_, role_type, count) = relation
                         .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
@@ -3500,7 +3502,7 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type);
+            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, StorageCounters::DISABLED);
             while let Some(relation) = relation_iterator
                 .next()
                 .transpose()
@@ -3511,7 +3513,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let role_players_iterator = relation.get_players(snapshot, thing_manager);
+                let role_players_iterator = relation.get_players(snapshot, thing_manager, StorageCounters::DISABLED);
 
                 for role_players in role_players_iterator {
                     let (role_player, count) = role_players

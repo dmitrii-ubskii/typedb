@@ -25,6 +25,7 @@ use keyspace::KeyspaceDeleteError;
 use lending_iterator::LendingIterator;
 use logger::{error, result::ResultExt};
 use resource::constants::{snapshot::BUFFER_VALUE_INLINE, storage::WATERMARK_WAIT_INTERVAL_MICROSECONDS};
+use resource::profile::StorageCounters;
 
 use crate::{
     durability_client::{DurabilityClient, DurabilityClientError},
@@ -360,6 +361,7 @@ impl<Durability> MVCCStorage<Durability> {
             iterator_pool,
             &KeyRange::new_within(StorageKey::<0>::Reference(key), false),
             open_sequence_number,
+            StorageCounters::DISABLED.clone() // gets are not measured right now
         );
         loop {
             match iterator.next().transpose()? {
@@ -375,8 +377,9 @@ impl<Durability> MVCCStorage<Durability> {
         iterpool: &IteratorPool,
         range: &KeyRange<StorageKey<'this, PS>>,
         open_sequence_number: SequenceNumber,
+        storage_counters: StorageCounters,
     ) -> MVCCRangeIterator {
-        MVCCRangeIterator::new(self, iterpool, range, open_sequence_number)
+        MVCCRangeIterator::new(self, iterpool, range, open_sequence_number, storage_counters)
     }
 
     pub fn snapshot_watermark(&self) -> SequenceNumber {

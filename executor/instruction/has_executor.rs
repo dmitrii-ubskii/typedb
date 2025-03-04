@@ -6,12 +6,16 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fmt, iter,
+    fmt,
     ops::Bound,
     sync::Arc,
 };
+use std::cmp::Ordering;
+use std::iter::Iterator;
 
-use answer::{variable_value::VariableValue, Thing, Type};
+use itertools::Itertools;
+
+use answer::{Thing, Type, variable_value::VariableValue};
 use compiler::{executable::match_::instructions::thing::HasInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
@@ -22,22 +26,28 @@ use concept::{
     },
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
-use itertools::{kmerge_by, Itertools, KMergeBy};
+use concept::thing::attribute::Attribute;
+use concept::thing::ThingAPI;
+use encoding::graph::type_::vertex::TypeVertexEncoding;
+use lending_iterator::{LendingIterator, Peekable};
+use lending_iterator::kmerge::KMergeBy;
 use primitive::Bounds;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        has_reverse_executor::HasReverseExecutor,
-        iterator::{SortedTupleIterator, TupleIterator},
-        min_max_types,
-        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        BinaryIterateMode,
+        Checker,
+        FilterFn,
+        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, min_max_types, tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions}, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::iterator::TupleSeekable;
+use crate::instruction::tuple::{tuple_attribute_owner_to_has_canonical, tuple_owner_attribute_to_has_canonical, TupleOrderingFn, TupleResult, TupleToHasFn, unsafe_compare_result_tuple};
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -58,10 +68,8 @@ impl fmt::Debug for HasExecutor {
     }
 }
 
-pub(super) type HasTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<HasFilterMapFn>>, HasToTupleFn>;
-
-pub(crate) type HasUnboundedTupleIteratorSingle = HasTupleIterator<HasIterator>;
-pub(crate) type HasUnboundedTupleIteratorMerged = HasTupleIterator<KMergeBy<HasIterator, HasOrderingFn>>;
+pub(crate) type HasTupleIteratorSingle = HasTupleIterator<HasIterator>;
+pub(crate) type HasTupleIteratorMerged = KMergeBy<HasTupleIterator<HasIterator>, TupleOrderingFn>;
 
 pub(super) type HasFilterFn = FilterFn<(Has, u64)>;
 pub(super) type HasFilterMapFn = FilterMapUnchangedFn<(Has, u64)>;
@@ -71,10 +79,6 @@ pub(super) const EXTRACT_OWNER: HasVariableValueExtractor = |(has, _)| VariableV
 pub(super) const EXTRACT_ATTRIBUTE: HasVariableValueExtractor =
     |(has, _)| VariableValue::Thing(Thing::Attribute(has.attribute()));
 
-pub(crate) type HasOrderingFn = for<'a, 'b> fn(
-    &'a Result<(Has, u64), Box<ConceptReadError>>,
-    &'b Result<(Has, u64), Box<ConceptReadError>>,
-) -> bool;
 
 impl HasExecutor {
     pub(crate) fn new<Snapshot: ReadableSnapshot>(
@@ -122,7 +126,7 @@ impl HasExecutor {
         let owner_cache = if iterate_mode == BinaryIterateMode::UnboundInverted {
             let mut cache = Vec::new();
             for type_ in owner_attribute_types.keys() {
-                let instances: Vec<_> = thing_manager.get_objects_in(snapshot, type_.as_object_type()).try_collect()?;
+                let instances: Vec<_> = Itertools::try_collect(thing_manager.get_objects_in(snapshot, type_.as_object_type(), StorageCounters::DISABLED))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -151,10 +155,11 @@ impl HasExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let filter = self.filter_fn.clone();
         let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<HasFilterMapFn> = Box::new(move |item| match filter(&item) {
+        let filter_for_row: Arc<HasFilterMapFn> = Arc::new(move |item| match filter(&item) {
             Ok(true) => match check(&item) {
                 Ok(true) | Err(_) => Some(item),
                 Ok(false) => None,
@@ -172,10 +177,15 @@ impl HasExecutor {
 
                 // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
                 //        we should determine which strategy we want long-term
-                let as_tuples: HasUnboundedTupleIteratorSingle = thing_manager
-                    .get_has_from_owner_type_range_unordered(snapshot, &self.owner_type_range)
-                    .filter_map(filter_for_row)
-                    .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_owner_attribute);
+                let has_iterator: HasIterator  = thing_manager
+                    .get_has_from_owner_type_range_unordered(snapshot, &self.owner_type_range, storage_counters);
+                let as_tuples = HasTupleIterator::new(
+                    has_iterator,
+                    filter_for_row,
+                    has_to_tuple_owner_attribute,
+                    tuple_owner_attribute_to_has_canonical,
+                    FixedHasBounds::None,
+                );
                 Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -191,11 +201,15 @@ impl HasExecutor {
                         thing_manager,
                         // TODO: this should be just the types owned by the one instance's type in the cache!
                         &self.attribute_type_range,
+                        storage_counters,
                     );
-                    let as_tuples: HasUnboundedTupleIteratorSingle =
-                        iterator
-                            .filter_map(filter_for_row)
-                            .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_attribute_owner);
+                    let as_tuples = HasTupleIterator::new(
+                        iterator,
+                        filter_for_row,
+                        has_to_tuple_attribute_owner,
+                        tuple_attribute_owner_to_has_canonical,
+                        FixedHasBounds::Owner(*owner),
+                    );
                     Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
                         as_tuples,
                         self.tuple_positions.clone(),
@@ -207,17 +221,25 @@ impl HasExecutor {
                     let owners = self.owner_cache.as_ref().unwrap().iter();
                     let iterators: Vec<_> = owners
                         .map(|object| {
-                            object.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
+                            let iterator = object.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range, storage_counters.clone());
+                            let filter = filter_for_row.clone();
+                            HasTupleIterator::new(
+                                iterator,
+                                filter,
+                                has_to_tuple_attribute_owner,
+                                tuple_attribute_owner_to_has_canonical,
+                                FixedHasBounds::Owner(*object)
+                            )
                         })
                         .collect();
 
                     // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
-                    let merged: KMergeBy<HasIterator, HasOrderingFn> =
-                        kmerge_by(iterators, compare_has_by_attribute_then_owner);
-                    let as_tuples: HasUnboundedTupleIteratorMerged =
-                        merged.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
+
+                    // TODO: this will be brittle, since we're using an unsafe comparison and unwrapping tuple comparisons.
+                    let merged_tuples: KMergeBy<HasTupleIterator<HasIterator>, TupleOrderingFn> =
+                        KMergeBy::new(iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::HasMerged(SortedTupleIterator::new(
-                        as_tuples,
+                        merged_tuples,
                         self.tuple_positions.clone(),
                         &self.variable_modes,
                     )))
@@ -229,15 +251,20 @@ impl HasExecutor {
                 // TODO: inject value ranges
                 let iterator = match row.get(owner) {
                     VariableValue::Thing(Thing::Entity(entity)) => {
-                        entity.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
+                        entity.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range, storage_counters)
                     }
                     VariableValue::Thing(Thing::Relation(relation)) => {
-                        relation.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
+                        relation.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range, storage_counters)
                     }
                     _ => unreachable!("Has owner must be an entity or relation."),
                 };
-                let as_tuples: HasUnboundedTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
+                let as_tuples = HasTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    has_to_tuple_attribute_owner,
+                    tuple_attribute_owner_to_has_canonical,
+                    FixedHasBounds::Owner(row.get(owner).as_thing().as_object())
+                );
                 Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -251,6 +278,73 @@ impl HasExecutor {
 impl fmt::Display for HasExecutor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "[{}], mode={}", &self.has, &self.iterate_mode)
+    }
+}
+
+pub(crate) enum FixedHasBounds {
+    None,
+    Owner(Object),
+    Attribute(Attribute),
+}
+
+pub(super) struct HasTupleIterator<Iter: LendingIterator> {
+    inner: Peekable<Iter>,
+    filter_map: Arc<HasFilterMapFn>,
+    to_tuple_fn: HasToTupleFn,
+    from_tuple_fn: TupleToHasFn,
+    fixed_bounds: FixedHasBounds,
+}
+
+impl<Iter> HasTupleIterator<Iter>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(Has, u64), Box<ConceptReadError>>> +
+    for<'a> LendingIterator<Item<'a>=Result<(Has, u64), Box<ConceptReadError>>>
+{
+    pub(super) fn new(
+        inner: Iter,
+        filter_map: Arc<HasFilterMapFn>,
+        to_tuple_fn: HasToTupleFn,
+        from_tuple_fn: TupleToHasFn,
+        fixed_bounds: FixedHasBounds,
+    ) -> Self {
+        Self {
+            inner: Peekable::new(inner),
+            filter_map,
+            to_tuple_fn,
+            from_tuple_fn,
+            fixed_bounds,
+        }
+    }
+}
+
+impl<Iter> LendingIterator for HasTupleIterator<Iter>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(Has, u64), Box<ConceptReadError>>> +
+        for<'a> LendingIterator<Item<'a>=Result<(Has, u64), Box<ConceptReadError>>>,
+{
+    type Item<'a> = TupleResult<'static>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        // TODO: can this be simplified with something like `.by_ref()` on iterators?
+        while let Some(next) = self.inner.next() {
+            if let Some(filter_mapped) = (self.filter_map)(next) {
+                return Some((self.to_tuple_fn)(filter_mapped));
+            }
+        }
+        None
+    }
+}
+
+impl<Iter> TupleSeekable for HasTupleIterator<Iter>
+    where
+        Iter: for<'a> lending_iterator::Seekable<Result<(Has, u64), Box<ConceptReadError>>> +
+            for<'a> LendingIterator<Item<'a>=Result<(Has, u64), Box<ConceptReadError>>> +
+{
+    fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
+        let target_has = (self.from_tuple_fn)(&target, &self.fixed_bounds);
+        let target_pair = (target_has, 0);
+        lending_iterator::Seekable::seek(&mut self.inner, &Ok(target_pair.clone()));
+        Ok(())
     }
 }
 
@@ -272,12 +366,12 @@ fn create_has_filter_attributes(attribute_types: Arc<BTreeSet<Type>>) -> Arc<Has
 }
 
 fn compare_has_by_attribute_then_owner(
-    left: &Result<(Has, u64), Box<ConceptReadError>>,
-    right: &Result<(Has, u64), Box<ConceptReadError>>,
-) -> bool {
+    (left, right): (&Result<(Has, u64), Box<ConceptReadError>>, &Result<(Has, u64), Box<ConceptReadError>>),
+) -> Ordering {
     if let (Ok((has_1, _)), Ok((has_2, _))) = (left, right) {
-        (has_1.attribute(), has_1.owner()) < (has_2.attribute(), has_2.owner())
+        (has_1.attribute(), has_1.owner()).cmp(&(has_2.attribute(), has_2.owner()))
     } else {
-        false
+        // arbitrary
+        Ordering::Equal
     }
 }

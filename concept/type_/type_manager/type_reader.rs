@@ -10,20 +10,21 @@ use bytes::Bytes;
 use encoding::{
     error::EncodingError,
     graph::{
-        definition::{definition_key::DefinitionKey, r#struct::StructDefinition, DefinitionValueEncoding},
+        definition::{definition_key::DefinitionKey, DefinitionValueEncoding, r#struct::StructDefinition},
         type_::{
+            CapabilityKind,
             edge::{TypeEdge, TypeEdgeEncoding},
             index::{IdentifierIndex, LabelToTypeVertexIndex, NameToStructDefinitionIndex},
             property::{TypeEdgeProperty, TypeEdgePropertyEncoding, TypeVertexProperty, TypeVertexPropertyEncoding},
             vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
-            CapabilityKind,
         },
     },
+    Keyable,
     layout::infix::Infix,
     value::{label::Label, value_type::ValueType},
-    Keyable,
 };
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
+use resource::profile::StorageCounters;
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
     snapshot::ReadableSnapshot,
@@ -37,18 +38,18 @@ use crate::{
             AnnotationIndependent, AnnotationKey, AnnotationRange, AnnotationRegex, AnnotationUnique, AnnotationValues,
         },
         attribute_type::AttributeType,
+        Capability,
         constraint::{
-            get_owns_default_constraints, get_plays_default_constraints, get_relates_default_constraints,
-            CapabilityConstraint, Constraint, ConstraintScope, TypeConstraint,
+            CapabilityConstraint, Constraint, ConstraintScope,
+            get_owns_default_constraints, get_plays_default_constraints, get_relates_default_constraints, TypeConstraint,
         },
         entity_type::EntityType,
+        KindAPI,
         object_type::ObjectType,
+        Ordering,
         owns::Owns,
         relates::Relates,
-        relation_type::RelationType,
-        role_type::RoleType,
-        sub::Sub,
-        Capability, KindAPI, Ordering, TypeAPI,
+        relation_type::RelationType, role_type::RoleType, sub::Sub, TypeAPI,
     },
 };
 
@@ -85,7 +86,7 @@ impl TypeReader {
         name_with_colon.push(':');
         let key = LabelToTypeVertexIndex::build(&Label::build(name_with_colon.as_str(), None)).into_storage_key();
         let vec = snapshot
-            .iterate_range(&KeyRange::new_within(key, IdentifierIndex::<TypeVertex>::FIXED_WIDTH_ENCODING))
+            .iterate_range(&KeyRange::new_within(key, IdentifierIndex::<TypeVertex>::FIXED_WIDTH_ENCODING), StorageCounters::DISABLED)
             .collect_cloned_vec(|_key, value| match RoleType::from_bytes(Bytes::copy(value)) {
                 Err(_) => None,
                 Ok(role_type) => Some(role_type),
@@ -122,7 +123,7 @@ impl TypeReader {
             .iterate_range(&KeyRange::new_within(
                 DefinitionKey::build_prefix(StructDefinition::PREFIX),
                 StructDefinition::PREFIX.fixed_width_keys(),
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_hashmap(|key, value| {
                 (DefinitionKey::new(Bytes::Array(key.bytes().into())), StructDefinition::from_bytes(value))
             })
@@ -179,7 +180,7 @@ impl TypeReader {
 
     pub(crate) fn get_entity_types(snapshot: &impl ReadableSnapshot) -> Result<Vec<EntityType>, Box<ConceptReadError>> {
         snapshot
-            .iterate_range(&KeyRange::new_within(EntityType::prefix_for_kind(), EntityType::PREFIX.fixed_width_keys()))
+            .iterate_range(&KeyRange::new_within(EntityType::prefix_for_kind(), EntityType::PREFIX.fixed_width_keys()), StorageCounters::DISABLED)
             .collect_cloned_vec(|key, _| EntityType::new(TypeVertex::decode(Bytes::copy(key.bytes()))))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
@@ -191,7 +192,7 @@ impl TypeReader {
             .iterate_range(&KeyRange::new_within(
                 RelationType::prefix_for_kind(),
                 RelationType::PREFIX.fixed_width_keys(),
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_vec(|key, _| RelationType::new(TypeVertex::decode(Bytes::copy(key.bytes()))))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
@@ -200,14 +201,14 @@ impl TypeReader {
         snapshot: &impl ReadableSnapshot,
     ) -> Result<Vec<AttributeType>, Box<ConceptReadError>> {
         snapshot
-            .iterate_range(&KeyRange::new_within(AttributeType::prefix_for_kind(), false))
+            .iterate_range(&KeyRange::new_within(AttributeType::prefix_for_kind(), false), StorageCounters::DISABLED)
             .collect_cloned_vec(|key, _| AttributeType::new(TypeVertex::decode(Bytes::copy(key.bytes()))))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
 
     pub(crate) fn get_role_types(snapshot: &impl ReadableSnapshot) -> Result<Vec<RoleType>, Box<ConceptReadError>> {
         snapshot
-            .iterate_range(&KeyRange::new_within(RoleType::prefix_for_kind(), RoleType::PREFIX.fixed_width_keys()))
+            .iterate_range(&KeyRange::new_within(RoleType::prefix_for_kind(), RoleType::PREFIX.fixed_width_keys()), StorageCounters::DISABLED)
             .collect_cloned_vec(|key, _| RoleType::new(TypeVertex::decode(Bytes::copy(key.bytes()))))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
@@ -225,7 +226,7 @@ impl TypeReader {
             .iterate_range(&KeyRange::new_within(
                 Sub::prefix_for_canonical_edges_from(subtype),
                 TypeEdge::FIXED_WIDTH_ENCODING,
-            ))
+            ), StorageCounters::DISABLED)
             .first_cloned()
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))?
             .map(|(key, _)| Sub::<T>::decode_canonical_edge(Bytes::Array(key.into_byte_array())).supertype()))
@@ -256,7 +257,7 @@ impl TypeReader {
             .iterate_range(&KeyRange::new_within(
                 Sub::prefix_for_reverse_edges_from(supertype),
                 TypeEdge::FIXED_WIDTH_ENCODING,
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_hashset(|key, _| {
                 Sub::<T>::decode_reverse_edge(Bytes::Reference(key.bytes()).into_owned()).subtype()
             })
@@ -295,7 +296,7 @@ impl TypeReader {
     ) -> Result<HashSet<CAP>, Box<ConceptReadError>> {
         let owns_prefix = CAP::prefix_for_canonical_edges_from(CAP::ObjectType::new(owner.into_vertex()));
         snapshot
-            .iterate_range(&KeyRange::new_within(owns_prefix, TypeEdge::FIXED_WIDTH_ENCODING))
+            .iterate_range(&KeyRange::new_within(owns_prefix, TypeEdge::FIXED_WIDTH_ENCODING), StorageCounters::DISABLED)
             .collect_cloned_hashset(|key, _| CAP::decode_canonical_edge(Bytes::Reference(key.bytes()).into_owned()))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
@@ -331,7 +332,7 @@ impl TypeReader {
     {
         let owns_prefix = CAP::prefix_for_reverse_edges_from(interface_type);
         snapshot
-            .iterate_range(&KeyRange::new_within(owns_prefix, TypeEdge::FIXED_WIDTH_ENCODING))
+            .iterate_range(&KeyRange::new_within(owns_prefix, TypeEdge::FIXED_WIDTH_ENCODING), StorageCounters::DISABLED)
             .collect_cloned_hashset(|key, _| CAP::decode_reverse_edge(Bytes::Array(key.bytes().into())))
             .map_err(|error| Box::new(ConceptReadError::SnapshotIterate { source: error }))
     }
@@ -515,7 +516,7 @@ impl TypeReader {
                 RangeEnd::EndPrefixInclusive(
                     TypeVertexProperty::new(type_.vertex(), Infix::ANNOTATION_MAX).into_storage_key(),
                 ),
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_hashset(|key, value| {
                 let annotation_key = TypeVertexProperty::decode(Bytes::Reference(key.bytes()));
                 let annotation = match annotation_key.infix() {
@@ -601,7 +602,7 @@ impl TypeReader {
                 RangeEnd::EndPrefixInclusive(
                     TypeEdgeProperty::new(type_edge, Infix::ANNOTATION_MAX).into_storage_key(),
                 ),
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_hashset(|key, value| {
                 let annotation_key = TypeEdgeProperty::decode(Bytes::Reference(key.bytes()));
                 let annotation = match annotation_key.infix() {

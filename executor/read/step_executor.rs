@@ -6,6 +6,9 @@
 
 use std::sync::Arc;
 
+use itertools::Itertools;
+use typeql::schema::definable::function::SingleSelector;
+
 use compiler::{
     executable::{
         function::{ExecutableFunction, ExecutableFunctionRegistry, ExecutableReturn, FunctionTablingType},
@@ -17,17 +20,13 @@ use compiler::{
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use error::{unimplemented_feature, UnimplementedFeature};
-use itertools::Itertools;
+use resource::profile::QueryProfile;
 use storage::snapshot::ReadableSnapshot;
-use typeql::schema::definable::function::SingleSelector;
 
-use crate::{
-    profile::QueryProfile,
-    read::{
-        collecting_stage_executor::CollectingStageExecutor, immediate_executor::ImmediateExecutor,
-        nested_pattern_executor::NestedPatternExecutor, pattern_executor::PatternExecutor,
-        stream_modifier::StreamModifierExecutor, tabled_call_executor::TabledCallExecutor,
-    },
+use crate::read::{
+    collecting_stage_executor::CollectingStageExecutor, immediate_executor::ImmediateExecutor,
+    nested_pattern_executor::NestedPatternExecutor, pattern_executor::PatternExecutor,
+    stream_modifier::StreamModifierExecutor, tabled_call_executor::TabledCallExecutor,
 };
 
 #[derive(Debug)]

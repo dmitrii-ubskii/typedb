@@ -15,10 +15,10 @@ use concept::thing::thing_manager::ThingManager;
 use error::typedb_error;
 use ir::pipeline::ParameterRegistry;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
-use typeql::common::Span;
 
 use crate::{
     document::ConceptDocument,
+    ExecutionInterrupt,
     pipeline::{
         delete::DeleteStageExecutor,
         fetch::FetchStageExecutor,
@@ -29,13 +29,11 @@ use crate::{
             DistinctStageExecutor, LimitStageExecutor, OffsetStageExecutor, RequireStageExecutor, SelectStageExecutor,
             SortStageExecutor,
         },
+        PipelineExecutionError,
         reduce::ReduceStageExecutor,
         stage::{ExecutionContext, ReadPipelineStage, StageAPI, WritePipelineStage},
-        update::UpdateStageExecutor,
-        PipelineExecutionError,
     },
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 pub enum Pipeline<Snapshot: ReadableSnapshot, Nonterminals: StageAPI<Snapshot>> {

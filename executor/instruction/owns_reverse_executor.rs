@@ -11,29 +11,32 @@ use std::{
     vec,
 };
 
+use itertools::Itertools;
+
 use answer::Type;
 use compiler::{executable::match_::instructions::type_::OwnsReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
-use itertools::Itertools;
+use lending_iterator::{AsLendingIterator, Peekable};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        BinaryIterateMode,
+        Checker,
         iterator::{SortedTupleIterator, TupleIterator},
         owns_executor::{
-            OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator, OwnsVariableValueExtractor, EXTRACT_ATTRIBUTE,
-            EXTRACT_OWNER,
+            EXTRACT_ATTRIBUTE, EXTRACT_OWNER, OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator,
+            OwnsVariableValueExtractor,
         },
-        plays_executor::PlaysExecutor,
-        tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
+        plays_executor::PlaysExecutor, tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions}, type_from_row_or_annotations, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
@@ -145,10 +148,10 @@ impl OwnsReverseExecutor {
                     })
                     .try_collect()?;
                 let iterator = owns.into_iter().flatten().map(Ok as _);
-                let as_tuples: OwnsReverseUnboundedSortedAttribute =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_attribute_owner as _);
+                let as_tuples = iterator.filter_map(filter_for_row).map(owns_to_tuple_attribute_owner as _);
+                let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::OwnsReverseUnbounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))
@@ -173,11 +176,10 @@ impl OwnsReverseExecutor {
                     .map(|object_type| (object_type, attribute_type));
 
                 let iterator = owns.sorted_by_key(|(owner, _)| *owner).map(Ok as _);
-                let as_tuples: OwnsReverseBoundedSortedOwner =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
-
+                let as_tuples  = iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
+                let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::OwnsReverseBounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))

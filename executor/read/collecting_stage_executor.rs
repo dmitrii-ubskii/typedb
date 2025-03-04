@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-use answer::{variable_value::VariableValue, Thing};
+use answer::{Thing, variable_value::VariableValue};
 use compiler::{
     executable::{
         modifiers::{DistinctExecutable, SortExecutable},

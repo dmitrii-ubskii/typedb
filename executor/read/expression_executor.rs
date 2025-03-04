@@ -6,11 +6,12 @@
 
 use std::{collections::HashMap, hash::Hash, sync::Arc};
 
-use answer::{variable_value::VariableValue, Thing};
+use answer::{Thing, variable_value::VariableValue};
 use compiler::annotation::expression::{
     compiled_expression::ExecutableExpression,
     instructions::{
         binary::{Binary, BinaryExpression, MathRemainderInteger},
+        ExpressionEvaluationError,
         list_operations::{ListConstructor, ListIndex, ListIndexRange},
         load_cast::{
             CastBinaryLeft, CastBinaryRight, CastLeftDecimalToDouble, CastLeftIntegerToDecimal,
@@ -23,7 +24,6 @@ use compiler::annotation::expression::{
         unary::{
             MathAbsDouble, MathAbsInteger, MathCeilDouble, MathFloorDouble, MathRoundDouble, Unary, UnaryExpression,
         },
-        ExpressionEvaluationError,
     },
 };
 use encoding::value::value::{NativeValueConvertible, Value};

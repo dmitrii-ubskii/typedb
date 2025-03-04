@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bytes::util::HexBytesFormatter;
 use encoding::value::{value::Value, value_type::ValueType};
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -17,17 +18,17 @@ use crate::{
         object::{Object, ObjectAPI},
         relation::Relation,
         thing_manager::{
-            validation::{
-                validation::{get_label_or_data_err, DataValidation},
-                DataValidationError,
-            },
             ThingManager,
+            validation::{
+                DataValidationError,
+                validation::{DataValidation, get_label_or_data_err},
+            },
         },
         ThingAPI,
     },
     type_::{
         attribute_type::AttributeType, constraint::Constraint, entity_type::EntityType, object_type::ObjectType,
-        relation_type::RelationType, role_type::RoleType, ObjectTypeAPI, OwnerAPI, PlayerAPI, TypeAPI,
+        ObjectTypeAPI, OwnerAPI, PlayerAPI, relation_type::RelationType, role_type::RoleType, TypeAPI,
     },
 };
 
@@ -436,7 +437,7 @@ impl OperationTimeValidation {
             let owner = owner.into_object();
 
             for checked_owner_type in owner_and_subtypes {
-                let mut objects = thing_manager.get_objects_in(snapshot, checked_owner_type);
+                let mut objects = thing_manager.get_objects_in(snapshot, checked_owner_type, StorageCounters::DISABLED);
                 while let Some(object) = objects
                     .next()
                     .transpose()

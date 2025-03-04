@@ -9,6 +9,8 @@ use std::{
     sync::Arc,
 };
 
+use itertools::Itertools;
+
 use compiler::{
     annotation::{
         expression::block_compiler::compile_expressions, function::EmptyAnnotatedFunctionSignatures,
@@ -22,19 +24,19 @@ use concept::{
 };
 use encoding::graph::definition::definition_key_generator::DefinitionKeyGenerator;
 use executor::{
-    match_executor::MatchExecutor, pipeline::stage::ExecutionContext, profile::QueryProfile, row::MaybeOwnedRow,
-    ExecutionInterrupt,
+    ExecutionInterrupt, match_executor::MatchExecutor, pipeline::stage::ExecutionContext,
+    row::MaybeOwnedRow,
 };
 use function::function_manager::FunctionManager;
 use ir::{
     pipeline::{function_signature::HashMapFunctionSignatureIndex, ParameterRegistry},
     translation::{match_::translate_match, TranslationContext},
 };
-use itertools::Itertools;
 use lending_iterator::LendingIterator;
 use query::query_manager::QueryManager;
+use resource::profile::QueryProfile;
 use storage::{
-    durability_client::WALClient, sequence_number::SequenceNumber, snapshot::CommittableSnapshot, MVCCStorage,
+    durability_client::WALClient, MVCCStorage, sequence_number::SequenceNumber, snapshot::CommittableSnapshot,
 };
 use test_utils::assert_matches;
 use test_utils_concept::{load_managers, setup_concept_storage};

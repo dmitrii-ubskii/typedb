@@ -13,16 +13,16 @@ use concept::{
     type_::{
         annotation::{AnnotationCardinality, AnnotationIndependent},
         attribute_type::AttributeTypeAnnotation,
-        relates::RelatesAnnotation,
-        ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI,
+        ObjectTypeAPI,
+        Ordering, OwnerAPI, PlayerAPI, relates::RelatesAnnotation,
     },
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use storage::{
     durability_client::WALClient,
+    MVCCStorage,
     sequence_number::SequenceNumber,
     snapshot::{CommittableSnapshot, ReadableSnapshot},
-    MVCCStorage,
 };
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;

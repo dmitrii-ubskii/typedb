@@ -11,28 +11,31 @@ use std::{
     vec,
 };
 
-use answer::{variable_value::VariableValue, Type};
+use itertools::Itertools;
+
+use answer::{Type, variable_value::VariableValue};
 use compiler::{executable::match_::instructions::type_::OwnsInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{
-        attribute_type::AttributeType, object_type::ObjectType, type_manager::TypeManager, ObjectTypeAPI, OwnerAPI,
+        attribute_type::AttributeType, object_type::ObjectType, ObjectTypeAPI, OwnerAPI, type_manager::TypeManager,
     },
 };
 use error::UnimplementedFeature;
-use itertools::Itertools;
+use lending_iterator::{AsLendingIterator, Peekable};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        iterator::{SortedTupleIterator, TupleIterator},
-        owns_reverse_executor::OwnsReverseExecutor,
-        tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        BinaryIterateMode,
+        Checker,
+        FilterFn,
+        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, owns_reverse_executor::OwnsReverseExecutor, tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions}, type_from_row_or_annotations, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct OwnsExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
@@ -51,7 +54,8 @@ impl fmt::Debug for OwnsExecutor {
     }
 }
 
-pub(super) type OwnsTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<OwnsFilterMapFn>>, OwnsToTupleFn>;
+pub(super) type OwnsTupleIterator<I> =
+    NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<OwnsFilterMapFn>>, OwnsToTupleFn>>>;
 
 pub(super) type OwnsUnboundedSortedOwner = OwnsTupleIterator<
     iter::Map<
@@ -149,10 +153,10 @@ impl OwnsExecutor {
                     .map(|owner| self.get_owns_for_owner(snapshot, type_manager, *owner))
                     .try_collect()?;
                 let iterator = owns.into_iter().flatten().map(Ok as _);
-                let as_tuples: OwnsUnboundedSortedOwner =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
+                let as_tuples = iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
+                let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::OwnsUnbounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))
@@ -171,10 +175,10 @@ impl OwnsExecutor {
                 let owns = self.get_owns_for_owner(snapshot, type_manager, owner)?;
 
                 let iterator = owns.into_iter().sorted_by_key(|(owner, attribute)| (*attribute, *owner)).map(Ok as _);
-                let as_tuples: OwnsBoundedSortedAttribute =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_attribute_owner as _);
+                let as_tuples = iterator.filter_map(filter_for_row).map(owns_to_tuple_attribute_owner as _);
+                let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::OwnsBounded(SortedTupleIterator::new(
-                    as_tuples,
+                    lending_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))

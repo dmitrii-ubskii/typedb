@@ -8,6 +8,8 @@
 
 use std::{borrow::Cow, collections::HashMap, ops::Bound};
 
+use itertools::Itertools;
+
 use concept::{
     error::ConceptReadError,
     thing::{
@@ -21,10 +23,10 @@ use concept::{
         annotation::{AnnotationCardinality, AnnotationDistinct, AnnotationIndependent, AnnotationUnique},
         attribute_type::AttributeTypeAnnotation,
         object_type::ObjectType,
+        Ordering,
+        OwnerAPI,
         owns::OwnsAnnotation,
-        relates::RelatesAnnotation,
-        type_manager::TypeManager,
-        Ordering, OwnerAPI, PlayerAPI,
+        PlayerAPI, relates::RelatesAnnotation, type_manager::TypeManager,
     },
 };
 use encoding::{
@@ -37,7 +39,6 @@ use encoding::{
         value_type::{ValueType, ValueTypeCategory},
     },
 };
-use itertools::Itertools;
 use storage::{
     durability_client::WALClient,
     snapshot::{CommittableSnapshot, ReadSnapshot, WritableSnapshot, WriteSnapshot},

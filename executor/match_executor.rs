@@ -9,19 +9,19 @@ use std::sync::Arc;
 use compiler::executable::{function::ExecutableFunctionRegistry, match_::planner::match_executable::MatchExecutable};
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use lending_iterator::{adaptors::FlatMap, AsLendingIterator, LendingIterator};
+use resource::profile::QueryProfile;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
+    ExecutionInterrupt,
     pipeline::stage::ExecutionContext,
-    profile::QueryProfile,
     read::{
-        pattern_executor::PatternExecutor, tabled_functions::TabledFunctions, QueryPatternSuspensions,
+        pattern_executor::PatternExecutor, QueryPatternSuspensions, tabled_functions::TabledFunctions,
         TODO_REMOVE_create_executors_for_match,
     },
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 pub struct MatchExecutor {

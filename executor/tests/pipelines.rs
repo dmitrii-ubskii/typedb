@@ -12,13 +12,14 @@ use encoding::{
     value::{label::Label, value::Value},
 };
 use executor::{
-    pipeline::stage::{ExecutionContext, StageIterator},
     ExecutionInterrupt,
+    pipeline::stage::{ExecutionContext, StageIterator},
 };
 use function::function_manager::FunctionManager;
 use lending_iterator::LendingIterator;
 use query::{query_cache::QueryCache, query_manager::QueryManager};
-use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
+use resource::profile::StorageCounters;
+use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
 use test_utils::{assert_matches, TempDir};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
@@ -92,7 +93,7 @@ fn test_insert() {
     let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
     let attr_age_10 =
         context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
-    assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager).count());
+    assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
     snapshot.close_resources()
 }
 
@@ -128,7 +129,7 @@ fn test_insert_insert() {
 
     let snapshot = context.storage.clone().open_snapshot_read();
     let membership_type = context.type_manager.get_relation_type(&snapshot, &MEMBERSHIP_LABEL).unwrap().unwrap();
-    assert_eq!(context.thing_manager.get_relations_in(&snapshot, membership_type).count(), 1);
+    assert_eq!(Iterator::count(context.thing_manager.get_relations_in(&snapshot, membership_type, StorageCounters::DISABLED)), 1);
     snapshot.close_resources()
 }
 
@@ -299,7 +300,7 @@ fn test_match_delete_has() {
         let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
         let attr_age_10 =
             context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
-        assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager).count());
+        assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
         snapshot.close_resources()
     }
 
@@ -334,7 +335,7 @@ fn test_match_delete_has() {
         let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
         let attr_age_10 =
             context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
-        assert_eq!(0, attr_age_10.get_owners(&snapshot, &context.thing_manager).count());
+        assert_eq!(0, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
         snapshot.close_resources()
     }
 }
@@ -399,7 +400,7 @@ fn test_insert_match_insert() {
 
     let snapshot = context.storage.clone().open_snapshot_read();
     let membership_type = context.type_manager.get_relation_type(&snapshot, &MEMBERSHIP_LABEL).unwrap().unwrap();
-    assert_eq!(context.thing_manager.get_relations_in(&snapshot, membership_type).count(), 1);
+    assert_eq!(Iterator::count(context.thing_manager.get_relations_in(&snapshot, membership_type, StorageCounters::DISABLED)), 1);
     snapshot.close_resources()
 }
 

@@ -6,40 +6,50 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fmt, iter,
+    fmt,
     ops::Bound,
     sync::Arc,
 };
+use std::cmp::Ordering;
 
-use answer::{variable_value::VariableValue, Thing, Type};
+use itertools::Itertools;
+
+use answer::{Thing, Type, variable_value::VariableValue};
 use compiler::{executable::match_::instructions::thing::LinksInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     thing::{
-        relation::{LinksIterator, Relation, RolePlayer},
+        relation::{LinksIterator, Relation},
         thing_manager::ThingManager,
     },
     type_::{object_type::ObjectType, relation_type::RelationType, role_type::RoleType},
 };
-use itertools::{kmerge_by, Itertools, KMergeBy};
+use concept::thing::object::Object;
+use concept::thing::relation::Links;
+use lending_iterator::{LendingIterator, Peekable};
+use lending_iterator::kmerge::KMergeBy;
 use primitive::Bounds;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        iterator::{SortedTupleIterator, TupleIterator},
-        links_reverse_executor::LinksReverseExecutor,
-        min_max_types,
-        tuple::{
+        Checker
+        ,
+        FilterFn,
+        FilterMapUnchangedFn,
+        iterator::{SortedTupleIterator, TupleIterator}, LinksIterateMode, min_max_types, tuple::{
             links_to_tuple_player_relation_role, links_to_tuple_relation_player_role,
             links_to_tuple_role_relation_player, LinksToTupleFn, TuplePositions,
-        },
-        Checker, FilterFn, FilterMapUnchangedFn, LinksIterateMode, VariableModes,
+        }, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::has_executor::FixedHasBounds;
+use crate::instruction::iterator::TupleSeekable;
+use crate::instruction::tuple::{Tuple, tuple_player_relation_role_to_links_canonical, tuple_relation_player_role_to_links_canonical, tuple_role_relation_player_to_links_canonical, TupleOrderingFn, TupleResult, TupleToLinksFn, unsafe_compare_result_tuple};
 
 pub(crate) struct LinksExecutor {
     links: ir::pattern::constraint::Links<ExecutorVariable>,
@@ -56,7 +66,7 @@ pub(crate) struct LinksExecutor {
     filter_fn: Arc<LinksFilterFn>,
     relation_cache: Option<Vec<Relation>>,
 
-    checker: Checker<(Relation, RolePlayer, u64)>,
+    checker: Checker<(Links, u64)>,
 }
 
 impl fmt::Debug for LinksExecutor {
@@ -65,26 +75,24 @@ impl fmt::Debug for LinksExecutor {
     }
 }
 
-pub(super) type LinksTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<LinksFilterMapFn>>, LinksToTupleFn>;
 
 pub(crate) type LinksTupleIteratorSingle = LinksTupleIterator<LinksIterator>;
-pub(crate) type LinksTupleIteratorMerged = LinksTupleIterator<KMergeBy<LinksIterator, LinksOrderingFn>>;
+pub(crate) type LinksTupleIteratorMerged = KMergeBy<LinksTupleIterator<LinksIterator>, TupleOrderingFn>;
 
-pub(super) type LinksFilterFn = FilterFn<(Relation, RolePlayer, u64)>;
-pub(super) type LinksFilterMapFn = FilterMapUnchangedFn<(Relation, RolePlayer, u64)>;
+pub(super) type LinksFilterFn = FilterFn<(Links, u64)>;
+pub(super) type LinksFilterMapFn = FilterMapUnchangedFn<(Links, u64)>;
 
-type LinksVariableValueExtractor = fn(&(Relation, RolePlayer, u64)) -> VariableValue<'static>;
+type LinksVariableValueExtractor = fn(&(Links, u64)) -> VariableValue<'static>;
 pub(super) const EXTRACT_RELATION: LinksVariableValueExtractor =
-    |&(rel, _, _)| VariableValue::Thing(Thing::Relation(rel));
+    |(links, _)| VariableValue::Thing(Thing::Relation(links.relation()));
 pub(super) const EXTRACT_PLAYER: LinksVariableValueExtractor =
-    |(_, rp, _)| VariableValue::Thing(Thing::from(rp.player()));
+    |(links, _)| VariableValue::Thing(Thing::from(links.player()));
 pub(super) const EXTRACT_ROLE: LinksVariableValueExtractor =
-    |(_, rp, _)| VariableValue::Type(Type::RoleType(rp.role_type()));
+    |(links, _)| VariableValue::Type(Type::RoleType(links.role_type()));
 
 pub(crate) type LinksOrderingFn = for<'a, 'b> fn(
-    &'a Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-    &'b Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-) -> bool;
+    (&'a Result<(Links, u64), Box<ConceptReadError>>, &'b Result<(Links, u64), Box<ConceptReadError>>)
+) -> Ordering;
 
 impl LinksExecutor {
     pub(crate) fn new(
@@ -118,7 +126,7 @@ impl LinksExecutor {
             }
         };
 
-        let checker = Checker::<(Relation, RolePlayer, _)>::new(
+        let checker = Checker::<(Links, _)>::new(
             checks,
             HashMap::from([(relation, EXTRACT_RELATION), (player, EXTRACT_PLAYER), (role_type, EXTRACT_ROLE)]),
         );
@@ -134,7 +142,7 @@ impl LinksExecutor {
             let mut cache = Vec::new();
             for type_ in relation_player_types.keys() {
                 let instances: Vec<Relation> =
-                    thing_manager.get_relations_in(snapshot, type_.as_relation_type()).try_collect()?;
+                    Itertools::try_collect(thing_manager.get_relations_in(snapshot, type_.as_relation_type(), StorageCounters::DISABLED))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -164,12 +172,13 @@ impl LinksExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let filter = self.filter_fn.clone();
         let check = self.checker.filter_for_row(context, &row);
 
         let existing_role = may_get_role(self.links.role_type().as_variable().unwrap(), row.as_reference());
-        let filter_for_row: Box<LinksFilterMapFn> = Box::new(move |item| match filter(&item) {
+        let filter_for_row: Arc<LinksFilterMapFn> = Arc::new(move |item| match filter(&item) {
             Ok(true) => match check(&item) {
                 Ok(true) => match verify_role(&item, existing_role) {
                     Ok(true) | Err(_) => Some(item),
@@ -188,9 +197,14 @@ impl LinksExecutor {
         match self.iterate_mode {
             LinksIterateMode::Unbound => {
                 // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-                let iterator = thing_manager.get_links_by_relation_type_range(snapshot, &self.relation_type_range);
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_relation_player_role as _);
+                let iterator = thing_manager.get_links_by_relation_type_range(snapshot, &self.relation_type_range, storage_counters);
+                let as_tuples: LinksTupleIteratorSingle = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_relation_player_role,
+                    tuple_relation_player_role_to_links_canonical,
+                    FixedLinksBounds::None,
+                );
                 Ok(TupleIterator::LinksSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -207,9 +221,15 @@ impl LinksExecutor {
                         *relation,
                         // TODO: this should be just the types owned by the one instance's type in the cache!
                         &self.player_type_range,
+                        storage_counters,
                     );
-                    let as_tuples: LinksTupleIteratorSingle =
-                        iterator.filter_map(filter_for_row).map(links_to_tuple_player_relation_role);
+                    let as_tuples = LinksTupleIterator::new(
+                        iterator,
+                        filter_for_row,
+                        links_to_tuple_player_relation_role,
+                        tuple_player_relation_role_to_links_canonical,
+                        FixedLinksBounds::Relation(*relation),
+                    );
                     Ok(TupleIterator::LinksSingle(SortedTupleIterator::new(
                         as_tuples,
                         self.tuple_positions.clone(),
@@ -219,23 +239,29 @@ impl LinksExecutor {
                     // TODO: we could create a reusable space for these temporarily held iterators
                     //       so we don't have allocate again before the merging iterator
                     let relations = self.relation_cache.as_ref().unwrap().iter();
-                    let iterators = relations
+                    let tuple_iterators = relations
                         .map(|&relation| {
-                            thing_manager.get_links_by_relation_and_player_type_range(
+                            let iterator = thing_manager.get_links_by_relation_and_player_type_range(
                                 snapshot,
                                 relation,
                                 &self.player_type_range,
+                                storage_counters.clone(),
+                            );
+                            LinksTupleIterator::new(
+                                iterator,
+                                filter_for_row.clone(),
+                                links_to_tuple_player_relation_role,
+                                tuple_player_relation_role_to_links_canonical,
+                                FixedLinksBounds::Relation(relation),
                             )
                         })
                         .collect_vec();
 
                     // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
-                    let merged: KMergeBy<LinksIterator, LinksOrderingFn> =
-                        kmerge_by(iterators, compare_by_player_then_relation);
-                    let as_tuples: LinksTupleIteratorMerged =
-                        merged.filter_map(filter_for_row).map(links_to_tuple_player_relation_role);
+                    let merged_tuples: KMergeBy<LinksTupleIterator<LinksIterator>, TupleOrderingFn> =
+                        KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::LinksMerged(SortedTupleIterator::new(
-                        as_tuples,
+                        merged_tuples,
                         self.tuple_positions.clone(),
                         &self.variable_modes,
                     )))
@@ -247,11 +273,16 @@ impl LinksExecutor {
                 debug_assert!(row.len() > relation.as_usize());
                 let iterator = match row.get(relation) {
                     &VariableValue::Thing(Thing::Relation(relation)) => thing_manager
-                        .get_links_by_relation_and_player_type_range(snapshot, relation, &self.player_type_range),
+                        .get_links_by_relation_and_player_type_range(snapshot, relation, &self.player_type_range, storage_counters),
                     _ => unreachable!("Links relation must be a relation."),
                 };
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_player_relation_role);
+                let as_tuples = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_player_relation_role,
+                    tuple_player_relation_role_to_links_canonical,
+                    FixedLinksBounds::Relation(row.get(relation).as_thing().as_relation()),
+                );
                 Ok(TupleIterator::LinksSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -266,9 +297,14 @@ impl LinksExecutor {
                 debug_assert!(row.len() > player.as_usize());
                 let relation = row.get(relation).as_thing().as_relation();
                 let player = row.get(player).as_thing().as_object();
-                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player);
-                let as_tuples: LinksTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(links_to_tuple_role_relation_player);
+                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
+                let as_tuples = LinksTupleIterator::new(
+                    iterator,
+                    filter_for_row,
+                    links_to_tuple_role_relation_player,
+                    tuple_role_relation_player_to_links_canonical,
+                    FixedLinksBounds::RelationAndPlayer(relation, player),
+                );
                 Ok(TupleIterator::LinksSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
@@ -285,33 +321,102 @@ impl fmt::Display for LinksExecutor {
     }
 }
 
+pub(super) enum FixedLinksBounds {
+    None,
+    Relation(Relation),
+    Player(Object),
+    RelationAndPlayer(Relation, Object),
+}
+
+pub(super) struct LinksTupleIterator<Iter: LendingIterator> {
+    inner: Peekable<Iter>,
+    filter_map: Arc<LinksFilterMapFn>,
+    to_tuple_fn: LinksToTupleFn,
+    from_tuple_fn: TupleToLinksFn,
+    fixed_bounds: FixedLinksBounds,
+}
+
+impl<Iter> LinksTupleIterator<Iter>
+    where
+        Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
+            for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+{
+    pub(super) fn new(
+        inner: Iter,
+        filter_map: Arc<LinksFilterMapFn>,
+        to_tuple_fn: LinksToTupleFn,
+        from_tuple_fn: TupleToLinksFn,
+        fixed_bounds: FixedLinksBounds,
+    ) -> Self {
+        Self {
+            inner: Peekable::new(inner),
+            filter_map,
+            to_tuple_fn,
+            from_tuple_fn,
+            fixed_bounds,
+        }
+    }
+}
+
+impl<Iter> LendingIterator for LinksTupleIterator<Iter>
+    where
+        Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
+            for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+{
+    type Item<'a> = TupleResult<'static>;
+
+    fn next(&mut self) -> Option<Self::Item<'_>> {
+        // TODO: can this be simplified with something like `.by_ref()` on iterators?
+        while let Some(next) = self.inner.next() {
+            if let Some(filter_mapped) = (self.filter_map)(next) {
+                return Some((self.to_tuple_fn)(filter_mapped));
+            }
+        }
+        None
+    }
+}
+
+impl<Iter> TupleSeekable for LinksTupleIterator<Iter>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
+        for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+{
+    fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
+        let target_links = (self.from_tuple_fn)(&target, &self.fixed_bounds);
+        println!("Links seek target: {:?}", &target_links);
+        let target_pair = (target_links, 0);
+        lending_iterator::Seekable::seek(&mut self.inner, &Ok(target_pair));
+        Ok(())
+    }
+}
+
 fn create_links_filter_relations_players_roles(
     relation_to_player: Arc<BTreeMap<Type, Vec<Type>>>,
     player_to_role: Arc<BTreeMap<Type, BTreeSet<Type>>>,
 ) -> Arc<LinksFilterFn> {
     Arc::new(move |result| {
-        let (rel, rp) = match result {
-            Ok((rel, rp, _)) => (rel, rp),
+        let links = match result {
+            Ok((links, _)) => links,
             Err(err) => return Err(err.clone()),
         };
-        let Some(player_types) = relation_to_player.get(&Type::from(rel.type_())) else {
+        let Some(player_types) = relation_to_player.get(&Type::from(links.relation().type_())) else {
             return Ok(false);
         };
-        let player_type = Type::from(rp.player().type_());
-        let role_type = Type::from(rp.role_type());
+        let player_type = Type::from(links.player().type_());
+        let role_type = Type::from(links.role_type());
         Ok(player_types.contains(&player_type)
             && player_to_role.get(&player_type).is_some_and(|role_types| role_types.contains(&role_type)))
     })
 }
 
 fn compare_by_player_then_relation(
-    left: &Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-    right: &Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
-) -> bool {
-    if let (Ok((rel_1, rp_1, _)), Ok((rel_2, rp_2, _))) = (left, right) {
-        (rp_1.player(), rel_1) < (rp_2.player(), rel_2)
+    (left, right): (&Result<(Links, u64), Box<ConceptReadError>>, &Result<(Links, u64), Box<ConceptReadError>>),
+) -> Ordering {
+    if let (Ok((links_1, _)), Ok((links_2, _))) = (left, right) {
+        (links_1.player(), links_1.relation()).cmp(&(links_2.player(), links_2.relation()))
     } else {
-        false
+        // arbitrary
+        Ordering::Equal
     }
 }
 
@@ -333,11 +438,11 @@ pub(crate) fn may_get_role(role_var: ExecutorVariable, row: MaybeOwnedRow<'_>) -
 }
 
 pub(crate) fn verify_role(
-    item: &Result<(Relation, RolePlayer, u64), Box<ConceptReadError>>,
+    item: &Result<(Links, u64), Box<ConceptReadError>>,
     expected_role: Option<RoleType>,
 ) -> Result<bool, &ConceptReadError> {
     match item {
-        Ok((_, role_player, _)) => Ok(expected_role.map(|role| role == role_player.role_type()).unwrap_or(true)),
+        Ok((links, _)) => Ok(expected_role.map(|role| role == links.role_type()).unwrap_or(true)),
         Err(err) => Err(err),
     }
 }

@@ -6,30 +6,32 @@
 
 use std::fmt;
 
+use itertools::Itertools;
+
 use bytes::Bytes;
 use encoding::{
+    AsBytes,
     graph::{
-        thing::{vertex_object::ObjectVertex, ThingVertex},
+        thing::{ThingVertex, vertex_object::ObjectVertex},
         type_::vertex::{PrefixedTypeVertexEncoding, TypeVertexEncoding},
         Typed,
     },
-    layout::prefix::Prefix,
-    AsBytes, Keyable, Prefixed,
+    Keyable, layout::prefix::Prefix, Prefixed,
 };
-use itertools::Itertools;
 use lending_iterator::higher_order::Hkt;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
+use resource::profile::StorageCounters;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
+    ConceptAPI,
+    ConceptStatus,
     error::{ConceptReadError, ConceptWriteError},
     thing::{
+        HKInstance,
         object::{Object, ObjectAPI},
-        thing_manager::ThingManager,
-        HKInstance, ThingAPI,
-    },
-    type_::{entity_type::EntityType, ObjectTypeAPI, Ordering, OwnerAPI},
-    ConceptAPI, ConceptStatus,
+        thing_manager::ThingManager, ThingAPI,
+    }, type_::{entity_type::EntityType, ObjectTypeAPI, Ordering, OwnerAPI},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -38,6 +40,11 @@ pub struct Entity {
 }
 
 impl Entity {
+    const fn new_const(vertex: ObjectVertex) -> Self {
+        // note: unchecked!
+        Self { vertex }
+    }
+    
     pub fn type_(&self) -> EntityType {
         EntityType::build_from_type_id(self.vertex.type_id_())
     }
@@ -54,11 +61,12 @@ impl ConceptAPI for Entity {}
 impl ThingAPI for Entity {
     type Vertex = ObjectVertex;
     type TypeAPI = EntityType;
+    const MIN: Entity = Self::new_const(ObjectVertex::MIN_ENTITY);
     const PREFIX_RANGE_INCLUSIVE: (Prefix, Prefix) = (Prefix::VertexEntity, Prefix::VertexEntity);
 
     fn new(vertex: ObjectVertex) -> Self {
         debug_assert_eq!(vertex.prefix(), Prefix::VertexEntity);
-        Entity { vertex }
+        Self::new_const(vertex)
     }
 
     fn vertex(&self) -> Self::Vertex {
@@ -89,7 +97,7 @@ impl ThingAPI for Entity {
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
     ) -> Result<(), Box<ConceptWriteError>> {
-        for attr in self.get_has_unordered(snapshot, thing_manager).map_ok(|(has, _count)| has.attribute()) {
+        for attr in self.get_has_unordered(snapshot, thing_manager, StorageCounters::DISABLED).map_ok(|(has, _count)| has.attribute()) {
             thing_manager.unset_has(snapshot, self, &attr?)?;
         }
 
@@ -100,7 +108,7 @@ impl ThingAPI for Entity {
             }
         }
 
-        for relates in self.get_relations_roles(snapshot, thing_manager) {
+        for relates in self.get_relations_roles(snapshot, thing_manager, StorageCounters::DISABLED) {
             let (relation, role, _count) = relates?;
             thing_manager.unset_links(snapshot, relation, self, role)?;
         }

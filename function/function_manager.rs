@@ -45,6 +45,7 @@ use storage::{
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 use typeql::common::Spanned;
+use resource::profile::StorageCounters;
 
 use crate::{function::SchemaFunction, function_cache::FunctionCache, FunctionError};
 
@@ -233,7 +234,7 @@ impl FunctionReader {
             .iterate_range(&KeyRange::new_within(
                 DefinitionKey::build_prefix(FunctionDefinition::PREFIX),
                 DefinitionKey::FIXED_WIDTH_ENCODING,
-            ))
+            ), StorageCounters::DISABLED)
             .collect_cloned_vec(|key, value| {
                 SchemaFunction::build(
                     DefinitionKey::new(Bytes::Reference(key.bytes()).into_owned()),

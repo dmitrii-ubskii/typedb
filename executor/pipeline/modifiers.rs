@@ -7,11 +7,11 @@ use std::{
     borrow::Cow,
     cmp::Ordering,
     collections::HashSet,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::Hash,
     sync::Arc,
 };
 
-use answer::{variable_value::VariableValue, Thing};
+use answer::{Thing, variable_value::VariableValue};
 use compiler::{
     executable::modifiers::{
         DistinctExecutable, LimitExecutable, OffsetExecutable, RequireExecutable, SelectExecutable, SortExecutable,
@@ -26,12 +26,12 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::Batch,
+    ExecutionInterrupt,
     pipeline::{
-        stage::{ExecutionContext, StageAPI},
-        PipelineExecutionError, StageIterator,
+        PipelineExecutionError,
+        stage::{ExecutionContext, StageAPI}, StageIterator,
     },
     row::MaybeOwnedRow,
-    ExecutionInterrupt,
 };
 
 // Sort

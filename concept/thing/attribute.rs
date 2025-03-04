@@ -4,45 +4,37 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{
-    cmp::Ordering,
-    collections::HashSet,
-    fmt,
-    hash::{Hash, Hasher},
-    iter,
-    sync::{Arc, OnceLock},
-};
-
-use bytes::Bytes;
-use encoding::{
-    graph::{
-        thing::{edge::ThingEdgeHasReverse, vertex_attribute::AttributeVertex},
-        type_::vertex::{PrefixedTypeVertexEncoding, TypeVertexEncoding},
-        Typed,
-    },
-    layout::prefix::Prefix,
-    value::{decode_value_u64, value::Value, value_type::ValueType},
-    AsBytes, Keyable,
-};
-use iterator::State;
+use std::cmp::Ordering;
+use std::collections::HashSet;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, OnceLock};
 use itertools::Itertools;
+use bytes::Bytes;
+use encoding::{AsBytes, Keyable};
+use encoding::graph::thing::edge::ThingEdgeHasReverse;
+use encoding::graph::thing::vertex_attribute::{AttributeID, AttributeVertex};
+use encoding::graph::type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertexEncoding};
+use encoding::graph::Typed;
+use encoding::layout::prefix::Prefix;
+use encoding::value::value::Value;
+use encoding::value::value_type::ValueType;
+use iterator::State;
 use lending_iterator::higher_order::Hkt;
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use storage::{
-    key_value::StorageKey,
-    snapshot::{
-        buffer::BufferRangeIterator, iterator::SnapshotRangeIterator, write::WriteCategory, ReadableSnapshot,
-        WritableSnapshot,
-    },
-};
-
-use crate::{
-    edge_iterator,
-    error::{ConceptReadError, ConceptWriteError},
-    thing::{object::Object, thing_manager::ThingManager, HKInstance, ThingAPI},
-    type_::{attribute_type::AttributeType, ObjectTypeAPI},
-    ConceptAPI, ConceptStatus,
-};
+use lending_iterator::{LendingIterator, Peekable, Seekable};
+use resource::constants::snapshot::BUFFER_KEY_INLINE;
+use resource::profile::StorageCounters;
+use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use storage::snapshot::buffer::BufferRangeIterator;
+use storage::snapshot::iterator::SnapshotRangeIterator;
+use storage::snapshot::write::WriteCategory;
+use crate::{ConceptAPI, ConceptStatus};
+use crate::error::{ConceptReadError, ConceptWriteError};
+use crate::thing::object::Object;
+use crate::thing::thing_manager::ThingManager;
+use crate::thing::{HKInstance, ThingAPI};
+use crate::type_::attribute_type::AttributeType;
+use crate::type_::ObjectTypeAPI;
 
 #[derive(Debug, Clone)]
 pub struct Attribute {
@@ -50,7 +42,12 @@ pub struct Attribute {
     value: OnceLock<Arc<Value<'static>>>,
 }
 
+pub static MIN_STATIC: Attribute = Attribute::MIN;
 impl Attribute {
+    const fn new_const(vertex: AttributeVertex) -> Self {
+        Self { vertex, value: OnceLock::new() }
+    }
+
     pub fn type_(&self) -> AttributeType {
         AttributeType::build_from_type_id(self.vertex.type_id_())
     }
@@ -80,8 +77,13 @@ impl Attribute {
         }
     }
 
-    pub fn get_owners(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager) -> AttributeOwnerIterator {
-        thing_manager.get_owners(snapshot, self)
+    pub fn get_owners(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> impl Iterator<Item=Result<(Object, u64), Box<ConceptReadError>>> {
+        thing_manager.get_owners(snapshot, self, storage_counters)
     }
 
     pub fn get_owners_by_type(
@@ -89,8 +91,9 @@ impl Attribute {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         owner_type: impl ObjectTypeAPI,
-    ) -> AttributeOwnerIterator {
-        thing_manager.get_owners_by_type(snapshot, self, owner_type)
+        storage_counters: StorageCounters,
+    ) -> impl Iterator<Item=Result<(Object, u64), Box<ConceptReadError>>> {
+        thing_manager.get_owners_by_type(snapshot, self, owner_type, storage_counters)
     }
 
     pub fn next_possible(&self) -> Attribute {
@@ -105,10 +108,11 @@ impl ConceptAPI for Attribute {}
 impl ThingAPI for Attribute {
     type Vertex = AttributeVertex;
     type TypeAPI = AttributeType;
+    const MIN: Attribute = Attribute::new_const(Self::Vertex::new(TypeID::MIN, AttributeID::MIN));
     const PREFIX_RANGE_INCLUSIVE: (Prefix, Prefix) = (Prefix::VertexAttribute, Prefix::VertexAttribute);
 
     fn new(vertex: Self::Vertex) -> Self {
-        Attribute { vertex, value: OnceLock::new() }
+        Self::new_const(vertex)
     }
 
     fn vertex(&self) -> Self::Vertex {
@@ -151,7 +155,7 @@ impl ThingAPI for Attribute {
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
     ) -> Result<(), Box<ConceptWriteError>> {
-        for object in self.get_owners(snapshot, thing_manager).map_ok(|(key, _)| key) {
+        for object in self.get_owners(snapshot, thing_manager, StorageCounters::DISABLED).map_ok(|(key, _)| key) {
             thing_manager.unset_has(snapshot, object?, &self)?;
         }
         thing_manager.delete_attribute(snapshot, self)?;
@@ -192,10 +196,10 @@ impl Ord for Attribute {
 
 pub struct AttributeIterator<AllAttributesIterator>
 where
-    AllAttributesIterator: Iterator<Item = Result<Attribute, Box<ConceptReadError>>>,
+    AllAttributesIterator: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
 {
     independent_attribute_types: Arc<HashSet<AttributeType>>,
-    attributes_iterator: Option<iter::Peekable<AllAttributesIterator>>,
+    attributes_iterator: Option<Peekable<AllAttributesIterator>>,
     has_reverse_iterator_buffer: Option<BufferRangeIterator>,
     has_reverse_iterator_storage: Option<SnapshotRangeIterator>,
     state: State<Box<ConceptReadError>>,
@@ -203,7 +207,7 @@ where
 
 impl<AllAttributesIterator> AttributeIterator<AllAttributesIterator>
 where
-    AllAttributesIterator: Iterator<Item = Result<Attribute, Box<ConceptReadError>>>,
+    AllAttributesIterator: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
 {
     pub(crate) fn new(
         attributes_iterator: AllAttributesIterator,
@@ -213,7 +217,7 @@ where
     ) -> Self {
         Self {
             independent_attribute_types,
-            attributes_iterator: Some(attributes_iterator.peekable()),
+            attributes_iterator: Some(Peekable::new(attributes_iterator)),
             has_reverse_iterator_buffer: Some(has_reverse_iterator_buffer),
             has_reverse_iterator_storage: Some(has_reverse_iterator_storage),
             state: State::Init,
@@ -230,9 +234,22 @@ where
         }
     }
 
-    #[cfg(unused_unimplemented_function)]
-    pub fn seek(&mut self) {
-        ensure_unimplemented_unused!()
+    pub fn seek(&mut self, target: &Attribute) {
+        todo!()
+    }
+
+    pub fn peek(&mut self) -> Option<Result<Attribute, Box<ConceptReadError>>> {
+        match &self.state {
+            State::Init | State::ItemUsed => {
+                self.find_next_state();
+                self.peek()
+            }
+            State::ItemReady => {
+                self.attributes_iterator.as_mut().unwrap().peek().cloned()
+            }
+            State::Error(error) => Some(Err(error.clone())),
+            State::Done => None,
+        }
     }
 
     fn iter_next(&mut self) -> Option<Result<Attribute, Box<ConceptReadError>>> {
@@ -330,7 +347,8 @@ where
 
 impl<I> Iterator for AttributeIterator<I>
 where
-    I: Iterator<Item = Result<Attribute, Box<ConceptReadError>>>,
+    I: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
+
 {
     type Item = Result<Attribute, Box<ConceptReadError>>;
 
@@ -338,20 +356,6 @@ where
         self.iter_next()
     }
 }
-
-fn storage_key_to_owner<'a>(
-    storage_key: StorageKey<'a, BUFFER_KEY_INLINE>,
-    value: Bytes<'a, BUFFER_VALUE_INLINE>,
-) -> (Object, u64) {
-    let edge = ThingEdgeHasReverse::decode(storage_key.into_bytes());
-    (Object::new(edge.to()), decode_value_u64(&value))
-}
-
-edge_iterator!(
-    AttributeOwnerIterator;
-    (Object, u64);
-    storage_key_to_owner
-);
 
 impl fmt::Display for Attribute {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

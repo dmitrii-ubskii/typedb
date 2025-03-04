@@ -13,18 +13,18 @@ use compiler::executable::insert::{
 use concept::thing::thing_manager::ThingManager;
 use ir::pipeline::ParameterRegistry;
 use lending_iterator::LendingIterator;
+use resource::profile::StageProfile;
 use storage::snapshot::WritableSnapshot;
 
 use crate::{
     batch::Batch,
+    ExecutionInterrupt,
     pipeline::{
-        stage::{ExecutionContext, StageAPI},
-        PipelineExecutionError, StageIterator, WrittenRowsIterator,
+        PipelineExecutionError,
+        stage::{ExecutionContext, StageAPI}, StageIterator, WrittenRowsIterator,
     },
-    profile::StageProfile,
     row::{MaybeOwnedRow, Row},
     write::{write_instruction::AsWriteInstruction, WriteError},
-    ExecutionInterrupt,
 };
 
 pub struct InsertStageExecutor<PreviousStage> {

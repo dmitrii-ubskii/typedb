@@ -10,6 +10,7 @@ use std::sync::{
 };
 
 use bytes::{byte_array::ByteArray, Bytes};
+use resource::profile::StorageCounters;
 use storage::{
     key_range::KeyRange,
     key_value::{StorageKey, StorageKeyReference},
@@ -85,14 +86,14 @@ impl ThingVertexGenerator {
             .iterate_range(&KeyRange::new_within(
                 build_type_vertex_prefix_key(Prefix::VertexEntityType),
                 Prefix::VertexEntityType.fixed_width_keys(),
-            ))
+            ), StorageCounters::DISABLED.clone())
             .collect_cloned_vec(|k, _v| TypeVertex::decode(Bytes::Reference(k.bytes())).type_id_().as_u16())
             .map_err(|err| EncodingError::ExistingTypesRead { source: err })?;
         let relation_types = read_snapshot
             .iterate_range(&KeyRange::new_within(
                 build_type_vertex_prefix_key(Prefix::VertexRelationType),
                 Prefix::VertexRelationType.fixed_width_keys(),
-            ))
+            ), StorageCounters::DISABLED.clone())
             .collect_cloned_vec(|k, _v| TypeVertex::decode(Bytes::Reference(k.bytes())).type_id_().as_u16())
             .map_err(|err| EncodingError::ExistingTypesRead { source: err })?;
         read_snapshot.close_resources();
