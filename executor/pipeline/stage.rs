@@ -32,6 +32,7 @@ use crate::{
     },
     row::MaybeOwnedRow,
 };
+use crate::pipeline::reduce::ReduceStageExecutor;
 
 #[derive(Debug)]
 pub struct ExecutionContext<Snapshot> {

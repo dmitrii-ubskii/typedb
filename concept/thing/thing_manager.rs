@@ -91,18 +91,16 @@ use crate::{
         attribute_type::AttributeType,
         Capability,
         constraint::{Constraint, get_checked_constraints},
-        entity_type::EntityType
-
-
-        ,
+        entity_type::EntityType,
         object_type::ObjectType,
         role_type::RoleType,
         type_manager::TypeManager,
-        , ObjectTypeAPI, OwnerAPI, PlayerAPI, TypeAPI,
+        ObjectTypeAPI, OwnerAPI, PlayerAPI, TypeAPI,
     },
 };
 use crate::thing::r#struct::StructIndexForAttributeTypeIterator;
 use crate::thing::relation::LinksReverseIterator;
+use crate::type_::relation_type::RelationType;
 
 pub mod validation;
 

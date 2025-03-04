@@ -27,7 +27,6 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use concept::thing::attribute::Attribute;
-use concept::thing::ThingAPI;
 use encoding::graph::type_::vertex::TypeVertexEncoding;
 use lending_iterator::{LendingIterator, Peekable};
 use lending_iterator::kmerge::KMergeBy;

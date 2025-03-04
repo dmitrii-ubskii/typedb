@@ -19,7 +19,7 @@ use concept::{
     error::ConceptReadError,
     type_::{relation_type::RelationType, role_type::RoleType},
 };
-use lending_iterator::{AsLendingIterator, Peekable};
+use lending_iterator::{AsLendingIterator, };
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{

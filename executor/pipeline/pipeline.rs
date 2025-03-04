@@ -35,6 +35,7 @@ use crate::{
     },
     row::MaybeOwnedRow,
 };
+use crate::pipeline::update::UpdateStageExecutor;
 
 pub enum Pipeline<Snapshot: ReadableSnapshot, Nonterminals: StageAPI<Snapshot>> {
     Unfetched(Nonterminals, HashMap<String, VariablePosition>),

@@ -7,7 +7,6 @@
 use std::{cmp::Ordering, collections::BTreeMap, fmt, iter, ops::Bound, sync::Arc, vec};
 
 use itertools::Itertools;
-use typeql::token::Keyword::Or;
 
 use answer::{Thing, Type, variable_value::VariableValue};
 use compiler::{executable::match_::instructions::thing::IsaInstruction, ExecutorVariable};
@@ -26,7 +25,7 @@ use ir::pattern::{
     constraint::{Isa, IsaKind},
     Vertex,
 };
-use lending_iterator::{AsLendingIterator, LendingIterator, Peekable, Seekable};
+use lending_iterator::{AsLendingIterator, LendingIterator, };
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 

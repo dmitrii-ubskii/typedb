@@ -16,7 +16,7 @@ use itertools::Itertools;
 use answer::{Type, variable_value::VariableValue};
 use compiler::{executable::match_::instructions::type_::SubInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
-use lending_iterator::{AsLendingIterator, Peekable};
+use lending_iterator::{AsLendingIterator, };
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
