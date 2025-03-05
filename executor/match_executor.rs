@@ -78,34 +78,32 @@ impl MatchExecutor {
         let batch =
             self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspensions)?;
         debug_assert!(self.suspensions.current_depth() == 0);
-        if batch.is_none() && !self.suspensions.is_empty() {
-            let mut return_batch = batch;
-            // TODO: We do it all the restoring here, but we should probably be doing it elsewhere. Maybe pattern_executor::execute_tabled_call
-            //  when the function returns None, AND it's possibly the head of a cycle.
-            while return_batch.is_none() && !self.suspensions.is_empty() {
-                self.last_seen_table_size = self.tabled_functions.total_table_size();
-                for function_state in self.tabled_functions.iterate_states() {
-                    let mut guard = function_state.executor_state.try_lock().unwrap();
-                    guard.prepare_to_retry_suspended();
-                }
-                // And on the entry
-                self.suspensions.prepare_restoring_from_suspending();
-                self.entry.prepare_to_restore_from_suspension(0);
 
-                return_batch = self.entry.compute_next_batch(
-                    context,
-                    interrupt,
-                    &mut self.tabled_functions,
-                    &mut self.suspensions,
-                )?;
-                if return_batch.is_none() && self.last_seen_table_size == self.tabled_functions.total_table_size() {
-                    return Ok(None);
-                }
-            }
-            Ok(return_batch)
-        } else {
-            Ok(batch)
+        if batch.is_some() {
+            return Ok(batch);
         }
+
+        // TODO: We do all the restoring here, but we should probably be doing it elsewhere. Maybe pattern_executor::execute_tabled_call
+        //  when the function returns None, AND it's possibly the head of a cycle.
+        while !self.suspensions.is_empty() {
+            self.last_seen_table_size = self.tabled_functions.total_table_size();
+            for function_state in self.tabled_functions.iterate_states() {
+                function_state.executor_state.lock().unwrap().prepare_to_retry_suspended();
+            }
+
+            // And on the entry
+            self.suspensions.prepare_restoring_from_suspending();
+            self.entry.prepare_to_restore_from_suspension(0);
+
+            let batch =
+                self.entry.compute_next_batch(context, interrupt, &mut self.tabled_functions, &mut self.suspensions)?;
+            if batch.is_some() {
+                return Ok(batch);
+            } else if self.last_seen_table_size == self.tabled_functions.total_table_size() {
+                return Ok(None);
+            }
+        }
+        Ok(None)
     }
 }
 
