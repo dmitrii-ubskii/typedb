@@ -39,6 +39,7 @@ use encoding::{
         value_type::{ValueType, ValueTypeCategory},
     },
 };
+use resource::profile::StorageCounters;
 use storage::{
     durability_client::WALClient,
     snapshot::{CommittableSnapshot, ReadSnapshot, WritableSnapshot, WriteSnapshot},
@@ -71,7 +72,7 @@ fn thing_create_iterate() {
     {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (_, thing_manager) = load_managers(storage.clone(), None);
-        let entities_count = thing_manager.get_entities(&snapshot).count();
+        let entities_count = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).count();
         assert_eq!(entities_count, 4);
     }
 }
@@ -126,11 +127,11 @@ fn attribute_create() {
     {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
-        let attributes_count = thing_manager.get_attributes(&snapshot).unwrap().count();
+        let attributes_count = thing_manager.get_attributes(&snapshot, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(attributes_count, 2);
 
         let age_type = type_manager.get_attribute_type(&snapshot, &age_label).unwrap().unwrap();
-        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot, age_type).unwrap().try_collect().unwrap();
+        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED).unwrap().try_collect().unwrap();
         assert_eq!(ages.len(), 1);
         assert_eq!(ages.first_mut().unwrap().get_value(&snapshot, &thing_manager).unwrap(), Value::Integer(age_value));
     }
@@ -186,7 +187,7 @@ fn has() {
         person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1).unwrap();
         person_1.set_has_unordered(&mut snapshot, &thing_manager, &name_1).unwrap();
 
-        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager).count();
+        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(retrieved_attributes_count, 2);
 
         let finalise_result = thing_manager.finalise(&mut snapshot);
@@ -197,12 +198,12 @@ fn has() {
     {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (_, thing_manager) = load_managers(storage.clone(), None);
-        let attributes_count = thing_manager.get_attributes(&snapshot).unwrap().count();
+        let attributes_count = thing_manager.get_attributes(&snapshot, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(attributes_count, 2);
 
-        let people: Vec<Entity> = thing_manager.get_entities(&snapshot).try_collect().unwrap();
+        let people: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).try_collect().unwrap();
         let person_1 = people.first().unwrap();
-        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager).count();
+        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(retrieved_attributes_count, 2);
     }
 }
@@ -330,6 +331,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Included(Value::Integer(age_value_10)), Bound::Unbounded),
                 &(Bound::Included(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         assert_eq!(age_owners_start_value_inclusive.count(), 4);
@@ -340,6 +342,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Excluded(Value::Integer(age_value_10)), Bound::Unbounded),
                 &(Bound::Included(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         assert_eq!(age_owners_start_value_exclusive.count(), 2);
@@ -350,6 +353,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Included(Value::Integer(age_value_10)), Bound::Excluded(Value::Integer(age_value_11))),
                 &(Bound::Included(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         assert_eq!(age_owners_start_value_inclusive_end_value_exclusive.count(), 2);
@@ -360,6 +364,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Excluded(Value::Integer(age_value_10)), Bound::Excluded(Value::Integer(age_value_11))),
                 &(Bound::Included(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         assert_eq!(age_owners_start_value_excluded_end_value_exclusive.count(), 0);
@@ -370,6 +375,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Included(Value::Integer(age_value_10)), Bound::Unbounded),
                 &(Bound::Excluded(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         // should skip age10-person, and return age10-company + age11-person + age11-company
@@ -381,6 +387,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Excluded(Value::Integer(age_value_10)), Bound::Unbounded),
                 &(Bound::Excluded(ObjectType::Entity(person_type)), Bound::Unbounded),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         // should skip age10-person, age10-company, and the impl should be able to work out the next prefix is age(10+1)-(person+1), and return only age11-company
@@ -392,6 +399,7 @@ fn get_has_reverse_in_range() {
                 age_type,
                 &(Bound::Unbounded, Bound::Included(Value::Integer(age_value_11))),
                 &(Bound::Excluded(ObjectType::Entity(person_type)), Bound::Excluded(ObjectType::Entity(company_type))),
+                StorageCounters::DISABLED,
             )
             .unwrap();
         // should construct open start age* (making Excluded person type irrelevant), and end before age11-company, returning only age10-person + age10-company + age11-person
@@ -461,7 +469,7 @@ fn attribute_cleanup_on_concurrent_detach() {
         let age_type = type_manager.get_attribute_type(&snapshot_1, &age_label).unwrap().unwrap();
 
         let bob = thing_manager
-            .get_entities(&snapshot_1)
+            .get_entities(&snapshot_1, StorageCounters::DISABLED)
             .find(|entity| {
                 entity
                     .as_ref()
@@ -490,7 +498,7 @@ fn attribute_cleanup_on_concurrent_detach() {
         let age_type = type_manager.get_attribute_type(&snapshot_2, &age_label).unwrap().unwrap();
 
         let alice = thing_manager
-            .get_entities(&snapshot_2)
+            .get_entities(&snapshot_2, StorageCounters::DISABLED)
             .find(|entity| {
                 entity
                     .as_ref()
@@ -506,7 +514,7 @@ fn attribute_cleanup_on_concurrent_detach() {
             .unwrap()
             .unwrap();
 
-        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot_2, age_type).unwrap().try_collect().unwrap();
+        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot_2, age_type, StorageCounters::DISABLED).unwrap().try_collect().unwrap();
         let age_position = ages
             .iter()
             .position(|attr| attr.get_value(&snapshot_2, &thing_manager).unwrap().unwrap_integer() == age_value)
@@ -526,7 +534,7 @@ fn attribute_cleanup_on_concurrent_detach() {
 
         let age_type = type_manager.get_attribute_type(&snapshot, &age_label).unwrap().unwrap();
 
-        let attributes_count = thing_manager.get_attributes_in(&snapshot, age_type).unwrap().count();
+        let attributes_count = thing_manager.get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(attributes_count, 0);
     }
 }
@@ -612,15 +620,15 @@ fn role_player_distinct() {
         employment_2.add_player(&mut snapshot, &thing_manager, employer_type, Object::Entity(company_2)).unwrap();
         employment_2.add_player(&mut snapshot, &thing_manager, employer_type, Object::Entity(company_3)).unwrap();
 
-        assert_eq!(employment_1.get_players(&snapshot, &thing_manager).count(), 2);
-        assert_eq!(employment_2.get_players(&snapshot, &thing_manager).count(), 3);
+        assert_eq!(employment_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
+        assert_eq!(employment_2.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 3);
 
-        assert_eq!(person_1.get_relations_roles(&snapshot, &thing_manager).count(), 2);
-        assert_eq!(company_1.get_relations_roles(&snapshot, &thing_manager).count(), 1);
-        assert_eq!(company_2.get_relations_roles(&snapshot, &thing_manager).count(), 1);
-        assert_eq!(company_3.get_relations_roles(&snapshot, &thing_manager).count(), 1);
+        assert_eq!(person_1.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
+        assert_eq!(company_1.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 1);
+        assert_eq!(company_2.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 1);
+        assert_eq!(company_3.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 1);
 
-        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type).unwrap().count(), 3);
+        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED).unwrap().count(), 3);
 
         let finalise_result = thing_manager.finalise(&mut snapshot);
         assert!(finalise_result.is_ok());
@@ -632,16 +640,16 @@ fn role_player_distinct() {
 
         let employment_type = type_manager.get_relation_type(&snapshot, &employment_label).unwrap().unwrap();
 
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 4);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 2);
 
-        let players_0 = relations[0].get_players(&snapshot, &thing_manager).count();
+        let players_0 = relations[0].get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count();
         if players_0 == 2 {
-            assert_eq!(relations[1].get_players(&snapshot, &thing_manager).count(), 3);
+            assert_eq!(relations[1].get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 3);
         } else {
-            assert_eq!(relations[1].get_players(&snapshot, &thing_manager).count(), 2);
+            assert_eq!(relations[1].get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
         }
 
         let person_1 = entities
@@ -649,8 +657,8 @@ fn role_player_distinct() {
             .find(|entity| entity.type_() == type_manager.get_entity_type(&snapshot, &person_label).unwrap().unwrap())
             .unwrap();
 
-        assert_eq!(person_1.get_relations_roles(&snapshot, &thing_manager).count(), 2);
-        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type).unwrap().count(), 3);
+        assert_eq!(person_1.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
+        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED).unwrap().count(), 3);
     }
 }
 
@@ -703,11 +711,11 @@ fn role_player_duplicates_unordered() {
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 2);
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -715,7 +723,7 @@ fn role_player_duplicates_unordered() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -724,7 +732,7 @@ fn role_player_duplicates_unordered() {
         assert_eq!(resource_relations_count, 1);
 
         let group_1_indexed_count: u64 = group_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -733,7 +741,7 @@ fn role_player_duplicates_unordered() {
             .sum();
         assert_eq!(group_1_indexed_count, 1);
         let resource_1_indexed_count: u64 = resource_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -743,7 +751,7 @@ fn role_player_duplicates_unordered() {
         assert_eq!(resource_1_indexed_count, 1);
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -760,13 +768,13 @@ fn role_player_duplicates_unordered() {
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
 
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 2);
 
         let group_1 = entities
@@ -780,7 +788,7 @@ fn role_player_duplicates_unordered() {
             .unwrap();
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -788,7 +796,7 @@ fn role_player_duplicates_unordered() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -797,7 +805,7 @@ fn role_player_duplicates_unordered() {
         assert_eq!(resource_relations_count, 1);
 
         let group_1_indexed_count: u64 = group_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -806,7 +814,7 @@ fn role_player_duplicates_unordered() {
             .sum();
         assert_eq!(group_1_indexed_count, 1);
         let resource_1_indexed_count: u64 = resource_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -864,11 +872,11 @@ fn role_player_duplicates_ordered_default_card() {
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 3);
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -876,7 +884,7 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -884,11 +892,11 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(resource_relations_count, 2);
 
-        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type);
+        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -904,13 +912,13 @@ fn role_player_duplicates_ordered_default_card() {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 3);
 
         let group_1 = entities
@@ -924,7 +932,7 @@ fn role_player_duplicates_ordered_default_card() {
             .unwrap();
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -932,7 +940,7 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -940,9 +948,9 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(resource_relations_count, 2);
 
-        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type);
+        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
-        let result = resource_1.get_indexed_relations(&snapshot, &thing_manager, collection_type);
+        let result = resource_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
     }
 }
@@ -1001,11 +1009,11 @@ fn role_player_duplicates_ordered_small_card() {
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
         collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1)).unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 3);
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -1013,7 +1021,7 @@ fn role_player_duplicates_ordered_small_card() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -1022,7 +1030,7 @@ fn role_player_duplicates_ordered_small_card() {
         assert_eq!(resource_relations_count, 2);
 
         let group_1_indexed_count: u64 = group_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -1031,7 +1039,7 @@ fn role_player_duplicates_ordered_small_card() {
             .sum();
         assert_eq!(group_1_indexed_count, 2, "Expected index to work");
         let resource_1_indexed_count: u64 = resource_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -1041,7 +1049,7 @@ fn role_player_duplicates_ordered_small_card() {
         assert_eq!(resource_1_indexed_count, 2, "Expected index to work");
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -1057,13 +1065,13 @@ fn role_player_duplicates_ordered_small_card() {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
         assert_eq!(player_counts, 3);
 
         let group_1 = entities
@@ -1077,7 +1085,7 @@ fn role_player_duplicates_ordered_small_card() {
             .unwrap();
 
         let group_relations_count: u64 = group_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -1085,7 +1093,7 @@ fn role_player_duplicates_ordered_small_card() {
             .sum();
         assert_eq!(group_relations_count, 1);
         let resource_relations_count: u64 = resource_1
-            .get_relations_roles(&snapshot, &thing_manager)
+            .get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED)
             .map(|res| {
                 let (_, _, count) = res.unwrap();
                 count
@@ -1094,7 +1102,7 @@ fn role_player_duplicates_ordered_small_card() {
         assert_eq!(resource_relations_count, 2);
 
         let group_1_indexed_count: u64 = group_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -1103,7 +1111,7 @@ fn role_player_duplicates_ordered_small_card() {
             .sum();
         assert_eq!(group_1_indexed_count, 2, "Expected index to work");
         let resource_1_indexed_count: u64 = resource_1
-            .get_indexed_relations(&snapshot, &thing_manager, collection_type)
+            .get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED)
             .unwrap()
             .map(|res| {
                 let (_, count) = res.unwrap();
@@ -1157,7 +1165,7 @@ fn attribute_string_write_read_delete() {
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let attrs: Vec<Attribute> =
-            thing_manager.get_attributes_in(&snapshot, attr_type).unwrap().map(|result| result.unwrap()).collect();
+            thing_manager.get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED).unwrap().map(|result| result.unwrap()).collect();
         let attr_values: Vec<String> = attrs
             .into_iter()
             .map(|attr| (*attr.get_value(&snapshot, &thing_manager).unwrap().unwrap_string()).to_owned())
@@ -1251,7 +1259,7 @@ fn attribute_string_write_read_delete_with_has() {
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let attrs: Vec<Attribute> =
-            thing_manager.get_attributes_in(&snapshot, attr_type).unwrap().map(|result| result.unwrap()).collect();
+            thing_manager.get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED).unwrap().map(|result| result.unwrap()).collect();
         let attr_values: Vec<String> = attrs
             .into_iter()
             .map(|attr| (*attr.get_value(&snapshot, &thing_manager).unwrap().unwrap_string()).to_owned())
@@ -1355,8 +1363,10 @@ fn attribute_struct_write_read() {
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let attr_type = type_manager.get_attribute_type(&snapshot, &attr_label).unwrap().unwrap();
-        let attr_vec: Vec<Attribute> =
-            thing_manager.get_attributes_in(&snapshot, attr_type).unwrap().map(|result| result.unwrap()).collect();
+        let attr_vec: Vec<Attribute> = thing_manager
+            .get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED)
+            .unwrap()
+            .map(|result| result.unwrap()).collect();
         let attr = attr_vec.first().unwrap().clone();
         let value_0 = attr.get_value(&snapshot, &thing_manager).unwrap();
         match value_0 {
