@@ -45,6 +45,7 @@ use storage::{
     MVCCStorage,
     snapshot::{CommittableSnapshot, WritableSnapshot, WriteSnapshot},
 };
+use storage::key_range::RangeStart;
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
 
@@ -479,7 +480,7 @@ fn test_has_with_input_rows() {
     let age_of_p10 = p10
         .as_thing()
         .as_object()
-        .get_has_type_unordered(&snapshot, &thing_manager, age_type, StorageCounters::DISABLED)
+        .get_has_type_unordered(&snapshot, &thing_manager, age_type, &.., StorageCounters::DISABLED)
         .map(|result| result.unwrap().0.clone())
         .collect::<Vec<_>>();
     assert_eq!(a10.as_thing().as_attribute(), &age_of_p10[0]);

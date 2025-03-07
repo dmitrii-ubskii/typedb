@@ -433,10 +433,11 @@ impl<Durability> MVCCStorage<Durability> {
         &'this self,
         iterator_pool: &IteratorPool,
         range: KeyRange<StorageKey<'this, PREFIX_INLINE>>,
+        storage_counters: StorageCounters,
     ) -> KeyspaceRangeIterator {
         self.keyspaces
             .get(range.start().get_value().keyspace_id())
-            .iterate_range(iterator_pool, &range.map(|k| k.as_bytes(), |fixed| fixed))
+            .iterate_range(iterator_pool, &range.map(|k| k.as_bytes(), |fixed| fixed), storage_counters)
     }
 
     pub fn reset(&mut self) -> Result<(), StorageResetError>

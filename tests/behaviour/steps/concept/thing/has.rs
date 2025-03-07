@@ -284,7 +284,7 @@ async fn object_get_has_type(
             .unwrap()
             .unwrap();
         object
-            .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, StorageCounters::DISABLED)
+            .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, &.., StorageCounters::DISABLED)
             .map(|res| {
                 let (attribute, _count) = res.unwrap();
                 attribute
@@ -319,7 +319,7 @@ async fn object_get_has_with_annotations(
             .into_iter()
             .flat_map(|attribute_type| {
                 object
-                    .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, StorageCounters::DISABLED)
+                    .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, &..,StorageCounters::DISABLED)
                     .map(|res| {
                         let (attribute, _count) = res.unwrap();
                         attribute

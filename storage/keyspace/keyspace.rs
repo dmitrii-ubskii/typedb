@@ -16,6 +16,7 @@ use itertools::Itertools;
 use resource::constants::storage::ROCKSDB_CACHE_SIZE_MB;
 use rocksdb::{checkpoint::Checkpoint, IteratorMode, Options, ReadOptions, WriteBatch, WriteOptions, DB};
 use serde::{Deserialize, Serialize};
+use resource::profile::StorageCounters;
 
 use super::{constants, iterator, IteratorPool};
 use crate::{key_range::KeyRange, write_batches::WriteBatches};
@@ -257,8 +258,9 @@ impl Keyspace {
         &self,
         iterpool: &IteratorPool,
         range: &KeyRange<Bytes<'_, PREFIX_INLINE_SIZE>>,
+        storage_counters: StorageCounters,
     ) -> iterator::KeyspaceRangeIterator {
-        iterator::KeyspaceRangeIterator::new(self, iterpool, range)
+        iterator::KeyspaceRangeIterator::new(self, iterpool, range, storage_counters)
     }
 
     pub(crate) fn write(&self, write_batch: WriteBatch) -> Result<(), KeyspaceError> {
