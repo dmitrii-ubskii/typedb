@@ -334,6 +334,9 @@ pub enum UnimplementedFeature {
     PipelineStageInFunction(&'static str),
 
     IrrelevantUnboundInvertedMode(&'static str),
+
+    #[cfg(debug_assertions)] // Break CI violently if I forget about it.
+    BoundToUsingReverse,
 }
 impl std::fmt::Display for UnimplementedFeature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

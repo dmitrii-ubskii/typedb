@@ -41,10 +41,12 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::{DynamicBinaryIterateMode, SortedOnTupleVariable};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
     iterate_mode: BinaryIterateMode,
+    sort_mode: SortedOnTupleVariable,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
     attribute_owner_types: Arc<BTreeMap<Type, Vec<Type>>>,
@@ -89,7 +91,7 @@ impl HasReverseExecutor {
 
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
-
+        let sort_mode = if sort_by == owner { SortedOnTupleVariable::From } else { SortedOnTupleVariable::To };
         let attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>> = attribute_owner_types
             .iter()
             .map(|(type_, owner_types)| {
@@ -116,6 +118,7 @@ impl HasReverseExecutor {
         Ok(Self {
             has,
             iterate_mode,
+            sort_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
             attribute_owner_types,
