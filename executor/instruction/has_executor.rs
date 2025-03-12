@@ -23,14 +23,13 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use itertools::{kmerge_by, Itertools, KMergeBy};
-use error::{ensure_unimplemented_unused, unimplemented_feature};
-use ir::pattern::Vertex;
 use primitive::Bounds;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        has_reverse_executor::HasReverseExecutor,
         iterator::{SortedTupleIterator, TupleIterator},
         min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
@@ -39,13 +38,10 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{BecomesSortedTupleIterator, DynamicBinaryIterateMode, DynamicBinaryIterator, SortedOnTupleVariable};
-use crate::instruction::has_reverse_executor::HasReverseTupleIteratorSingle;
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
     iterate_mode: BinaryIterateMode,
-    sort_mode: SortedOnTupleVariable,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
     owner_attribute_types: Arc<BTreeMap<Type, Vec<Type>>>,
@@ -104,14 +100,10 @@ impl HasExecutor {
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
 
-        let sort_mode = if sort_by == owner { SortedOnTupleVariable::From } else { SortedOnTupleVariable::To };
         let output_tuple_positions = match iterate_mode {
             BinaryIterateMode::Unbound => TuplePositions::Pair([Some(owner), Some(attribute)]),
             _ => TuplePositions::Pair([Some(attribute), Some(owner)]),
         };
-        // TODO: Why does this work?
-        // let output_tuple_positions = TuplePositions::Pair([Some(owner), Some(attribute)]);
-
 
         let checker =
             Checker::<(Has, _)>::new(checks, HashMap::from([(owner, EXTRACT_OWNER), (attribute, EXTRACT_ATTRIBUTE)]));
@@ -144,7 +136,6 @@ impl HasExecutor {
         Ok(Self {
             has,
             iterate_mode,
-            sort_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
             owner_attribute_types,
@@ -175,16 +166,8 @@ impl HasExecutor {
         let snapshot = &**context.snapshot();
         let thing_manager = context.thing_manager();
 
-        let attribute = self.has.attribute().as_variable().unwrap().as_position();
-        let owner = self.has.owner().as_variable().unwrap().as_position();
-
-        let attribute =
-            attribute.and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos))).filter(|v| !v.is_empty());
-        let owner = owner.and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos))).filter(|v| !v.is_empty());
-
-        let dynamic_iterate_mode = DynamicBinaryIterateMode::new(&owner, &attribute, self.sort_mode);
-        match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::Unbound => {
+        match self.iterate_mode {
+            BinaryIterateMode::Unbound => {
                 // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
 
                 // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
@@ -199,7 +182,7 @@ impl HasExecutor {
                     &self.variable_modes,
                 )))
             }
-            DynamicBinaryIterateMode::UnboundInvertedMerged => {
+            BinaryIterateMode::UnboundInverted => {
                 debug_assert!(self.owner_cache.is_some());
                 if let Some([owner]) = self.owner_cache.as_deref() {
                     // no heap allocs needed if there is only 1 iterator
@@ -240,29 +223,11 @@ impl HasExecutor {
                     )))
                 }
             }
-            DynamicBinaryIterateMode::BoundToUsingReverse | DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {
-                let attribute = attribute.unwrap();
-                let VariableValue::Thing(Thing::Attribute(attribute)) = attribute else { panic!() };
-                let iterator = thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
-                    snapshot,
-                    attribute,
-                    &self.owner_type_range,
-                );
-                let as_tuples: HasReverseTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
-                Ok(TupleIterator::HasReverseSingle(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-            DynamicBinaryIterateMode::BoundFromSwapped => {
-                todo!()
-            }
-            DynamicBinaryIterateMode::BoundFrom => {
+            BinaryIterateMode::BoundFrom => {
+                let owner = self.has.owner().as_variable().unwrap().as_position().unwrap();
+                debug_assert!(row.len() > owner.as_usize());
                 // TODO: inject value ranges
-                let owner= owner.unwrap();
-                let iterator = match owner {
+                let iterator = match row.get(owner) {
                     VariableValue::Thing(Thing::Entity(entity)) => {
                         entity.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
                     }
@@ -272,30 +237,12 @@ impl HasExecutor {
                     _ => unreachable!("Has owner must be an entity or relation."),
                 };
                 let as_tuples: HasUnboundedTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(has_to_tuple_owner_attribute);
+                    iterator.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
                 Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
                     as_tuples,
                     self.tuple_positions.clone(),
                     &self.variable_modes,
                 )))
-            }
-            DynamicBinaryIterateMode::Check => {
-                let owner = owner.unwrap();
-                let attribute = attribute.unwrap();
-                let VariableValue::Thing(Thing::Attribute(attr)) = attribute else { panic!() };
-                let VariableValue::Thing(owner_obj) = owner else { panic!() };
-                Ok(TupleIterator::Check(SortedTupleIterator::new(
-                    owner_obj
-                        .as_object()
-                        .has_attribute(snapshot, thing_manager, attr)?
-                        .then(|| Ok(Tuple::Pair([owner.to_owned(), attribute.to_owned()])))
-                        .into_iter(),
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-            DynamicBinaryIterateMode::CheckSwapped => {
-                todo!()
             }
         }
     }
@@ -332,39 +279,5 @@ fn compare_has_by_attribute_then_owner(
         (has_1.attribute(), has_1.owner()) < (has_2.attribute(), has_2.owner())
     } else {
         false
-    }
-}
-
-impl BecomesSortedTupleIterator for HasUnboundedTupleIteratorSingle {
-    fn into_tuple_iterator(self, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
-        TupleIterator::HasSingle(SortedTupleIterator::new(self, tuple_positions, variable_modes))
-    }
-}
-
-impl DynamicBinaryIterator for HasExecutor {
-    type IteratorUnbound = HasUnboundedTupleIteratorSingle;
-
-    fn from(&self) -> &Vertex<ExecutorVariable> {
-        self.has.owner()
-    }
-
-    fn to(&self) -> &Vertex<ExecutorVariable> {
-        self.has.attribute()
-    }
-
-    fn sort_mode(&self) -> SortedOnTupleVariable {
-        self.sort_mode
-    }
-
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot>, filter_for_row: Box<HasFilterMapFn>) -> Self::IteratorUnbound {
-        // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-
-        // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
-        //        we should determine which strategy we want long-term
-        let as_tuples: HasUnboundedTupleIteratorSingle = context.thing_manager
-            .get_has_from_owner_type_range_unordered(&*context.snapshot, &self.owner_type_range)
-            .filter_map(filter_for_row)
-            .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_owner_attribute);
-        as_tuples
     }
 }
