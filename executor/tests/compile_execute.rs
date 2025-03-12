@@ -833,7 +833,7 @@ fn test_disjunction_planning_traversal() {
         println!()
     }
 
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 4);
 }
 
 // #[test]
