@@ -24,7 +24,7 @@ use crate::{
         indexed_relation_executor::{IndexedRelationTupleIteratorMerged, IndexedRelationTupleIteratorSingle},
         is_executor::IsIterator,
         isa_executor::{IsaBoundedSortedType, IsaUnboundedSortedThing},
-        isa_reverse_executor::{IsaReverseBoundedSortedThing, IsaReverseUnboundedSortedType},
+        isa_reverse_executor::{IsaReverseBoundedSortedThing, IsaReverseUnboundedSortedType, IsaReverseUnified},
         links_executor::{LinksTupleIteratorMerged, LinksTupleIteratorSingle},
         owns_executor::{OwnsBoundedSortedAttribute, OwnsUnboundedSortedOwner},
         owns_reverse_executor::{OwnsReverseBoundedSortedOwner, OwnsReverseUnboundedSortedAttribute},
@@ -39,7 +39,6 @@ use crate::{
     },
     row::Row,
 };
-use crate::instruction::isa_reverse_executor::IsaReverseUnified;
 
 // TODO: the 'check' can deduplicate against all relevant variables as soon as an anonymous variable is no longer relevant.
 //       if the deduplicated answer leads to an answer, we should not re-emit it again (we will rediscover the same answers)

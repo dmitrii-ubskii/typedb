@@ -26,12 +26,17 @@ use itertools::Itertools;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
-    iterator::{SortedTupleIterator, TupleIterator},
-    tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-    BinaryIterateMode, Checker, FilterMapUnchangedFn, VariableModes, TYPES_EMPTY,
-}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
-use crate::instruction::{BecomesSortedTupleIterator, DynamicBinaryIterator, TupleSortMode, UnreachableIteratorType};
+use crate::{
+    impl_becomes_sorted_tuple_iterator,
+    instruction::{
+        iterator::{SortedTupleIterator, TupleIterator},
+        tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
+        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterMapUnchangedFn,
+        MapToTupleFn, TupleSortMode, UnreachableIteratorType, VariableModes, TYPES_EMPTY,
+    },
+    pipeline::stage::ExecutionContext,
+    row::MaybeOwnedRow,
+};
 
 #[derive(Debug)]
 pub(crate) struct IsaExecutor {
@@ -192,13 +197,11 @@ pub(super) fn instances_of_all_types_chained(
 
 type IsaBoundedInner = ThingWithTypes<iter::Once<Result<Thing, Box<ConceptReadError>>>>;
 impl DynamicBinaryIterator for IsaExecutor {
-    type CheckFilterFn = Box<IsaFilterMapFn>;
-    type ToTupleMapFn = IsaToTupleFn;
+    type Element = (Thing, Type);
     type IteratorUnbound = MultipleTypeIsaIterator;
     type IteratorUnboundInverted = UnreachableIteratorType;
     type IteratorUnboundInvertedMerged = UnreachableIteratorType;
     type IteratorBoundFrom = IsaBoundedInner;
-    type Element = UnreachableIteratorType; // todo
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.isa.thing()
@@ -212,11 +215,14 @@ impl DynamicBinaryIterator for IsaExecutor {
         self.sort_mode
     }
 
-    const TUPLE_FROM_TO: Self::ToTupleMapFn = isa_to_tuple_thing_type;
-    const TUPLE_TO_FROM: Self::ToTupleMapFn = isa_to_tuple_type_thing;
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = isa_to_tuple_thing_type;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = isa_to_tuple_type_thing;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
-
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
         let instances_range = if let Vertex::Variable(thing_variable) = self.isa.thing() {
             self.checker.value_range_for(context, Some(row.as_reference()), *thing_variable)?
         } else {
@@ -231,11 +237,19 @@ impl DynamicBinaryIterator for IsaExecutor {
         )
     }
 
-    fn get_iterator_unbound_inverted(&self, _context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
         unreachable!()
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+        from: &VariableValue<'_>,
+    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         let VariableValue::Thing(thing) = from.to_owned() else {
             unreachable!("Has thing must be an entity or relation.")
         };
@@ -244,12 +258,17 @@ impl DynamicBinaryIterator for IsaExecutor {
         Ok(with_types(iter::once(Ok(thing)), supertypes))
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+        to: &VariableValue<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         todo!()
     }
 }
 
 impl_becomes_sorted_tuple_iterator! {
-    MultipleTypeIsaIterator[Box<IsaFilterMapFn>, IsaToTupleFn] => IsaUnbounded,
-    IsaBoundedInner[Box<IsaFilterMapFn>, IsaToTupleFn] => IsaBounded,
+    MultipleTypeIsaIterator[(Thing, Type)] => IsaUnbounded,
+    IsaBoundedInner[(Thing, Type)] => IsaBounded,
 }

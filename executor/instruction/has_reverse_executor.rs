@@ -34,12 +34,12 @@ use crate::{
         iterator::{SortedTupleIterator, TupleIterator},
         min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, TupleSortMode, VariableModes,
+        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterMapUnchangedFn,
+        MapToTupleFn, TupleSortMode, UnreachableIteratorType, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::UnreachableIteratorType;
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -224,14 +224,11 @@ fn compare_has_by_owner_then_attribute(
 }
 
 impl DynamicBinaryIterator for HasReverseExecutor {
-    type CheckFilterFn = Box<HasFilterMapFn>;
-    type ToTupleMapFn = HasToTupleFn;
-
+    type Element = (Has, u64);
     type IteratorUnbound = ChainedHasReverseIterator;
     type IteratorUnboundInverted = HasReverseIterator;
     type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
     type IteratorBoundFrom = HasReverseIterator;
-    type Element = UnreachableIteratorType; // TODO:
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.has.attribute()
@@ -245,8 +242,8 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         self.sort_mode
     }
 
-    const TUPLE_FROM_TO: Self::ToTupleMapFn = HasExecutor::TUPLE_TO_FROM;
-    const TUPLE_TO_FROM: Self::ToTupleMapFn = HasExecutor::TUPLE_FROM_TO;
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = HasExecutor::TUPLE_TO_FROM;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = HasExecutor::TUPLE_FROM_TO;
 
     fn get_iterator_unbound(
         &self,
@@ -311,13 +308,18 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         ))
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+        to: &VariableValue<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         todo!()
     }
 }
 
 impl_becomes_sorted_tuple_iterator! {
-    HasReverseIterator[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseSingle,
-    ChainedHasReverseIterator[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseChained,
-    KMergeBy<HasReverseIterator, HasOrderingFn>[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseMerged,
+    HasReverseIterator[(Has,u64)] => HasReverseSingle,
+    ChainedHasReverseIterator[(Has,u64)] => HasReverseChained,
+    KMergeBy<HasReverseIterator, HasOrderingFn>[(Has,u64)] => HasReverseMerged,
 }

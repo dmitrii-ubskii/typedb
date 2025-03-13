@@ -19,13 +19,13 @@ use concept::{
         has::Has,
         object::{HasIterator, Object, ObjectAPI},
         thing_manager::ThingManager,
+        ThingAPI,
     },
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
+use encoding::graph::thing::edge::ThingEdgeHas;
 use ir::pattern::Vertex;
 use itertools::{kmerge_by, Itertools, KMergeBy};
-use concept::thing::ThingAPI;
-use encoding::graph::thing::edge::ThingEdgeHas;
 use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
@@ -38,7 +38,7 @@ use crate::{
         min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
         BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterFn, FilterMapUnchangedFn,
-        TupleSortMode, VariableModes,
+        MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -210,8 +210,6 @@ fn compare_has_by_attribute_then_owner(
 
 impl DynamicBinaryIterator for HasExecutor {
     type Element = (Has, u64);
-    type CheckFilterFn = Box<HasFilterMapFn>;
-    type ToTupleMapFn = HasToTupleFn;
 
     type IteratorUnbound = HasIterator;
     type IteratorUnboundInverted = HasIterator;
@@ -230,8 +228,8 @@ impl DynamicBinaryIterator for HasExecutor {
         self.sort_mode
     }
 
-    const TUPLE_FROM_TO: Self::ToTupleMapFn = has_to_tuple_owner_attribute;
-    const TUPLE_TO_FROM: Self::ToTupleMapFn = has_to_tuple_attribute_owner;
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = has_to_tuple_owner_attribute;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = has_to_tuple_attribute_owner;
 
     fn get_iterator_unbound(
         &self,
@@ -303,18 +301,22 @@ impl DynamicBinaryIterator for HasExecutor {
         Ok(iterator)
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>,) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+        to: &VariableValue<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let VariableValue::Thing(Thing::Attribute(attr)) = to else { panic!() };
         let VariableValue::Thing(owner_obj) = from else { panic!() };
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
-            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())),1 as u64))
-        )
+            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1 as u64)))
     }
 }
 
 impl_becomes_sorted_tuple_iterator! {
-    HasIterator[Box<HasFilterMapFn>, HasToTupleFn] => HasSingle,
-    KMergeBy<HasIterator, HasOrderingFn>[Box<HasFilterMapFn>, HasToTupleFn] => HasMerged,
+    HasIterator[(Has,u64)] => HasSingle,
+    KMergeBy<HasIterator, HasOrderingFn>[(Has,u64)] => HasMerged,
 }
