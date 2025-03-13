@@ -397,7 +397,7 @@ impl<T> Checker<T> {
 
     pub(crate) fn value_range_for(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        context: &ExecutionContext<impl ReadableSnapshot>,
         row: Option<MaybeOwnedRow<'_>>,
         target_variable: ExecutorVariable,
     ) -> Result<(Bound<Value<'_>>, Bound<Value<'_>>), Box<ConceptReadError>> {
@@ -1128,6 +1128,7 @@ trait DynamicBinaryIterator
     type ToTupleMapFn;
 
     type IteratorUnbound: BecomesSortedTupleIterator<Self::CheckFilterFn, Self::ToTupleMapFn>;
+    type IteratorUnboundInverted: BecomesSortedTupleIterator<Self::CheckFilterFn, Self::ToTupleMapFn>;
     type IteratorUnboundInvertedMerged: BecomesSortedTupleIterator<Self::CheckFilterFn, Self::ToTupleMapFn>;
 
     // TODO: If it's always the same as IteratorUnbound, we should just do defaults.
@@ -1169,11 +1170,11 @@ trait DynamicBinaryIterator
 
         let iterator = match dynamic_iterate_mode {
             DynamicBinaryIterateMode::Unbound => {
-                self.get_iterator_unbound(context)
+                self.get_iterator_unbound(context, &row)?
                     .into_tuple_iterator(filter_for_row, Self::TUPLE_FROM_TO, tuple_positions, variable_modes)
             },
             DynamicBinaryIterateMode::UnboundInverted => {
-                match self.get_iterator_unbound_inverted(context) {
+                match self.get_iterator_unbound_inverted(context)? {
                     Either::First(single) => single.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes),
                     Either::Second(merged) => {
                         merged.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
@@ -1184,7 +1185,7 @@ trait DynamicBinaryIterator
                 // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
                 // So this function should take charge of the direction and allow the delegates to return their standard direction
                 debug_assert!(from.is_some());
-                self.get_iterator_bound_from(context, from.unwrap())
+                self.get_iterator_bound_from(context, from.unwrap())?
                     .into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
             }
             // DynamicBinaryIterateMode::BoundFromSwapped => {}
@@ -1197,10 +1198,10 @@ trait DynamicBinaryIterator
         Ok(iterator)
     }
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Self::IteratorUnbound;
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged>;
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: &MaybeOwnedRow<'_>)-> Result<Self::IteratorUnbound, Box<ConceptReadError>>;
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>>;
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Self::IteratorBoundFrom;
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>)-> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
 }
 
 fn may_get_from_row<'a>(vertex: &Vertex<ExecutorVariable>, row: &'a MaybeOwnedRow<'a>) -> Option<&'a VariableValue<'a>> {

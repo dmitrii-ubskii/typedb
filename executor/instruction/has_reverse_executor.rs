@@ -20,26 +20,29 @@ use concept::{
 };
 use encoding::value::value::Value;
 use itertools::{kmerge_by, Itertools, KMergeBy};
+use answer::variable_value::VariableValue;
+use ir::pattern::Vertex;
 use primitive::Bounds;
+use primitive::either::Either;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
-use super::has_executor::HasFilterMapFn;
-use crate::{
-    instruction::{
-        has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
-        iid_executor::IidExecutor,
-        iterator::{SortedTupleIterator, TupleIterator},
-        min_max_types,
-        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, Tuple, TuplePositions},
-        BinaryIterateMode, Checker, VariableModes,
-    },
-    pipeline::stage::ExecutionContext,
-    row::MaybeOwnedRow,
-};
+use super::has_executor::{HasExecutor, HasFilterMapFn};
+use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
+    BecomesSortedTupleIterator,
+    has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
+    iid_executor::IidExecutor,
+    iterator::{SortedTupleIterator, TupleIterator},
+    min_max_types,
+    tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, Tuple, TuplePositions},
+    BinaryIterateMode, Checker, VariableModes,
+}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
+use crate::instruction::{DynamicBinaryIterator, TupleSortMode};
+use crate::instruction::tuple::HasToTupleFn;
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
+    sort_mode: TupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -85,6 +88,7 @@ impl HasReverseExecutor {
 
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
+        let sort_mode = if owner == sort_by { TupleSortMode::From } else { TupleSortMode::To };
 
         let attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>> = attribute_owner_types
             .iter()
@@ -114,6 +118,7 @@ impl HasReverseExecutor {
 
         Ok(Self {
             has,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -160,85 +165,7 @@ impl HasReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-
-        let snapshot = &**context.snapshot();
-        let thing_manager = context.thing_manager();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let range = self.checker.value_range_for(
-                    context,
-                    Some(row.as_reference()),
-                    self.has.attribute().as_variable().unwrap(),
-                )?;
-                let as_tuples: HasTupleIterator<ChainedHasReverseIterator> =
-                    Self::all_has_reverse_chained(snapshot, thing_manager, &self.attribute_owner_types_range, range)?
-                        .filter_map(filter_for_row)
-                        .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_attribute_owner);
-                Ok(TupleIterator::HasReverseChained(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-            BinaryIterateMode::UnboundInverted => {
-                debug_assert!(self.attribute_cache.get().is_some());
-                if self.attribute_cache.get().unwrap().len() == 1 {
-                    let attribute = &self.attribute_cache.get().unwrap()[0];
-                    // no heap allocs needed if there is only 1 iterator
-                    let iterator = thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
-                        snapshot,
-                        attribute,
-                        &self.owner_type_range,
-                    );
-                    let as_tuples: HasReverseTupleIteratorSingle =
-                        iterator.filter_map(filter_for_row).map(has_to_tuple_owner_attribute);
-                    Ok(TupleIterator::HasReverseSingle(SortedTupleIterator::new(
-                        as_tuples,
-                        self.tuple_positions.clone(),
-                        &self.variable_modes,
-                    )))
-                } else {
-                    // TODO: we could create a reusable space for these temporarily held iterators so we don't have allocate again before the merging iterator
-                    let attributes = self.attribute_cache.get().unwrap().iter();
-                    let iterators = attributes.map(|attribute| {
-                        thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
-                            snapshot,
-                            attribute,
-                            &self.owner_type_range,
-                        )
-                    });
-
-                    // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
-                    let merged: KMergeBy<HasReverseIterator, HasOrderingFn> =
-                        kmerge_by(iterators, compare_has_by_owner_then_attribute);
-                    let as_tuples: HasReverseUnboundedSortedOwnerMerged =
-                        merged.filter_map(filter_for_row).map(has_to_tuple_owner_attribute);
-                    Ok(TupleIterator::HasReverseMerged(SortedTupleIterator::new(
-                        as_tuples,
-                        self.tuple_positions.clone(),
-                        &self.variable_modes,
-                    )))
-                }
-            }
-            BinaryIterateMode::BoundFrom => {
-                let attribute = self.has.attribute().as_variable().unwrap().as_position().unwrap();
-                debug_assert!(row.len() > attribute.as_usize());
-                let variable_value = row.get(attribute);
-                let iterator = thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
-                    snapshot,
-                    variable_value.as_thing().as_attribute(),
-                    &self.owner_type_range,
-                );
-                let as_tuples: HasReverseTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(has_to_tuple_owner_attribute);
-                Ok(TupleIterator::HasReverseSingle(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode(), &row, filter_for_row)
     }
 
     fn all_has_reverse_chained(
@@ -293,4 +220,83 @@ fn compare_has_by_owner_then_attribute(
     } else {
         false
     }
+}
+
+impl DynamicBinaryIterator for HasReverseExecutor {
+    type CheckFilterFn = Box<HasFilterMapFn>;
+    type ToTupleMapFn = HasToTupleFn;
+
+    type IteratorUnbound = ChainedHasReverseIterator;
+    type IteratorUnboundInverted = HasReverseIterator;
+    type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
+    type IteratorBoundFrom = HasReverseIterator;
+
+    fn from(&self) -> &Vertex<ExecutorVariable> {
+        self.has.attribute()
+    }
+
+    fn to(&self) -> &Vertex<ExecutorVariable> {
+        self.has.owner()
+    }
+
+    fn sort_mode(&self) -> TupleSortMode {
+        self.sort_mode
+    }
+
+
+    const TUPLE_FROM_TO: Self::ToTupleMapFn = HasExecutor::TUPLE_TO_FROM;
+    const TUPLE_TO_FROM: Self::ToTupleMapFn = HasExecutor::TUPLE_FROM_TO;
+
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: &MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+
+        let range = self.checker.value_range_for(
+            context,
+            Some(row.as_reference()),
+            self.has.attribute().as_variable().unwrap(),
+        )?;
+        Self::all_has_reverse_chained(&*context.snapshot, &*context.thing_manager, &self.attribute_owner_types_range, range)
+    }
+
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+        debug_assert!(self.attribute_cache.get().is_some());
+        if self.attribute_cache.get().unwrap().len() == 1 {
+            let attribute = &self.attribute_cache.get().unwrap()[0];
+            // no heap allocs needed if there is only 1 iterator
+            let iterator = context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
+                &*context.snapshot,
+                attribute,
+                &self.owner_type_range,
+            );
+            Ok(Either::First(iterator))
+        } else {
+            // TODO: we could create a reusable space for these temporarily held iterators so we don't have allocate again before the merging iterator
+            let attributes = self.attribute_cache.get().unwrap().iter();
+            let iterators = attributes.map(|attribute| {
+                context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
+                    &*context.snapshot,
+                    attribute,
+                    &self.owner_type_range,
+                )
+            });
+
+            // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
+            let merged: KMergeBy<HasReverseIterator, HasOrderingFn> =
+                kmerge_by(iterators, compare_has_by_owner_then_attribute);
+            Ok(Either::Second(merged))
+        }
+    }
+
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+        Ok(context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
+            &*context.snapshot,
+            from.as_thing().as_attribute(),
+            &self.owner_type_range,
+        ))
+    }
+}
+
+impl_becomes_sorted_tuple_iterator! {
+    HasReverseIterator[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseSingle,
+    ChainedHasReverseIterator[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseChained,
+    KMergeBy<HasReverseIterator, HasOrderingFn>[Box<HasFilterMapFn>, HasToTupleFn] => HasReverseMerged,
 }
