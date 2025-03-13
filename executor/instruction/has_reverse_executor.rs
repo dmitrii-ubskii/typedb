@@ -165,7 +165,7 @@ impl HasReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode(), &row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode(), row, filter_for_row)
     }
 
     fn all_has_reverse_chained(
@@ -249,7 +249,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: &MaybeOwnedRow<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
         let range = self.checker.value_range_for(
             context,

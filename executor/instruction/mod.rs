@@ -1123,6 +1123,21 @@ trait BecomesSortedTupleIterator<CheckFn, ToTupleFn: Sized>: Iterator + Sized {
     ) -> TupleIterator;
 }
 
+struct UnreachableIteratorType;
+impl Iterator for UnreachableIteratorType {
+    type Item = ();
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unreachable!()
+    }
+}
+
+impl<F, M> BecomesSortedTupleIterator<F, M> for UnreachableIteratorType {
+    fn into_tuple_iterator(self, _: F, _: M, _: TuplePositions, _: &VariableModes) -> TupleIterator {
+        unreachable!()
+    }
+}
+
 #[macro_export]
 macro_rules! impl_becomes_sorted_tuple_iterator {
     ( $($type_:ty[$filter:ty, $map:ty] => $variant:ident,)* ) => {
@@ -1168,7 +1183,7 @@ trait DynamicBinaryIterator {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         variable_modes: &VariableModes,
         sort_mode: TupleSortMode,
-        row: &MaybeOwnedRow<'_>,
+        row: MaybeOwnedRow<'_>,
         filter_for_row: Self::CheckFilterFn,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let tuple_positions = match sort_mode {
@@ -1182,7 +1197,7 @@ trait DynamicBinaryIterator {
         let dynamic_iterate_mode = DynamicBinaryIterateMode::new(&from, &to, sort_mode);
 
         let iterator = match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::Unbound => self.get_iterator_unbound(context, &row)?.into_tuple_iterator(
+            DynamicBinaryIterateMode::Unbound => self.get_iterator_unbound(context, row)?.into_tuple_iterator(
                 filter_for_row,
                 Self::TUPLE_FROM_TO,
                 tuple_positions,
@@ -1220,7 +1235,7 @@ trait DynamicBinaryIterator {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: &MaybeOwnedRow<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>>;
     fn get_iterator_unbound_inverted(
         &self,

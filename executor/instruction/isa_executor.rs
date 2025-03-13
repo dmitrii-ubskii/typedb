@@ -23,21 +23,20 @@ use ir::pattern::{
     Vertex,
 };
 use itertools::Itertools;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{
-    instruction::{
-        iterator::{SortedTupleIterator, TupleIterator},
-        tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-        BinaryIterateMode, Checker, FilterMapUnchangedFn, VariableModes, TYPES_EMPTY,
-    },
-    pipeline::stage::ExecutionContext,
-    row::MaybeOwnedRow,
-};
+use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
+    iterator::{SortedTupleIterator, TupleIterator},
+    tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
+    BinaryIterateMode, Checker, FilterMapUnchangedFn, VariableModes, TYPES_EMPTY,
+}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
+use crate::instruction::{BecomesSortedTupleIterator, DynamicBinaryIterator, TupleSortMode, UnreachableIteratorType};
 
 #[derive(Debug)]
 pub(crate) struct IsaExecutor {
     isa: Isa<ExecutorVariable>,
+    sort_mode: TupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -90,7 +89,7 @@ impl IsaExecutor {
 
         let thing = isa.thing().as_variable();
         let type_ = isa.type_().as_variable();
-
+        let sort_mode = if thing.as_ref().unwrap() == &sort_by { TupleSortMode::From } else { TupleSortMode::To };
         let output_tuple_positions = match iterate_mode {
             BinaryIterateMode::Unbound => TuplePositions::Pair([thing, type_]),
             _ => TuplePositions::Pair([type_, thing]),
@@ -106,6 +105,7 @@ impl IsaExecutor {
 
         Self {
             isa,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -124,52 +124,7 @@ impl IsaExecutor {
             Ok(true) | Err(_) => Some(item),
             Ok(false) => None,
         });
-
-        let snapshot = &**context.snapshot();
-        let thing_manager = context.thing_manager();
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let instances_range = if let Vertex::Variable(thing_variable) = self.isa.thing() {
-                    self.checker.value_range_for(context, Some(row), *thing_variable)?
-                } else {
-                    (Bound::Unbounded, Bound::Unbounded)
-                };
-                let thing_iter = instances_of_all_types_chained(
-                    snapshot,
-                    thing_manager,
-                    self.instance_type_to_types.as_ref(),
-                    self.isa.isa_kind(),
-                    instances_range,
-                )?;
-                let as_tuples: IsaUnboundedSortedThing =
-                    thing_iter.filter_map(filter_for_row).map(isa_to_tuple_thing_type);
-                Ok(TupleIterator::IsaUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-            BinaryIterateMode::UnboundInverted => {
-                unreachable!()
-            }
-            BinaryIterateMode::BoundFrom => {
-                let thing = self.isa.thing().as_variable().unwrap().as_position().unwrap();
-                debug_assert!(row.len() > thing.as_usize());
-                let VariableValue::Thing(thing) = row.get(thing).to_owned() else {
-                    unreachable!("Has thing must be an entity or relation.")
-                };
-                let type_ = thing.type_();
-                let supertypes = self.instance_type_to_types.get(&type_).cloned().unwrap_or(TYPES_EMPTY);
-                let as_tuples: IsaBoundedSortedType = with_types(iter::once(Ok(thing)), supertypes)
-                    .filter_map(filter_for_row)
-                    .map(isa_to_tuple_type_thing);
-                Ok(TupleIterator::IsaBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, row, filter_for_row)
     }
 }
 
@@ -233,4 +188,63 @@ pub(super) fn instances_of_all_types_chained(
 
     let thing_iter: MultipleTypeIsaIterator = object_iter.chain(attribute_iter);
     Ok(thing_iter)
+}
+
+type IsaBoundedInner = ThingWithTypes<iter::Once<Result<Thing, Box<ConceptReadError>>>>;
+impl DynamicBinaryIterator for IsaExecutor {
+    type CheckFilterFn = Box<IsaFilterMapFn>;
+    type ToTupleMapFn = IsaToTupleFn;
+    type IteratorUnbound = MultipleTypeIsaIterator;
+    type IteratorUnboundInverted = UnreachableIteratorType;
+    type IteratorUnboundInvertedMerged = UnreachableIteratorType;
+    type IteratorBoundFrom = IsaBoundedInner;
+
+    fn from(&self) -> &Vertex<ExecutorVariable> {
+        self.isa.thing()
+    }
+
+    fn to(&self) -> &Vertex<ExecutorVariable> {
+        self.isa.type_()
+    }
+
+    fn sort_mode(&self) -> TupleSortMode {
+        self.sort_mode
+    }
+
+    const TUPLE_FROM_TO: Self::ToTupleMapFn = isa_to_tuple_thing_type;
+    const TUPLE_TO_FROM: Self::ToTupleMapFn = isa_to_tuple_type_thing;
+
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+
+        let instances_range = if let Vertex::Variable(thing_variable) = self.isa.thing() {
+            self.checker.value_range_for(context, Some(row.as_reference()), *thing_variable)?
+        } else {
+            (Bound::Unbounded, Bound::Unbounded)
+        };
+        instances_of_all_types_chained(
+            &*context.snapshot,
+            &*context.thing_manager,
+            self.instance_type_to_types.as_ref(),
+            self.isa.isa_kind(),
+            instances_range,
+        )
+    }
+
+    fn get_iterator_unbound_inverted(&self, _context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+        unreachable!()
+    }
+
+    fn get_iterator_bound_from(&self, _context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+        let VariableValue::Thing(thing) = from.to_owned() else {
+            unreachable!("Has thing must be an entity or relation.")
+        };
+        let type_ = thing.type_();
+        let supertypes = self.instance_type_to_types.get(&type_).cloned().unwrap_or(TYPES_EMPTY);
+        Ok(with_types(iter::once(Ok(thing)), supertypes))
+    }
+}
+
+impl_becomes_sorted_tuple_iterator! {
+    MultipleTypeIsaIterator[Box<IsaFilterMapFn>, IsaToTupleFn] => IsaUnbounded,
+    IsaBoundedInner[Box<IsaFilterMapFn>, IsaToTupleFn] => IsaBounded,
 }

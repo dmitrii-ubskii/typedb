@@ -168,7 +168,7 @@ impl HasExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, &row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, row, filter_for_row)
     }
 }
 
@@ -233,7 +233,7 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot>,
-        _row: &MaybeOwnedRow<'_>,
+        _row: MaybeOwnedRow<'_>,
     ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
         // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
 
