@@ -195,6 +195,7 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
     type IteratorUnboundInverted = UnreachableIteratorType;
     type IteratorUnboundInvertedMerged = UnreachableIteratorType;
     type IteratorBoundFrom = MultipleTypeIsaIterator;
+    type Element = UnreachableIteratorType; // TODO
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.isa.type_()
@@ -249,6 +250,10 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
         //         Err(err) => Some(Err(err)),
         //     }) as _)
         //
+    }
+
+    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        todo!()
     }
 }
 

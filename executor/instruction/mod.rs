@@ -5,6 +5,7 @@
  */
 
 use std::{collections::HashMap, fmt, iter, marker::PhantomData, ops::Bound};
+use std::task::Context;
 
 use ::iterator::minmax_or;
 use answer::{variable_value::VariableValue, Thing, Type};
@@ -32,6 +33,7 @@ use ir::{
     pipeline::ParameterRegistry,
 };
 use itertools::{Itertools, MinMaxResult};
+use concept::thing::has::Has;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
@@ -1167,7 +1169,7 @@ trait DynamicBinaryIterator {
     // type IteratorBoundToOnFrom;
     // type IteratorBoundToOnTo; // TODO, Can we derive this automatically?
     //
-    // type IteratorCheckFrom;
+    type Element;
     // type IteratorCheckTo; // TODO, Can we derive this automatically?
 
     fn from(&self) -> &Vertex<ExecutorVariable>;
@@ -1225,8 +1227,12 @@ trait DynamicBinaryIterator {
             // DynamicBinaryIterateMode::BoundFromSwapped => {}
             // DynamicBinaryIterateMode::BoundToUsingReverse => {}
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
-            // DynamicBinaryIterateMode::Check => {}
-            // DynamicBinaryIterateMode::CheckSwapped => {}
+            DynamicBinaryIterateMode::CheckOnFrom => {
+                debug_assert!(from.is_some() && to.is_some());
+                todo!()
+                // self.get_iterator_check(context, from.unwrap(), to.unwrap())?.and_then(filter_for_row).map(Self::TUPLE_FROM_TO)
+            }
+            // DynamicBinaryIterateMode::CheckOnTo => {}
             _ => todo!(),
         };
         Ok(iterator)
@@ -1248,6 +1254,13 @@ trait DynamicBinaryIterator {
         row: MaybeOwnedRow<'_>,
         from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
+
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+        to: &VariableValue<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>>;
 }
 
 fn may_get_from_row<'a>(

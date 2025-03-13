@@ -24,6 +24,8 @@ use concept::{
 };
 use ir::pattern::Vertex;
 use itertools::{kmerge_by, Itertools, KMergeBy};
+use concept::thing::ThingAPI;
+use encoding::graph::thing::edge::ThingEdgeHas;
 use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
@@ -207,6 +209,7 @@ fn compare_has_by_attribute_then_owner(
 }
 
 impl DynamicBinaryIterator for HasExecutor {
+    type Element = (Has, u64);
     type CheckFilterFn = Box<HasFilterMapFn>;
     type ToTupleMapFn = HasToTupleFn;
 
@@ -298,6 +301,16 @@ impl DynamicBinaryIterator for HasExecutor {
             _ => unreachable!("Has owner must be an entity or relation."),
         };
         Ok(iterator)
+    }
+
+    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>,) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        let VariableValue::Thing(Thing::Attribute(attr)) = to else { panic!() };
+        let VariableValue::Thing(owner_obj) = from else { panic!() };
+        Ok(owner_obj
+            .as_object()
+            .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
+            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())),1 as u64))
+        )
     }
 }
 

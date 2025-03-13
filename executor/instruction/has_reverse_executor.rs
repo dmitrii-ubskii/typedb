@@ -39,6 +39,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::UnreachableIteratorType;
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -230,6 +231,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     type IteratorUnboundInverted = HasReverseIterator;
     type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
     type IteratorBoundFrom = HasReverseIterator;
+    type Element = UnreachableIteratorType; // TODO:
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.has.attribute()
@@ -307,6 +309,10 @@ impl DynamicBinaryIterator for HasReverseExecutor {
             from.as_thing().as_attribute(),
             &self.owner_type_range,
         ))
+    }
+
+    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>, to: &VariableValue<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        todo!()
     }
 }
 
