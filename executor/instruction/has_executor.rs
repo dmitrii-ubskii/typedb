@@ -22,21 +22,25 @@ use concept::{
     },
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
-use itertools::{kmerge_by, Itertools, KMergeBy};
 use ir::pattern::Vertex;
-use primitive::Bounds;
-use primitive::either::Either;
+use itertools::{kmerge_by, Itertools, KMergeBy};
+use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
-    has_reverse_executor::HasReverseExecutor,
-    iterator::{SortedTupleIterator, TupleIterator},
-    min_max_types,
-    tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-    BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
-}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
-use crate::instruction::{BecomesSortedTupleIterator, DynamicBinaryIterator, TupleSortMode};
+use crate::{
+    impl_becomes_sorted_tuple_iterator,
+    instruction::{
+        has_reverse_executor::HasReverseExecutor,
+        iterator::{SortedTupleIterator, TupleIterator},
+        min_max_types,
+        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
+        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterFn, FilterMapUnchangedFn,
+        TupleSortMode, VariableModes,
+    },
+    pipeline::stage::ExecutionContext,
+    row::MaybeOwnedRow,
+};
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -226,16 +230,22 @@ impl DynamicBinaryIterator for HasExecutor {
     const TUPLE_FROM_TO: Self::ToTupleMapFn = has_to_tuple_owner_attribute;
     const TUPLE_TO_FROM: Self::ToTupleMapFn = has_to_tuple_attribute_owner;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot>, _row: &MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot>,
+        _row: &MaybeOwnedRow<'_>,
+    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
         // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
 
         // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
         //        we should determine which strategy we want long-term
-        Ok(context.thing_manager
-            .get_has_from_owner_type_range_unordered(&*context.snapshot, &self.owner_type_range))
+        Ok(context.thing_manager.get_has_from_owner_type_range_unordered(&*context.snapshot, &self.owner_type_range))
     }
 
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
         if let Some([owner]) = self.owner_cache.as_deref() {
             // no heap allocs needed if there is only 1 iterator
             let iterator = owner.get_has_types_range_unordered(
@@ -252,7 +262,11 @@ impl DynamicBinaryIterator for HasExecutor {
             let owners = self.owner_cache.as_ref().unwrap().iter();
             let iterators: Vec<_> = owners
                 .map(|object| {
-                    object.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
+                    object.get_has_types_range_unordered(
+                        &*context.snapshot,
+                        &*context.thing_manager,
+                        &self.attribute_type_range,
+                    )
                 })
                 .collect();
 
@@ -263,15 +277,23 @@ impl DynamicBinaryIterator for HasExecutor {
         }
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         // TODO: inject value ranges
         let iterator = match from {
-            VariableValue::Thing(Thing::Entity(entity)) => {
-                entity.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
-            }
-            VariableValue::Thing(Thing::Relation(relation)) => {
-                relation.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
-            }
+            VariableValue::Thing(Thing::Entity(entity)) => entity.get_has_types_range_unordered(
+                &*context.snapshot,
+                &*context.thing_manager,
+                &self.attribute_type_range,
+            ),
+            VariableValue::Thing(Thing::Relation(relation)) => relation.get_has_types_range_unordered(
+                &*context.snapshot,
+                &*context.thing_manager,
+                &self.attribute_type_range,
+            ),
             _ => unreachable!("Has owner must be an entity or relation."),
         };
         Ok(iterator)

@@ -37,21 +37,30 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        has_executor::HasExecutor, has_reverse_executor::HasReverseExecutor, iid_executor::IidExecutor,
-        indexed_relation_executor::IndexedRelationExecutor, is_executor::IsExecutor, isa_executor::IsaExecutor,
-        isa_reverse_executor::IsaReverseExecutor, iterator::TupleIterator, links_executor::LinksExecutor,
-        links_reverse_executor::LinksReverseExecutor, owns_executor::OwnsExecutor,
-        owns_reverse_executor::OwnsReverseExecutor, plays_executor::PlaysExecutor,
-        plays_reverse_executor::PlaysReverseExecutor, relates_executor::RelatesExecutor,
-        relates_reverse_executor::RelatesReverseExecutor, sub_executor::SubExecutor,
-        sub_reverse_executor::SubReverseExecutor, type_list_executor::TypeListExecutor,
+        has_executor::{HasExecutor, HasFilterMapFn, HasUnboundedTupleIteratorSingle},
+        has_reverse_executor::HasReverseExecutor,
+        iid_executor::IidExecutor,
+        indexed_relation_executor::IndexedRelationExecutor,
+        is_executor::IsExecutor,
+        isa_executor::IsaExecutor,
+        isa_reverse_executor::IsaReverseExecutor,
+        iterator::{SortedTupleIterator, TupleIterator},
+        links_executor::LinksExecutor,
+        links_reverse_executor::LinksReverseExecutor,
+        owns_executor::OwnsExecutor,
+        owns_reverse_executor::OwnsReverseExecutor,
+        plays_executor::PlaysExecutor,
+        plays_reverse_executor::PlaysReverseExecutor,
+        relates_executor::RelatesExecutor,
+        relates_reverse_executor::RelatesReverseExecutor,
+        sub_executor::SubExecutor,
+        sub_reverse_executor::SubReverseExecutor,
+        tuple::{TuplePositions, TupleResult},
+        type_list_executor::TypeListExecutor,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::has_executor::{HasFilterMapFn, HasUnboundedTupleIteratorSingle};
-use crate::instruction::iterator::SortedTupleIterator;
-use crate::instruction::tuple::{TuplePositions, TupleResult};
 
 mod has_executor;
 mod has_reverse_executor;
@@ -1077,11 +1086,11 @@ pub(crate) enum DynamicBinaryIterateMode {
     UnboundInverted,
 
     // [X, y], where X is bound. Trivially sorted on both, but the position matters
-    BoundFrom, // Sort variable is y
+    BoundFrom,        // Sort variable is y
     BoundFromSwapped, // Sort variable is X
 
     // [x, Y] where Y is bound. Trivially sorted on both, but the position matters
-    BoundToUsingReverse, // Sort variable is x
+    BoundToUsingReverse,        // Sort variable is x
     BoundToUsingReverseSwapped, // Sort variable is Y
 
     // [X, Y] where X & Y are both bound. Trivially sorted on both, but the position matters
@@ -1104,8 +1113,14 @@ impl DynamicBinaryIterateMode {
     }
 }
 
-trait BecomesSortedTupleIterator<CheckFn, ToTupleFn: Sized> : Iterator + Sized  {
-    fn into_tuple_iterator(self, check: CheckFn, to_tuple: ToTupleFn, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator;
+trait BecomesSortedTupleIterator<CheckFn, ToTupleFn: Sized>: Iterator + Sized {
+    fn into_tuple_iterator(
+        self,
+        check: CheckFn,
+        to_tuple: ToTupleFn,
+        tuple_positions: TuplePositions,
+        variable_modes: &VariableModes,
+    ) -> TupleIterator;
 }
 
 #[macro_export]
@@ -1122,8 +1137,7 @@ macro_rules! impl_becomes_sorted_tuple_iterator {
     };
 }
 
-trait DynamicBinaryIterator
-{
+trait DynamicBinaryIterator {
     type CheckFilterFn;
     type ToTupleMapFn;
 
@@ -1149,7 +1163,6 @@ trait DynamicBinaryIterator
     const TUPLE_FROM_TO: Self::ToTupleMapFn;
     const TUPLE_TO_FROM: Self::ToTupleMapFn;
 
-
     fn get_iterator_for(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
@@ -1169,42 +1182,65 @@ trait DynamicBinaryIterator
         let dynamic_iterate_mode = DynamicBinaryIterateMode::new(&from, &to, sort_mode);
 
         let iterator = match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::Unbound => {
-                self.get_iterator_unbound(context, &row)?
-                    .into_tuple_iterator(filter_for_row, Self::TUPLE_FROM_TO, tuple_positions, variable_modes)
-            },
-            DynamicBinaryIterateMode::UnboundInverted => {
-                match self.get_iterator_unbound_inverted(context)? {
-                    Either::First(single) => single.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes),
-                    Either::Second(merged) => {
-                        merged.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
-                    },
+            DynamicBinaryIterateMode::Unbound => self.get_iterator_unbound(context, &row)?.into_tuple_iterator(
+                filter_for_row,
+                Self::TUPLE_FROM_TO,
+                tuple_positions,
+                variable_modes,
+            ),
+            DynamicBinaryIterateMode::UnboundInverted => match self.get_iterator_unbound_inverted(context)? {
+                Either::First(single) => {
+                    single.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
                 }
-            }
+                Either::Second(merged) => {
+                    merged.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
+                }
+            },
             DynamicBinaryIterateMode::BoundFrom => {
                 // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
                 // So this function should take charge of the direction and allow the delegates to return their standard direction
                 debug_assert!(from.is_some());
-                self.get_iterator_bound_from(context, from.unwrap())?
-                    .into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
+                self.get_iterator_bound_from(context, from.unwrap())?.into_tuple_iterator(
+                    filter_for_row,
+                    Self::TUPLE_TO_FROM,
+                    tuple_positions,
+                    variable_modes,
+                )
             }
             // DynamicBinaryIterateMode::BoundFromSwapped => {}
             // DynamicBinaryIterateMode::BoundToUsingReverse => {}
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
             // DynamicBinaryIterateMode::Check => {}
             // DynamicBinaryIterateMode::CheckSwapped => {}
-            _ => todo!()
+            _ => todo!(),
         };
         Ok(iterator)
     }
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: &MaybeOwnedRow<'_>)-> Result<Self::IteratorUnbound, Box<ConceptReadError>>;
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>>;
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: &MaybeOwnedRow<'_>,
+    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>>;
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>>;
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>)-> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
 }
 
-fn may_get_from_row<'a>(vertex: &Vertex<ExecutorVariable>, row: &'a MaybeOwnedRow<'a>) -> Option<&'a VariableValue<'a>> {
-    vertex.as_variable().and_then(|var| var.as_position())
-        .and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos))).filter(|v| !v.is_empty())
+fn may_get_from_row<'a>(
+    vertex: &Vertex<ExecutorVariable>,
+    row: &'a MaybeOwnedRow<'a>,
+) -> Option<&'a VariableValue<'a>> {
+    vertex
+        .as_variable()
+        .and_then(|var| var.as_position())
+        .and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos)))
+        .filter(|v| !v.is_empty())
 }

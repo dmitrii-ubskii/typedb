@@ -11,7 +11,7 @@ use std::{
     vec,
 };
 
-use answer::Type;
+use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::thing::HasReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
@@ -19,26 +19,26 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use encoding::value::value::Value;
-use itertools::{kmerge_by, Itertools, KMergeBy};
-use answer::variable_value::VariableValue;
 use ir::pattern::Vertex;
-use primitive::Bounds;
-use primitive::either::Either;
+use itertools::{kmerge_by, Itertools, KMergeBy};
+use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
 use super::has_executor::{HasExecutor, HasFilterMapFn};
-use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
-    BecomesSortedTupleIterator,
-    has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
-    iid_executor::IidExecutor,
-    iterator::{SortedTupleIterator, TupleIterator},
-    min_max_types,
-    tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, Tuple, TuplePositions},
-    BinaryIterateMode, Checker, VariableModes,
-}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
-use crate::instruction::{DynamicBinaryIterator, TupleSortMode};
-use crate::instruction::tuple::HasToTupleFn;
+use crate::{
+    impl_becomes_sorted_tuple_iterator,
+    instruction::{
+        has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
+        iid_executor::IidExecutor,
+        iterator::{SortedTupleIterator, TupleIterator},
+        min_max_types,
+        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
+        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, TupleSortMode, VariableModes,
+    },
+    pipeline::stage::ExecutionContext,
+    row::MaybeOwnedRow,
+};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -243,21 +243,31 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         self.sort_mode
     }
 
-
     const TUPLE_FROM_TO: Self::ToTupleMapFn = HasExecutor::TUPLE_TO_FROM;
     const TUPLE_TO_FROM: Self::ToTupleMapFn = HasExecutor::TUPLE_FROM_TO;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: &MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
-
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: &MaybeOwnedRow<'_>,
+    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
         let range = self.checker.value_range_for(
             context,
             Some(row.as_reference()),
             self.has.attribute().as_variable().unwrap(),
         )?;
-        Self::all_has_reverse_chained(&*context.snapshot, &*context.thing_manager, &self.attribute_owner_types_range, range)
+        Self::all_has_reverse_chained(
+            &*context.snapshot,
+            &*context.thing_manager,
+            &self.attribute_owner_types_range,
+            range,
+        )
     }
 
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
         debug_assert!(self.attribute_cache.get().is_some());
         if self.attribute_cache.get().unwrap().len() == 1 {
             let attribute = &self.attribute_cache.get().unwrap()[0];
@@ -286,7 +296,11 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         }
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        from: &VariableValue<'_>,
+    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         Ok(context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
             &*context.snapshot,
             from.as_thing().as_attribute(),
