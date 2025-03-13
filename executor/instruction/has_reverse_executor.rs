@@ -88,7 +88,7 @@ impl HasReverseExecutor {
 
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
-        let sort_mode = if owner == sort_by { TupleSortMode::From } else { TupleSortMode::To };
+        let sort_mode = if attribute == sort_by { TupleSortMode::From } else { TupleSortMode::To };
 
         let attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>> = attribute_owner_types
             .iter()
