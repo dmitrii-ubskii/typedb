@@ -32,6 +32,7 @@ use ir::{
     pipeline::ParameterRegistry,
 };
 use itertools::{Itertools, MinMaxResult};
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -48,7 +49,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::has_executor::HasFilterMapFn;
+use crate::instruction::has_executor::{HasFilterMapFn, HasUnboundedTupleIteratorSingle};
 use crate::instruction::iterator::SortedTupleIterator;
 use crate::instruction::tuple::{TuplePositions, TupleResult};
 
@@ -1063,18 +1064,17 @@ fn min_max_types<'a>(types: impl IntoIterator<Item = &'a Type>) -> (&'a Type, &'
 // Note: The Tuples always hold the same variable in the same position.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SortedOnTupleVariable {
+pub(crate) enum TupleSortMode {
     From,
     To,
 }
-
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum DynamicBinaryIterateMode {
     // [x, y] in standard order, sorted by x, then y
     Unbound,
     // [x, y] in [y, x] sort order
-    UnboundInvertedMerged,
+    UnboundInverted,
 
     // [X, y], where X is bound. Trivially sorted on both, but the position matters
     BoundFrom, // Sort variable is y
@@ -1085,61 +1085,74 @@ pub(crate) enum DynamicBinaryIterateMode {
     BoundToUsingReverseSwapped, // Sort variable is Y
 
     // [X, Y] where X & Y are both bound. Trivially sorted on both, but the position matters
-    Check,
-    CheckSwapped,
+    CheckOnFrom,
+    CheckOnTo,
 }
 
 impl DynamicBinaryIterateMode {
-    fn new(from: &Option<&VariableValue<'_>>, to: &Option<&VariableValue<'_>>, sorted_on: SortedOnTupleVariable) -> Self {
+    fn new(from: &Option<&VariableValue<'_>>, to: &Option<&VariableValue<'_>>, sorted_on: TupleSortMode) -> Self {
         match (from, to, sorted_on) {
-            (None, None, SortedOnTupleVariable::From) => Self::Unbound,
-            (None, None, SortedOnTupleVariable::To) => Self::UnboundInvertedMerged,
-            (Some(_), None, SortedOnTupleVariable::From) => Self::BoundFromSwapped,
-            (Some(_), None, SortedOnTupleVariable::To) => Self::BoundFrom,
-            (None, Some(_), SortedOnTupleVariable::From) => Self::BoundToUsingReverse,
-            (None, Some(_), SortedOnTupleVariable::To) => Self::BoundToUsingReverseSwapped,
-            (Some(_), Some(_), _) => Self::Check,
+            (None, None, TupleSortMode::From) => Self::Unbound,
+            (None, None, TupleSortMode::To) => Self::UnboundInverted,
+            (Some(_), None, TupleSortMode::From) => Self::BoundFromSwapped,
+            (Some(_), None, TupleSortMode::To) => Self::BoundFrom,
+            (None, Some(_), TupleSortMode::From) => Self::BoundToUsingReverse,
+            (None, Some(_), TupleSortMode::To) => Self::BoundToUsingReverseSwapped,
+            (Some(_), Some(_), TupleSortMode::From) => Self::CheckOnFrom,
+            (Some(_), Some(_), TupleSortMode::To) => Self::CheckOnTo,
         }
     }
 }
 
 trait BecomesSortedTupleIterator {
-    fn into_tuple_iterator(self, tuple_positions: TuplePositions, variable_mode: &VariableModes) -> TupleIterator;
+    fn into_tuple_iterator(self, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator;
+}
+
+#[macro_export]
+macro_rules! impl_becomes_sorted_tuple_iterator {
+    ( $($type_:ty => $variant:ident,)* ) => {
+        $(
+        impl BecomesSortedTupleIterator for $type_ {
+            fn into_tuple_iterator(self, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
+                TupleIterator::$variant(SortedTupleIterator::new(self, tuple_positions, variable_modes))
+            }
+        }
+        )*
+    };
 }
 
 trait DynamicBinaryIterator
 {
     type IteratorUnbound: Iterator<Item = TupleResult<'static>> + BecomesSortedTupleIterator;
-    // type IteratorUnboundInverted;
-    // type IteratorUnboundInvertedMerged;
+    type IteratorUnboundInvertedMerged: Iterator<Item = TupleResult<'static>> + BecomesSortedTupleIterator;
+
+    // TODO: If it's always the same as IteratorUnbound, we should just do defaults.
+    type IteratorBoundFromOnTo: Iterator<Item = TupleResult<'static>> + BecomesSortedTupleIterator;
+    // type IteratorBoundFromOnFrom;// TODO, Can we derive this automatically?
     //
-    // type BoundFromOnTo;
-    // type BoundFromOnFrom;// TODO, Can we derive this automatically?
+    // type IteratorBoundToOnFrom;
+    // type IteratorBoundToOnTo; // TODO, Can we derive this automatically?
     //
-    // type BoundToOnFrom;
-    // type BoundToOnTo; // TODO, Can we derive this automatically?
-    //
-    // type CheckFrom;
-    // type CheckTo; // TODO, Can we derive this automatically?
+    // type IteratorCheckFrom;
+    // type IteratorCheckTo; // TODO, Can we derive this automatically?
 
     fn from(&self) -> &Vertex<ExecutorVariable>;
     fn to(&self) -> &Vertex<ExecutorVariable>;
 
-    fn sort_mode(&self) -> SortedOnTupleVariable;
+    fn sort_mode(&self) -> TupleSortMode;
 
 
     fn get_iterator_for(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         variable_modes: &VariableModes,
-        sort_mode: SortedOnTupleVariable,
+        sort_mode: TupleSortMode,
         row: &MaybeOwnedRow<'_>,
         filter_for_row: Box<HasFilterMapFn>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-
         let tuple_positions = match sort_mode {
-            SortedOnTupleVariable::From => [self.from().as_variable(), self.to().as_variable()],
-            SortedOnTupleVariable::To => [self.to().as_variable(), self.from().as_variable()],
+            TupleSortMode::From => [self.from().as_variable(), self.to().as_variable()],
+            TupleSortMode::To => [self.to().as_variable(), self.from().as_variable()],
         };
         let tuple_positions = TuplePositions::Pair(tuple_positions);
 
@@ -1151,19 +1164,32 @@ trait DynamicBinaryIterator
             DynamicBinaryIterateMode::Unbound => {
                 self.get_iterator_unbound(context, filter_for_row).into_tuple_iterator(tuple_positions, variable_modes)
             },
-            _ => todo!()
-            // DynamicBinaryIterateMode::UnboundInvertedMerged => {}
-            // DynamicBinaryIterateMode::BoundFrom => {}
+            DynamicBinaryIterateMode::UnboundInverted => {
+                match self.get_iterator_unbound_inverted(context, filter_for_row) {
+                    Either::First(single) => single.into_tuple_iterator(tuple_positions, variable_modes),
+                    Either::Second(merged) => merged.into_tuple_iterator(tuple_positions, variable_modes),
+                }
+            }
+            DynamicBinaryIterateMode::BoundFrom => {
+                // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
+                // So this function should take charge of the direction and allow the delegates to return their standard direction
+                debug_assert!(from.is_some());
+                self.get_iterator_bound_from(context, filter_for_row, from.unwrap()).into_tuple_iterator(tuple_positions, variable_modes)
+            }
             // DynamicBinaryIterateMode::BoundFromSwapped => {}
             // DynamicBinaryIterateMode::BoundToUsingReverse => {}
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
             // DynamicBinaryIterateMode::Check => {}
             // DynamicBinaryIterateMode::CheckSwapped => {}
+            _ => todo!()
         };
         Ok(iterator)
     }
 
     fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, filter_for_row: Box<HasFilterMapFn>) -> Self::IteratorUnbound;
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, filter_for_row: Box<HasFilterMapFn>) -> Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged>;
+
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, filter_for_row: Box<HasFilterMapFn>, from: &VariableValue<'_>) -> Self::IteratorBoundFromOnTo;
 }
 
 fn may_get_from_row<'a>(vertex: &Vertex<ExecutorVariable>, row: &'a MaybeOwnedRow<'a>) -> Option<&'a VariableValue<'a>> {

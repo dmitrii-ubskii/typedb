@@ -23,24 +23,24 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use itertools::{kmerge_by, Itertools, KMergeBy};
+use ir::pattern::Vertex;
 use primitive::Bounds;
+use primitive::either::Either;
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{
-    instruction::{
-        has_reverse_executor::HasReverseExecutor,
-        iterator::{SortedTupleIterator, TupleIterator},
-        min_max_types,
-        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
-    },
-    pipeline::stage::ExecutionContext,
-    row::MaybeOwnedRow,
-};
+use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
+    has_reverse_executor::HasReverseExecutor,
+    iterator::{SortedTupleIterator, TupleIterator},
+    min_max_types,
+    tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
+    BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
+use crate::instruction::{BecomesSortedTupleIterator, DynamicBinaryIterator, TupleSortMode};
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
+    sort_mode: TupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -100,6 +100,7 @@ impl HasExecutor {
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
 
+        let sort_mode = if owner == sort_by { TupleSortMode::From } else { TupleSortMode::To };
         let output_tuple_positions = match iterate_mode {
             BinaryIterateMode::Unbound => TuplePositions::Pair([Some(owner), Some(attribute)]),
             _ => TuplePositions::Pair([Some(attribute), Some(owner)]),
@@ -135,6 +136,7 @@ impl HasExecutor {
         };
         Ok(Self {
             has,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -162,89 +164,7 @@ impl HasExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-
-        let snapshot = &**context.snapshot();
-        let thing_manager = context.thing_manager();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-
-                // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
-                //        we should determine which strategy we want long-term
-                let as_tuples: HasUnboundedTupleIteratorSingle = thing_manager
-                    .get_has_from_owner_type_range_unordered(snapshot, &self.owner_type_range)
-                    .filter_map(filter_for_row)
-                    .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_owner_attribute);
-                Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-            BinaryIterateMode::UnboundInverted => {
-                debug_assert!(self.owner_cache.is_some());
-                if let Some([owner]) = self.owner_cache.as_deref() {
-                    // no heap allocs needed if there is only 1 iterator
-                    let iterator = owner.get_has_types_range_unordered(
-                        snapshot,
-                        thing_manager,
-                        // TODO: this should be just the types owned by the one instance's type in the cache!
-                        &self.attribute_type_range,
-                    );
-                    let as_tuples: HasUnboundedTupleIteratorSingle =
-                        iterator
-                            .filter_map(filter_for_row)
-                            .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_attribute_owner);
-                    Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
-                        as_tuples,
-                        self.tuple_positions.clone(),
-                        &self.variable_modes,
-                    )))
-                } else {
-                    // TODO: we could create a reusable space for these temporarily held iterators
-                    //       so we don't have allocate again before the merging iterator
-                    let owners = self.owner_cache.as_ref().unwrap().iter();
-                    let iterators: Vec<_> = owners
-                        .map(|object| {
-                            object.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
-                        })
-                        .collect();
-
-                    // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
-                    let merged: KMergeBy<HasIterator, HasOrderingFn> =
-                        kmerge_by(iterators, compare_has_by_attribute_then_owner);
-                    let as_tuples: HasUnboundedTupleIteratorMerged =
-                        merged.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
-                    Ok(TupleIterator::HasMerged(SortedTupleIterator::new(
-                        as_tuples,
-                        self.tuple_positions.clone(),
-                        &self.variable_modes,
-                    )))
-                }
-            }
-            BinaryIterateMode::BoundFrom => {
-                let owner = self.has.owner().as_variable().unwrap().as_position().unwrap();
-                debug_assert!(row.len() > owner.as_usize());
-                // TODO: inject value ranges
-                let iterator = match row.get(owner) {
-                    VariableValue::Thing(Thing::Entity(entity)) => {
-                        entity.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
-                    }
-                    VariableValue::Thing(Thing::Relation(relation)) => {
-                        relation.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range)
-                    }
-                    _ => unreachable!("Has owner must be an entity or relation."),
-                };
-                let as_tuples: HasUnboundedTupleIteratorSingle =
-                    iterator.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
-                Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, &row, filter_for_row)
     }
 }
 
@@ -280,4 +200,88 @@ fn compare_has_by_attribute_then_owner(
     } else {
         false
     }
+}
+
+impl DynamicBinaryIterator for HasExecutor {
+    type IteratorUnbound = HasUnboundedTupleIteratorSingle;
+    type IteratorUnboundInvertedMerged = HasUnboundedTupleIteratorMerged;
+    type IteratorBoundFromOnTo = HasUnboundedTupleIteratorSingle;
+
+    fn from(&self) -> &Vertex<ExecutorVariable> {
+        self.has.owner()
+    }
+
+    fn to(&self) -> &Vertex<ExecutorVariable> {
+        self.has.attribute()
+    }
+
+    fn sort_mode(&self) -> TupleSortMode {
+        self.sort_mode
+    }
+
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot>, filter_for_row: Box<HasFilterMapFn>) -> Self::IteratorUnbound {
+        // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
+
+        // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
+        //        we should determine which strategy we want long-term
+        let as_tuples: HasUnboundedTupleIteratorSingle = context.thing_manager
+            .get_has_from_owner_type_range_unordered(&*context.snapshot, &self.owner_type_range)
+            .filter_map(filter_for_row)
+            .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_owner_attribute);
+        as_tuples
+    }
+
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, filter_for_row: Box<HasFilterMapFn>) -> Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged> {
+        if let Some([owner]) = self.owner_cache.as_deref() {
+            // no heap allocs needed if there is only 1 iterator
+            let iterator = owner.get_has_types_range_unordered(
+                &*context.snapshot,
+                &*context.thing_manager,
+                // TODO: this should be just the types owned by the one instance's type in the cache!
+                &self.attribute_type_range,
+            );
+            let as_tuples: HasUnboundedTupleIteratorSingle =
+                iterator
+                    .filter_map(filter_for_row)
+                    .map::<Result<Tuple<'_>, _>, _>(has_to_tuple_attribute_owner);
+            Either::First(as_tuples)
+        } else {
+            // TODO: we could create a reusable space for these temporarily held iterators
+            //       so we don't have allocate again before the merging iterator
+            let owners = self.owner_cache.as_ref().unwrap().iter();
+            let iterators: Vec<_> = owners
+                .map(|object| {
+                    object.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
+                })
+                .collect();
+
+            // note: this will always have to heap alloc, if we use don't have a re-usable/small-vec'ed priority queue somewhere
+            let merged: KMergeBy<HasIterator, HasOrderingFn> =
+                kmerge_by(iterators, compare_has_by_attribute_then_owner);
+            let as_tuples: HasUnboundedTupleIteratorMerged =
+                merged.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
+            Either::Second(as_tuples)
+        }
+    }
+
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, filter_for_row: Box<HasFilterMapFn>, from: &VariableValue<'_>) -> Self::IteratorBoundFromOnTo {
+        // TODO: inject value ranges
+        let iterator = match from {
+            VariableValue::Thing(Thing::Entity(entity)) => {
+                entity.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
+            }
+            VariableValue::Thing(Thing::Relation(relation)) => {
+                relation.get_has_types_range_unordered(&*context.snapshot, &*context.thing_manager, &self.attribute_type_range)
+            }
+            _ => unreachable!("Has owner must be an entity or relation."),
+        };
+        let as_tuples: HasUnboundedTupleIteratorSingle =
+            iterator.filter_map(filter_for_row).map(has_to_tuple_attribute_owner);
+        as_tuples
+    }
+}
+
+impl_becomes_sorted_tuple_iterator! {
+    HasUnboundedTupleIteratorSingle => HasSingle,
+    HasUnboundedTupleIteratorMerged => HasMerged,
 }
