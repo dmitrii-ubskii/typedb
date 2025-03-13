@@ -16,7 +16,7 @@ use compiler::{
     ExecutorVariable, VariablePosition,
 };
 use concept::error::ConceptReadError;
-use lending_iterator::{kmerge, LendingIterator, Peekable, Seekable};
+use lending_iterator::{kmerge, LendingIterator, Peekable};
 use lending_iterator::adaptors::Inspect;
 use lending_iterator::kmerge::KMergeBy;
 
@@ -453,7 +453,7 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
         //     match self.peek() {
         //         None => return Ok(None),
         //         Some(Ok(tuple)) => {
-        //             println!(" --> Skipping over tuple {:?}", tuple);
+        //             // println!(" --> Skipping over tuple {:?}", tuple);
         //             let value = &tuple.values()[index as usize];
         //             match value.partial_cmp(target).unwrap() {
         //                 Ordering::Less => self.advance_single()?,
