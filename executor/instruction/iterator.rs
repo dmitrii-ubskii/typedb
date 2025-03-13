@@ -39,6 +39,7 @@ use crate::{
     },
     row::Row,
 };
+use crate::instruction::isa_reverse_executor::IsaReverseUnified;
 
 // TODO: the 'check' can deduplicate against all relevant variables as soon as an anonymous variable is no longer relevant.
 //       if the deduplicated answer leads to an answer, we should not re-emit it again (we will rediscover the same answers)
@@ -116,8 +117,10 @@ pub(crate) enum TupleIterator {
     IsaUnbounded(SortedTupleIterator<IsaUnboundedSortedThing>),
     IsaBounded(SortedTupleIterator<IsaBoundedSortedType>),
 
-    IsaReverseUnbounded(SortedTupleIterator<IsaReverseUnboundedSortedType>),
-    IsaReverseBounded(SortedTupleIterator<IsaReverseBoundedSortedThing>),
+    // IsaReverseUnbounded(SortedTupleIterator<IsaReverseUnboundedSortedType>),
+    // IsaReverseBounded(SortedTupleIterator<IsaReverseBoundedSortedThing>),
+
+    IsaReverseUnified(SortedTupleIterator<IsaReverseUnified>),
 
     HasSingle(SortedTupleIterator<HasUnboundedTupleIteratorSingle>),
     HasMerged(SortedTupleIterator<HasUnboundedTupleIteratorMerged>),

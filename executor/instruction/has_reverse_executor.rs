@@ -299,6 +299,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     fn get_iterator_bound_from(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
         from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         Ok(context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(

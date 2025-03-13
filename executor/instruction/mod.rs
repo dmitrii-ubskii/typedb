@@ -1215,7 +1215,7 @@ trait DynamicBinaryIterator {
                 // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
                 // So this function should take charge of the direction and allow the delegates to return their standard direction
                 debug_assert!(from.is_some());
-                self.get_iterator_bound_from(context, from.unwrap())?.into_tuple_iterator(
+                self.get_iterator_bound_from(context, row.as_reference(), from.unwrap())?.into_tuple_iterator(
                     filter_for_row,
                     Self::TUPLE_TO_FROM,
                     tuple_positions,
@@ -1245,6 +1245,7 @@ trait DynamicBinaryIterator {
     fn get_iterator_bound_from(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
         from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
 }

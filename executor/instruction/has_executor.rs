@@ -280,6 +280,7 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_bound_from(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
         from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         // TODO: inject value ranges

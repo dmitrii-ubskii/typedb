@@ -234,7 +234,7 @@ impl DynamicBinaryIterator for IsaExecutor {
         unreachable!()
     }
 
-    fn get_iterator_bound_from(&self, _context: &ExecutionContext<impl ReadableSnapshot + Sized>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>, from: &VariableValue<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         let VariableValue::Thing(thing) = from.to_owned() else {
             unreachable!("Has thing must be an entity or relation.")
         };
