@@ -1083,17 +1083,17 @@ pub(crate) enum TupleSortMode {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum DynamicBinaryIterateMode {
     // [x, y] in standard order, sorted by x, then y
-    Unbound,
+    UnboundOnFrom,
     // [x, y] in [y, x] sort order
-    UnboundInverted,
+    UnboundOnTo,
 
     // [X, y], where X is bound. Trivially sorted on both, but the position matters
-    BoundFrom,        // Sort variable is y
-    BoundFromSwapped, // Sort variable is X
+    BoundFromOnFrom, // Sort variable is X
+    BoundFromOnTo,   // Sort variable is y
 
     // [x, Y] where Y is bound. Trivially sorted on both, but the position matters
-    BoundToUsingReverse,        // Sort variable is x
-    BoundToUsingReverseSwapped, // Sort variable is Y
+    BoundToOnFromUsingReverse,        // Sort variable is x
+    BoundToOnToUsingReverse, // Sort variable is Y
 
     // [X, Y] where X & Y are both bound. Trivially sorted on both, but the position matters
     CheckOnFrom,
@@ -1101,16 +1101,51 @@ pub(crate) enum DynamicBinaryIterateMode {
 }
 
 impl DynamicBinaryIterateMode {
-    fn new(from: &Option<&VariableValue<'_>>, to: &Option<&VariableValue<'_>>, sorted_on: TupleSortMode) -> Self {
-        match (from, to, sorted_on) {
-            (None, None, TupleSortMode::From) => Self::Unbound,
-            (None, None, TupleSortMode::To) => Self::UnboundInverted,
-            (Some(_), None, TupleSortMode::From) => Self::BoundFromSwapped,
-            (Some(_), None, TupleSortMode::To) => Self::BoundFrom,
-            (None, Some(_), TupleSortMode::From) => Self::BoundToUsingReverse,
-            (None, Some(_), TupleSortMode::To) => Self::BoundToUsingReverseSwapped,
-            (Some(_), Some(_), TupleSortMode::From) => Self::CheckOnFrom,
-            (Some(_), Some(_), TupleSortMode::To) => Self::CheckOnTo,
+    fn new(from: &Vertex<ExecutorVariable>, to: &Vertex<ExecutorVariable>, sorted_on: TupleSortMode, row: MaybeOwnedRow<'_>) -> Self {
+
+        let from_bound: bool = !from.is_variable() ||  may_get_from_row(from, &row).is_some();
+        let to_bound: bool = !to.is_variable() || may_get_from_row(to, &row).is_some();
+
+        // TODO: Remove this short-circuit
+        // BinaryIterateMode also considers Label & Param bound for BoundFrom
+        let actual_mode = match (from_bound, to_bound, sorted_on) {
+            (false, false, TupleSortMode::From) => Self::UnboundOnFrom,
+            (false, false, TupleSortMode::To) => Self::UnboundOnTo,
+            (true, false, TupleSortMode::From) => Self::BoundFromOnFrom,
+            (true, false, TupleSortMode::To) => Self::BoundFromOnTo,
+            (false, true, TupleSortMode::From) => Self::BoundToOnFromUsingReverse,
+            (false, true, TupleSortMode::To) => Self::BoundToOnToUsingReverse,
+            (true, true, TupleSortMode::From) => Self::CheckOnFrom,
+            (true, true, TupleSortMode::To) => Self::CheckOnTo,
+        };
+
+        // TODO: return actual_mode;
+        //
+        // let mapped_to_old = match actual_mode {
+        //     Self::UnboundOnFrom => Self::UnboundOnFrom,
+        //     Self::UnboundOnTo => Self::UnboundOnTo,
+        //     Self::BoundFromOnFrom => Self::UnboundOnFrom, // See spreadsheet
+        //     Self::BoundFromOnTo => Self::BoundFromOnTo,
+        //     Self::BoundToOnFromUsingReverse => Self::UnboundOnFrom,
+        //     Self::BoundToOnToUsingReverse => Self::UnboundOnTo,
+        //     Self::CheckOnFrom => Self::UnboundOnFrom,
+        //     Self::CheckOnTo => Self::BoundFromOnTo,
+        // };
+
+        let binary_iterate_mode = match actual_mode {
+            DynamicBinaryIterateMode::UnboundOnFrom => BinaryIterateMode::Unbound,
+            DynamicBinaryIterateMode::UnboundOnTo => BinaryIterateMode::UnboundInverted,
+            DynamicBinaryIterateMode::BoundFromOnFrom => BinaryIterateMode::Unbound,
+            DynamicBinaryIterateMode::BoundFromOnTo => BinaryIterateMode::BoundFrom,
+            DynamicBinaryIterateMode::BoundToOnFromUsingReverse => BinaryIterateMode::Unbound,
+            DynamicBinaryIterateMode::BoundToOnToUsingReverse => BinaryIterateMode::UnboundInverted,
+            DynamicBinaryIterateMode::CheckOnFrom => BinaryIterateMode::Unbound,
+            DynamicBinaryIterateMode::CheckOnTo => BinaryIterateMode::BoundFrom,
+        };
+        match binary_iterate_mode {
+            BinaryIterateMode::Unbound => Self::UnboundOnFrom,
+            BinaryIterateMode::UnboundInverted => Self::UnboundOnTo,
+            BinaryIterateMode::BoundFrom => Self::BoundFromOnTo,
         }
     }
 }
@@ -1197,18 +1232,18 @@ trait DynamicBinaryIterator {
         };
         let tuple_positions = TuplePositions::Pair(tuple_positions);
 
+        let dynamic_iterate_mode = DynamicBinaryIterateMode::new(self.from(), self.to(), sort_mode, row.as_reference());
         let from = may_get_from_row(self.from(), &row);
         let to = may_get_from_row(self.to(), &row);
-        let dynamic_iterate_mode = DynamicBinaryIterateMode::new(&from, &to, sort_mode);
 
         let iterator = match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::Unbound => self.get_iterator_unbound(context, row)?.into_tuple_iterator(
+            DynamicBinaryIterateMode::UnboundOnFrom => self.get_iterator_unbound(context, row)?.into_tuple_iterator(
                 filter_for_row,
                 Self::TUPLE_FROM_TO,
                 tuple_positions,
                 variable_modes,
             ),
-            DynamicBinaryIterateMode::UnboundInverted => match self.get_iterator_unbound_inverted(context)? {
+            DynamicBinaryIterateMode::UnboundOnTo => match self.get_iterator_unbound_inverted(context)? {
                 Either::First(single) => {
                     single.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
                 }
@@ -1216,11 +1251,10 @@ trait DynamicBinaryIterator {
                     merged.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
                 }
             },
-            DynamicBinaryIterateMode::BoundFrom => {
+            DynamicBinaryIterateMode::BoundFromOnTo => {
                 // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
                 // So this function should take charge of the direction and allow the delegates to return their standard direction
-                debug_assert!(from.is_some());
-                self.get_iterator_bound_from(context, row.as_reference(), from.unwrap())?.into_tuple_iterator(
+                self.get_iterator_bound_from(context, row.as_reference())?.into_tuple_iterator(
                     filter_for_row,
                     Self::TUPLE_TO_FROM,
                     tuple_positions,
@@ -1232,12 +1266,14 @@ trait DynamicBinaryIterator {
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
             DynamicBinaryIterateMode::CheckOnFrom => {
                 debug_assert!(from.is_some() && to.is_some());
-                let optional_element = self.get_iterator_check(context, from.unwrap(), to.unwrap())?;
+                let optional_element = self.get_iterator_check(context, row)?;
                 let optional_tuple_result = optional_element.map(|x| Ok(x)).and_then(filter_for_row).map(Self::TUPLE_FROM_TO);
                 TupleIterator::Check(SortedTupleIterator::new(optional_tuple_result.into_iter(), tuple_positions, variable_modes))
             }
             // DynamicBinaryIterateMode::CheckOnTo => {}
-            _ => todo!(),
+            _ => {
+                todo!("Hit {:?} for {:?}", dynamic_iterate_mode, std::any::type_name::<Self>())
+            },
         };
         Ok(iterator)
     }
@@ -1256,14 +1292,12 @@ trait DynamicBinaryIterator {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-        from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
 
     fn get_iterator_check(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        from: &VariableValue<'_>,
-        to: &VariableValue<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>>;
 }
 

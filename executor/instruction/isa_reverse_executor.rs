@@ -41,6 +41,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::may_get_from_row;
 
 #[derive(Debug)]
 pub(crate) struct IsaReverseExecutor {
@@ -83,7 +84,7 @@ impl IsaReverseExecutor {
 
         let thing = isa.thing().as_variable();
         let type_ = isa.type_().as_variable();
-        let sort_mode = if type_.as_ref().unwrap() == &sort_by { TupleSortMode::From } else { TupleSortMode::To };
+        let sort_mode = if thing == Some(sort_by) { TupleSortMode::To } else { TupleSortMode::From };
         let output_tuple_positions = match iterate_mode {
             BinaryIterateMode::Unbound => TuplePositions::Pair([type_, thing]),
             _ => TuplePositions::Pair([thing, type_]),
@@ -241,12 +242,10 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-        from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         let range =
             self.checker.value_range_for(context, Some(row.as_reference()), self.isa.thing().as_variable().unwrap())?;
         let type_ = type_from_row_or_annotations(self.isa.type_(), row, self.type_to_instance_types.keys());
-        debug_assert!(&VariableValue::Type(type_) == from);
         instances_of_types_chained(
             &*context.snapshot,
             &*context.thing_manager,
@@ -268,12 +267,11 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
     fn get_iterator_check(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        from: &VariableValue<'_>,
-        to: &VariableValue<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let VariableValue::Type(type_) = from else { panic!() };
-        let VariableValue::Thing(thing) = to else { panic!() };
-        Ok((&thing.type_() == type_).then(|| (thing.clone(), type_.clone())))
+        let type_ = type_from_row_or_annotations(self.to(), row.as_reference(), self.type_to_instance_types.keys());
+        let VariableValue::Thing(thing) = may_get_from_row(self.to(), &row).unwrap() else { panic!() };
+        Ok((self.type_to_instance_types.get(&type_).unwrap().contains(&thing.type_())).then(|| (thing.clone(), type_.clone())))
     }
 }
 

@@ -43,6 +43,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::may_get_from_row;
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -282,10 +283,10 @@ impl DynamicBinaryIterator for HasExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-        from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
         // TODO: inject value ranges
-        let iterator = match from {
+        let owner = may_get_from_row(self.from(), &row).unwrap();
+        let iterator = match owner {
             VariableValue::Thing(Thing::Entity(entity)) => entity.get_has_types_range_unordered(
                 &*context.snapshot,
                 &*context.thing_manager,
@@ -304,11 +305,10 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_check(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        from: &VariableValue<'_>,
-        to: &VariableValue<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let VariableValue::Thing(owner_obj) = from else { panic!() };
-        let VariableValue::Thing(Thing::Attribute(attr)) = to else { panic!() };
+        let VariableValue::Thing(owner_obj) = may_get_from_row(self.from(), &row).unwrap() else { panic!() };
+        let VariableValue::Thing(Thing::Attribute(attr)) = may_get_from_row(self.to(), &row).unwrap() else { panic!() };
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?

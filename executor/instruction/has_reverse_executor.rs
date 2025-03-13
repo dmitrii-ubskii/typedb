@@ -43,6 +43,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::may_get_from_row;
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -302,11 +303,11 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-        from: &VariableValue<'_>,
     ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+        let attribute = may_get_from_row(self.from(), &row).unwrap();
         Ok(context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
             &*context.snapshot,
-            from.as_thing().as_attribute(),
+            attribute.as_thing().as_attribute(),
             &self.owner_type_range,
         ))
     }
@@ -314,11 +315,10 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     fn get_iterator_check(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        from: &VariableValue<'_>,
-        to: &VariableValue<'_>,
+        row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let VariableValue::Thing(Thing::Attribute(attr)) = from else { panic!() };
-        let VariableValue::Thing(owner_obj) = to else { panic!() };
+        let VariableValue::Thing(Thing::Attribute(attr)) = may_get_from_row(self.from(), &row).unwrap() else { panic!() };
+        let VariableValue::Thing(owner_obj) = may_get_from_row(self.to(), &row).unwrap() else { panic!() };
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
