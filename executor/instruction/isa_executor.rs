@@ -23,6 +23,10 @@ use ir::pattern::{
     Vertex,
 };
 use itertools::Itertools;
+use concept::thing::has::Has;
+use concept::thing::object::ObjectAPI;
+use concept::thing::ThingAPI;
+use encoding::graph::thing::edge::ThingEdgeHas;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
@@ -264,7 +268,9 @@ impl DynamicBinaryIterator for IsaExecutor {
         from: &VariableValue<'_>,
         to: &VariableValue<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let VariableValue::Thing(thing) = from else { panic!() };
+        let VariableValue::Type(type_) = to else { panic!() };
+        Ok((&thing.type_() == type_).then(|| (thing.clone(), type_.clone())))
     }
 }
 

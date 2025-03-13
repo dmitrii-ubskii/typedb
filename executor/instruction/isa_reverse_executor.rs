@@ -271,7 +271,9 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
         from: &VariableValue<'_>,
         to: &VariableValue<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let VariableValue::Type(type_) = from else { panic!() };
+        let VariableValue::Thing(thing) = to else { panic!() };
+        Ok((&thing.type_() == type_).then(|| (thing.clone(), type_.clone())))
     }
 }
 

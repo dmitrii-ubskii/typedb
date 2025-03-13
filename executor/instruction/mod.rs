@@ -1232,8 +1232,9 @@ trait DynamicBinaryIterator {
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
             DynamicBinaryIterateMode::CheckOnFrom => {
                 debug_assert!(from.is_some() && to.is_some());
-                todo!()
-                // self.get_iterator_check(context, from.unwrap(), to.unwrap())?.and_then(filter_for_row).map(Self::TUPLE_FROM_TO)
+                let optional_element = self.get_iterator_check(context, from.unwrap(), to.unwrap())?;
+                let optional_tuple_result = optional_element.map(|x| Ok(x)).and_then(filter_for_row).map(Self::TUPLE_FROM_TO);
+                TupleIterator::Check(SortedTupleIterator::new(optional_tuple_result.into_iter(), tuple_positions, variable_modes))
             }
             // DynamicBinaryIterateMode::CheckOnTo => {}
             _ => todo!(),

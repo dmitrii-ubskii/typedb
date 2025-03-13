@@ -307,8 +307,8 @@ impl DynamicBinaryIterator for HasExecutor {
         from: &VariableValue<'_>,
         to: &VariableValue<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let VariableValue::Thing(Thing::Attribute(attr)) = to else { panic!() };
         let VariableValue::Thing(owner_obj) = from else { panic!() };
+        let VariableValue::Thing(Thing::Attribute(attr)) = to else { panic!() };
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?

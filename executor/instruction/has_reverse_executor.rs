@@ -11,7 +11,7 @@ use std::{
     vec,
 };
 
-use answer::{variable_value::VariableValue, Type};
+use answer::{variable_value::VariableValue, Type, Thing};
 use compiler::{executable::match_::instructions::thing::HasReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
@@ -21,6 +21,9 @@ use concept::{
 use encoding::value::value::Value;
 use ir::pattern::Vertex;
 use itertools::{kmerge_by, Itertools, KMergeBy};
+use concept::thing::object::ObjectAPI;
+use concept::thing::ThingAPI;
+use encoding::graph::thing::edge::ThingEdgeHas;
 use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
@@ -314,7 +317,12 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         from: &VariableValue<'_>,
         to: &VariableValue<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let VariableValue::Thing(Thing::Attribute(attr)) = from else { panic!() };
+        let VariableValue::Thing(owner_obj) = to else { panic!() };
+        Ok(owner_obj
+            .as_object()
+            .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
+            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1 as u64)))
     }
 }
 
