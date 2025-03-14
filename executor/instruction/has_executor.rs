@@ -28,6 +28,7 @@ use concept::{
 };
 use concept::thing::attribute::Attribute;
 use encoding::graph::type_::vertex::TypeVertexEncoding;
+use encoding::value::value_type::ValueTypeCategory;
 use lending_iterator::{LendingIterator, Peekable};
 use lending_iterator::kmerge::KMergeBy;
 use primitive::Bounds;
@@ -56,6 +57,7 @@ pub(crate) struct HasExecutor {
     owner_attribute_types: Arc<BTreeMap<Type, Vec<Type>>>,
     owner_type_range: Bounds<ObjectType>,
     attribute_type_range: Bounds<AttributeType>,
+    ordered_value_type_categories: Vec<ValueTypeCategory>,
     filter_fn: Arc<HasFilterFn>,
     owner_cache: Option<Vec<Object>>,
     checker: Checker<(Has, u64)>,
@@ -136,6 +138,17 @@ impl HasExecutor {
         } else {
             None
         };
+
+        let possible_attribute_value_categories = thing_manager.type_manager().get_attribute_types(snapshot)?
+            .into_iter()
+            .filter_map(|attribute_type| {
+                attribute_type.get_value_type_without_source(snapshot, thing_manager.type_manager())
+                    .ok()?
+                    .map(|value_type| value_type.category())
+        })
+            .sorted_by_key(|category| category.to_bytes())
+            .collect_vec();
+
         Ok(Self {
             has,
             iterate_mode,
@@ -144,6 +157,7 @@ impl HasExecutor {
             owner_attribute_types,
             owner_type_range,
             attribute_type_range,
+            ordered_value_type_categories: possible_attribute_value_categories,
             filter_fn,
             owner_cache,
             checker,
@@ -200,11 +214,12 @@ impl HasExecutor {
                 debug_assert!(self.owner_cache.is_some());
                 if let Some([owner]) = self.owner_cache.as_deref() {
                     // no heap allocs needed if there is only 1 iterator
-                    let iterator = owner.get_has_types_range_unordered(
+                    let iterator = owner.get_has_types_range_unordered_in_value_types(
                         snapshot,
                         thing_manager,
                         // TODO: this should be just the types owned by the one instance's type in the cache!
                         &self.attribute_type_range,
+                        &self.ordered_value_type_categories,
                         &value_range,
                         storage_counters,
                     )?;
@@ -226,10 +241,11 @@ impl HasExecutor {
                     let owners = self.owner_cache.as_ref().unwrap().iter();
                     let mut iterators = Vec::new();
                     for owner in owners {
-                        let iterator = owner.get_has_types_range_unordered(
+                        let iterator = owner.get_has_types_range_unordered_in_value_types(
                             snapshot,
                             thing_manager,
                             &self.attribute_type_range,
+                            &self.ordered_value_type_categories,
                             &value_range,
                             storage_counters.clone()
                         )?;
@@ -259,13 +275,26 @@ impl HasExecutor {
             BinaryIterateMode::BoundFrom => {
                 let owner = self.has.owner().as_variable().unwrap().as_position().unwrap();
                 debug_assert!(row.len() > owner.as_usize());
-                // TODO: inject value ranges
                 let iterator = match row.get(owner) {
                     VariableValue::Thing(Thing::Entity(entity)) => {
-                        entity.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range, &value_range, storage_counters)?
+                        entity.get_has_types_range_unordered_in_value_types(
+                            snapshot,
+                            thing_manager,
+                            &self.attribute_type_range,
+                            &self.ordered_value_type_categories,
+                            &value_range,
+                            storage_counters
+                        )?
                     }
                     VariableValue::Thing(Thing::Relation(relation)) => {
-                        relation.get_has_types_range_unordered(snapshot, thing_manager, &self.attribute_type_range, &value_range, storage_counters)?
+                        relation.get_has_types_range_unordered_in_value_types(
+                            snapshot,
+                            thing_manager,
+                            &self.attribute_type_range,
+                            &self.ordered_value_type_categories,
+                            &value_range,
+                            storage_counters
+                        )?
                     }
                     _ => unreachable!("Has owner must be an entity or relation."),
                 };
@@ -360,12 +389,18 @@ impl<Iter> TupleSeekable for HasTupleIterator<Iter>
 }
 
 fn create_has_filter_owners_attributes(owner_attribute_types: Arc<BTreeMap<Type, Vec<Type>>>) -> Arc<HasFilterFn> {
-    Arc::new(move |result| match result {
-        Ok((has, _)) => match owner_attribute_types.get(&Type::from(has.owner().type_())) {
-            Some(attribute_types) => Ok(attribute_types.contains(&Type::Attribute(has.attribute().type_()))),
-            None => Ok(false),
-        },
-        Err(err) => Err(err.clone()),
+    Arc::new(move |result| {
+        match result {
+            Ok((has, _)) => match owner_attribute_types.get(&Type::from(has.owner().type_())) {
+                Some(attribute_types) => {
+                    let attribute_type = has.attribute().type_();
+                    println!("Checking if attribute type {:?} is within allowed types {:?}", attribute_type, attribute_types);
+                    Ok(attribute_types.contains(&Type::Attribute(attribute_type)))
+                },
+                None => Ok(false),
+            },
+            Err(err) => Err(err.clone()),
+        }
     })
 }
 

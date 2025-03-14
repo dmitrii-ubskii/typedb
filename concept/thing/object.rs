@@ -16,6 +16,7 @@ use encoding::{graph::thing::{
     edge::{ThingEdgeHas, ThingEdgeHasReverse},
     vertex_object::ObjectVertex,
 }, Keyable, layout::prefix::Prefix, Prefixed, value::{decode_value_u64, value::Value}};
+use encoding::value::value_type::ValueTypeCategory;
 use lending_iterator::{higher_order::Hkt, LendingIterator};
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
 use resource::profile::StorageCounters;
@@ -149,7 +150,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         attribute_type: AttributeType,
         value: Value<'_>,
     ) -> Result<bool, Box<ConceptReadError>> {
-        thing_manager.has_attribute_with_value(snapshot, self, attribute_type, value)
+        thing_manager.owner_has_attribute_with_value(snapshot, self, attribute_type, value)
     }
 
     fn has_attribute(
@@ -158,7 +159,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         thing_manager: &ThingManager,
         attribute: &Attribute,
     ) -> Result<bool, Box<ConceptReadError>> {
-        thing_manager.has_attribute(snapshot, self, attribute)
+        thing_manager.owner_has_attribute(snapshot, self, attribute)
     }
 
     fn get_has_unordered<'m>(
@@ -167,13 +168,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         thing_manager: &'m ThingManager,
         storage_counters: StorageCounters,
     ) -> Result<HasIterator, Box<ConceptReadError>> {
-        self.get_has_types_range_unordered(
-            snapshot,
-            thing_manager,
-            &(Bound::<AttributeType>::Unbounded, Bound::Unbounded),
-            &..,
-            storage_counters,
-        )
+        self.get_has_types_range_unordered(snapshot, thing_manager, storage_counters )
     }
 
     fn get_has_type_unordered<'a>(
@@ -200,11 +195,28 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         self,
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> Result<HasIterator, Box<ConceptReadError>> {
+        thing_manager.owner_get_has_unordered_all(snapshot, self, storage_counters)
+    }
+
+    fn get_has_types_range_unordered_in_value_types<'a>(
+        self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
         attribute_type_range: &impl RangeBounds<AttributeType>,
+        ordered_value_categories: &[ValueTypeCategory],
         value_range: &'a impl RangeBounds<Value<'a>>,
         storage_counters: StorageCounters,
     ) -> Result<HasIterator, Box<ConceptReadError>> {
-        thing_manager.get_has_from_thing_unordered(snapshot, self, attribute_type_range, value_range, storage_counters)
+        thing_manager.owner_get_has_unordered_in_value_type(
+            snapshot,
+            self,
+            attribute_type_range,
+            ordered_value_categories,
+            value_range,
+            storage_counters
+        )
     }
 
     fn set_has_unordered(
@@ -370,7 +382,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
     ) -> impl Iterator<Item = Result<Relation, Box<ConceptReadError>>> {
-        thing_manager.get_relations_player(snapshot, self, storage_counters)
+        thing_manager.get_player_relations(snapshot, self, storage_counters)
     }
 
     fn get_relations_by_role(
@@ -380,7 +392,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         role_type: RoleType,
         storage_counters: StorageCounters,
     ) -> impl Iterator<Item = Result<(Relation, u64), Box<ConceptReadError>>> {
-        thing_manager.get_relations_player_role(snapshot, self, role_type, storage_counters)
+        thing_manager.get_player_relations_using_role(snapshot, self, role_type, storage_counters)
     }
 
     fn get_relations_roles(
@@ -389,7 +401,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
     )-> impl Iterator<Item=Result<(Relation, RoleType, u64), Box<ConceptReadError>>> + 'static {
-        thing_manager.get_relations_roles(snapshot, self, storage_counters)
+        thing_manager.get_player_relations_roles(snapshot, self, storage_counters)
     }
 
     fn get_has_counts(
@@ -439,7 +451,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         relation_type: RelationType,
         storage_counters: StorageCounters,
     ) -> Result<IndexedRelationsIterator, Box<ConceptReadError>> {
-        thing_manager.get_indexed_relation_players(snapshot, self, relation_type, storage_counters)
+        thing_manager.get_indexed_relation_players_from(snapshot, self, relation_type, storage_counters)
     }
 
     fn get_indexed_relations_with_player(
@@ -450,7 +462,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         relation_type: RelationType,
         storage_counters: StorageCounters,
     ) -> Result<IndexedRelationsIterator, Box<ConceptReadError>> {
-        thing_manager.get_indexed_relations(snapshot, self, end_player, relation_type, storage_counters)
+        thing_manager.get_indexed_relations_between(snapshot, self, end_player, relation_type, storage_counters)
     }
 
     fn get_indexed_relation_roles_with_player_and_relation(

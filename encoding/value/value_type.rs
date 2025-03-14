@@ -6,18 +6,19 @@
 
 use std::{fmt, mem, ops::Range};
 
-use bytes::{byte_array::ByteArray, Bytes};
-use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
+
+use bytes::{byte_array::ByteArray, Bytes};
+use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use structural_equality::StructuralEquality;
 
 use crate::{
+    AsBytes,
     graph::{definition::definition_key::DefinitionKey, type_::property::TypeVertexPropertyEncoding},
     layout::infix::Infix,
-    AsBytes,
 };
 
 // We can support Prefix::ATTRIBUTE_MAX - Prefix::ATTRIBUTE_MIN different built-in value types
@@ -87,29 +88,29 @@ impl ValueType {
         }
     }
 
-    pub fn is_trivially_castable_to(&self, other: &Self) -> bool {
-        if self == other {
+    pub fn is_trivially_castable_to(&self, other: ValueTypeCategory) -> bool {
+        if self.category() == other {
             return true;
         }
         match self {
-            ValueType::Integer => other == &ValueType::Double || other == &ValueType::Decimal,
-            ValueType::Decimal => other == &ValueType::Double,
-            ValueType::Date => other == &ValueType::DateTime,
+            ValueType::Integer => other == ValueTypeCategory::Double || other == ValueTypeCategory::Decimal,
+            ValueType::Decimal => other == ValueTypeCategory::Double,
+            ValueType::Date => other == ValueTypeCategory::DateTime,
             _ => false,
         }
     }
 
     // we can approximately cast any numerical type to any other numerical type
-    pub fn is_approximately_castable_to(&self, other: &Self) -> bool {
-        if self == other {
+    pub fn is_approximately_castable_to(&self, other: ValueTypeCategory) -> bool {
+        if self.category() == other {
             return true;
         }
         match self {
-            ValueType::Integer => other == &ValueType::Double || other == &ValueType::Decimal,
-            ValueType::Decimal => other == &ValueType::Double || other == &ValueType::Integer,
-            ValueType::Double => other == &ValueType::Decimal || other == &ValueType::Integer,
+            ValueType::Integer => other == ValueTypeCategory::Double || other == ValueTypeCategory::Decimal,
+            ValueType::Decimal => other == ValueTypeCategory::Double || other == ValueTypeCategory::Integer,
+            ValueType::Double => other == ValueTypeCategory::Decimal || other == ValueTypeCategory::Integer,
             // TODO: we will have to decide if we consider date datatypes to be approximately castable to each other
-            ValueType::Date => other == &ValueType::DateTime,
+            ValueType::Date => other == ValueTypeCategory::DateTime,
             _ => false,
         }
     }
