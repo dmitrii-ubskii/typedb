@@ -18,25 +18,27 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use itertools::Itertools;
+use concept::type_::OwnerAPI;
+use ir::pattern::Vertex;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{
-    instruction::{
-        iterator::{SortedTupleIterator, TupleIterator},
-        owns_executor::{
-            OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator, OwnsVariableValueExtractor, EXTRACT_ATTRIBUTE,
-            EXTRACT_OWNER,
-        },
-        plays_executor::PlaysExecutor,
-        tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
+use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
+    iterator::{SortedTupleIterator, TupleIterator},
+    owns_executor::{
+        OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator, OwnsVariableValueExtractor, EXTRACT_ATTRIBUTE,
+        EXTRACT_OWNER,
     },
-    pipeline::stage::ExecutionContext,
-    row::MaybeOwnedRow,
-};
+    plays_executor::PlaysExecutor,
+    tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
+    type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
+}, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
+use crate::instruction::{DynamicBinaryIterateMode, DynamicBinaryIterator, MapToTupleFn, TupleSortMode, UnreachableIteratorType};
+use crate::instruction::owns_executor::{OwnsExecutor, OwnsFlattenedVectorInner, OwnsVectorInner};
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
+    sort_mode: TupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -77,6 +79,7 @@ impl OwnsReverseExecutor {
 
         let OwnsReverseInstruction { owns, checks, .. } = owns;
 
+        let sort_mode = todo!();
         let iterate_mode = BinaryIterateMode::new(owns.attribute(), owns.owner(), &variable_modes, sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_owns_filter_owner_attribute(attribute_owner_types.clone()),
@@ -103,6 +106,7 @@ impl OwnsReverseExecutor {
 
         Self {
             owns,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -208,3 +212,74 @@ fn create_owns_filter_attribute(owner_types: Arc<BTreeSet<Type>>) -> Arc<OwnsFil
         Err(err) => Err(err.clone()),
     })
 }
+
+impl DynamicBinaryIterator for OwnsReverseExecutor {
+    type Element = (ObjectType, AttributeType);
+    type IteratorUnbound = OwnsFlattenedVectorInner;
+    type IteratorUnboundInverted = UnreachableIteratorType;
+    type IteratorUnboundInvertedMerged = UnreachableIteratorType;
+    type IteratorBoundFrom = OwnsVectorInner;
+
+    fn from(&self) -> &Vertex<ExecutorVariable> {
+        todo!()
+    }
+
+    fn to(&self) -> &Vertex<ExecutorVariable> {
+        todo!()
+    }
+
+    fn sort_mode(&self) -> TupleSortMode {
+        self.sort_mode
+    }
+
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = OwnsExecutor::TUPLE_TO_FROM;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = OwnsExecutor::TUPLE_FROM_TO;
+
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+
+            let type_manager = context.type_manager();
+            let owns: Vec<_> = self
+                .attribute_owner_types
+                .keys()
+                .map(|attribute| {
+                    let attribute_type = attribute.as_attribute_type();
+                    attribute_type.get_owner_types(&*context.snapshot, type_manager).map(|res| {
+                        res.to_owned().keys().map(|object_type| (*object_type, attribute_type)).collect()
+                    })
+                })
+                .try_collect()?;
+            let iterator: OwnsFlattenedVectorInner = owns.into_iter().flatten().map(Ok as _);
+         Ok(iterator)
+
+    }
+
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+        return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
+            functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
+        }));
+    }
+
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+        let attribute_type =
+            type_from_row_or_annotations(self.owns.attribute(), row, self.attribute_owner_types.keys())
+                .as_attribute_type();
+        let type_manager = context.type_manager();
+        let owns = attribute_type
+            .get_owner_types(&*context.snapshot, type_manager)?
+            .to_owned()
+            .into_keys()
+            .map(|object_type| (object_type, attribute_type));
+
+        let iterator = owns.sorted_by_key(|(owner, _)| *owner).map(Ok as _);
+        Ok(iterator)
+    }
+
+    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        let attribute = type_from_row_or_annotations(self.from(), row.as_reference(), self.attribute_owner_types.keys()).as_attribute_type();
+        let owner = type_from_row_or_annotations(self.to(), row, self.owner_types.iter()).as_object_type();
+        Ok(owner.has_owns_attribute(&*context.snapshot, context.type_manager(), attribute)?
+            .then(|| (owner, attribute)))
+    }
+}
+
+compile_error!("I don't have the BecomesSortedTupleIterator here because they share types. I'm gonna change it to use just a macro")

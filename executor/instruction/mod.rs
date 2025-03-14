@@ -1196,6 +1196,7 @@ macro_rules! impl_becomes_sorted_tuple_iterator {
 }
 
 trait DynamicBinaryIterator {
+    type Element;
     type IteratorUnbound: BecomesSortedTupleIterator<Self::Element>;
     type IteratorUnboundInverted: BecomesSortedTupleIterator<Self::Element>;
     type IteratorUnboundInvertedMerged: BecomesSortedTupleIterator<Self::Element>;
@@ -1207,7 +1208,6 @@ trait DynamicBinaryIterator {
     // type IteratorBoundToOnFrom;
     // type IteratorBoundToOnTo; // TODO, Can we derive this automatically?
     //
-    type Element;
     // type IteratorCheckTo; // TODO, Can we derive this automatically?
 
     fn from(&self) -> &Vertex<ExecutorVariable>;
