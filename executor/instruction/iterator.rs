@@ -116,10 +116,8 @@ pub(crate) enum TupleIterator {
     IsaUnbounded(SortedTupleIterator<IsaUnboundedSortedThing>),
     IsaBounded(SortedTupleIterator<IsaBoundedSortedType>),
 
-    // IsaReverseUnbounded(SortedTupleIterator<IsaReverseUnboundedSortedType>),
-    // IsaReverseBounded(SortedTupleIterator<IsaReverseBoundedSortedThing>),
-
-    IsaReverseUnified(SortedTupleIterator<IsaReverseUnified>),
+    IsaReverseUnbounded(SortedTupleIterator<IsaReverseUnboundedSortedType>),
+    IsaReverseBounded(SortedTupleIterator<IsaReverseBoundedSortedThing>),
 
     HasSingle(SortedTupleIterator<HasUnboundedTupleIteratorSingle>),
     HasMerged(SortedTupleIterator<HasUnboundedTupleIteratorMerged>),

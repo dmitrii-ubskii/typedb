@@ -30,20 +30,19 @@ use storage::snapshot::ReadableSnapshot;
 
 use super::has_executor::{HasExecutor, HasFilterMapFn};
 use crate::{
-    impl_becomes_sorted_tuple_iterator,
     instruction::{
         has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
         iid_executor::IidExecutor,
         iterator::{SortedTupleIterator, TupleIterator},
         min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterMapUnchangedFn,
+        BinaryIterateMode, Checker, DynamicBinaryIterator, FilterMapUnchangedFn,
         MapToTupleFn, TupleSortMode, UnreachableIteratorType, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::may_get_from_row;
+use crate::instruction::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, may_get_from_row};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -67,7 +66,7 @@ impl fmt::Debug for HasReverseExecutor {
 
 pub(crate) type HasReverseTupleIteratorSingle = HasTupleIterator<HasReverseIterator>;
 pub(crate) type HasReverseTupleIteratorChained = HasTupleIterator<ChainedHasReverseIterator>;
-type ChainedHasReverseIterator = iter::Flatten<vec::IntoIter<HasReverseIterator>>;
+pub(crate) type ChainedHasReverseIterator = iter::Flatten<vec::IntoIter<HasReverseIterator>>;
 pub(crate) type HasReverseUnboundedSortedOwnerMerged = HasTupleIterator<KMergeBy<HasReverseIterator, HasOrderingFn>>;
 
 impl HasReverseExecutor {
@@ -229,10 +228,10 @@ fn compare_has_by_owner_then_attribute(
 
 impl DynamicBinaryIterator for HasReverseExecutor {
     type Element = (Has, u64);
-    type IteratorUnbound = ChainedHasReverseIterator;
-    type IteratorUnboundInverted = HasReverseIterator;
-    type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
-    type IteratorBoundFrom = HasReverseIterator;
+    // type IteratorUnbound = ChainedHasReverseIterator;
+    // type IteratorUnboundInverted = HasReverseIterator;
+    // type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
+    // type IteratorBoundFrom = HasReverseIterator;
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.has.attribute()
@@ -253,7 +252,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let range = self.checker.value_range_for(
             context,
             Some(row.as_reference()),
@@ -270,7 +269,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     fn get_iterator_unbound_inverted(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    ) -> Result<Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>, Box<ConceptReadError>> {
         debug_assert!(self.attribute_cache.get().is_some());
         if self.attribute_cache.get().unwrap().len() == 1 {
             let attribute = &self.attribute_cache.get().unwrap()[0];
@@ -303,7 +302,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let attribute = may_get_from_row(self.from(), &row).unwrap();
         Ok(context.thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
             &*context.snapshot,
@@ -326,8 +325,8 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     }
 }
 
-impl_becomes_sorted_tuple_iterator! {
-    HasReverseIterator[(Has,u64)] => HasReverseSingle,
-    ChainedHasReverseIterator[(Has,u64)] => HasReverseChained,
-    KMergeBy<HasReverseIterator, HasOrderingFn>[(Has,u64)] => HasReverseMerged,
-}
+// impl_becomes_sorted_tuple_iterator! {
+//     HasReverseIterator[(Has,u64)] => HasReverseSingle,
+//     ChainedHasReverseIterator[(Has,u64)] => HasReverseChained,
+//     KMergeBy<HasReverseIterator, HasOrderingFn>[(Has,u64)] => HasReverseMerged,
+// }

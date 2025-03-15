@@ -23,7 +23,7 @@ use ir::pattern::Vertex;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
+use crate::{instruction::{
     iterator::{SortedTupleIterator, TupleIterator},
     owns_executor::{
         OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator, OwnsVariableValueExtractor, EXTRACT_ATTRIBUTE,
@@ -33,7 +33,7 @@ use crate::{impl_becomes_sorted_tuple_iterator, instruction::{
     tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
     type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
 }, pipeline::stage::ExecutionContext, row::MaybeOwnedRow};
-use crate::instruction::{DynamicBinaryIterateMode, DynamicBinaryIterator, MapToTupleFn, TupleSortMode, UnreachableIteratorType};
+use crate::instruction::{DynamicBinaryIterateMode, DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, MapToTupleFn, TupleSortMode, UnreachableIteratorType};
 use crate::instruction::owns_executor::{OwnsExecutor, OwnsFlattenedVectorInner, OwnsVectorInner};
 
 pub(crate) struct OwnsReverseExecutor {
@@ -215,10 +215,10 @@ fn create_owns_filter_attribute(owner_types: Arc<BTreeSet<Type>>) -> Arc<OwnsFil
 
 impl DynamicBinaryIterator for OwnsReverseExecutor {
     type Element = (ObjectType, AttributeType);
-    type IteratorUnbound = OwnsFlattenedVectorInner;
-    type IteratorUnboundInverted = UnreachableIteratorType;
-    type IteratorUnboundInvertedMerged = UnreachableIteratorType;
-    type IteratorBoundFrom = OwnsVectorInner;
+    // type IteratorUnbound = OwnsFlattenedVectorInner;
+    // type IteratorUnboundInverted = UnreachableIteratorType;
+    // type IteratorUnboundInvertedMerged = UnreachableIteratorType;
+    // type IteratorBoundFrom = OwnsVectorInner;
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         todo!()
@@ -235,7 +235,7 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = OwnsExecutor::TUPLE_TO_FROM;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = OwnsExecutor::TUPLE_FROM_TO;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
 
             let type_manager = context.type_manager();
             let owns: Vec<_> = self
@@ -253,13 +253,13 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
 
     }
 
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<UnreachableIteratorType<Self::Element>,UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
         return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
             functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
         }));
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let attribute_type =
             type_from_row_or_annotations(self.owns.attribute(), row, self.attribute_owner_types.keys())
                 .as_attribute_type();
@@ -282,4 +282,4 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
     }
 }
 
-compile_error!("I don't have the BecomesSortedTupleIterator here because they share types. I'm gonna change it to use just a macro")
+// compile_error!("I don't have the BecomesSortedTupleIterator here because they share types. I'm gonna change it to use just a macro")

@@ -31,7 +31,8 @@ use ir::{
     },
     pipeline::ParameterRegistry,
 };
-use itertools::{Itertools, MinMaxResult};
+use itertools::{Itertools, KMergeBy, MinMaxResult};
+use concept::thing::object::{HasIterator, HasReverseIterator};
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
@@ -61,6 +62,10 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::has_executor::HasOrderingFn;
+use crate::instruction::has_reverse_executor::ChainedHasReverseIterator;
+use crate::instruction::isa_executor::{IsaBoundedInner, MultipleTypeIsaIterator};
+use crate::instruction::owns_executor::{OwnsFlattenedVectorInner, OwnsVectorInner};
 
 mod has_executor;
 mod has_reverse_executor;
@@ -1150,66 +1155,20 @@ impl DynamicBinaryIterateMode {
     }
 }
 
-trait BecomesSortedTupleIterator<T>: Iterator + Sized {
-    fn into_tuple_iterator(
-        self,
-        check: Box<FilterMapUnchangedFn<T>>,
-        to_tuple: MapToTupleFn<T>,
-        tuple_positions: TuplePositions,
-        variable_modes: &VariableModes,
-    ) -> TupleIterator;
+struct UnreachableIteratorType<T> {
+    phantom: PhantomData<T>,
 }
-
-struct UnreachableIteratorType;
-impl Iterator for UnreachableIteratorType {
-    type Item = ();
+impl<T> Iterator for UnreachableIteratorType<T> {
+    type Item = ExecutorResult<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         unreachable!()
     }
 }
 
-impl<T> BecomesSortedTupleIterator<T> for UnreachableIteratorType {
-    fn into_tuple_iterator(
-        self,
-        _: Box<FilterMapUnchangedFn<T>>,
-        _: MapToTupleFn<T>,
-        _: TuplePositions,
-        _: &VariableModes,
-    ) -> TupleIterator {
-        unreachable!()
-    }
-}
 
-#[macro_export]
-macro_rules! impl_becomes_sorted_tuple_iterator {
-    ( $($type_:ty[$element:ty] => $variant:ident,)* ) => {
-        $(
-        impl BecomesSortedTupleIterator<$element> for $type_ {
-            fn into_tuple_iterator(self, check: Box<FilterMapUnchangedFn<$element>>, to_tuple: MapToTupleFn<$element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
-                let filter_mapped = self.filter_map(check).map(to_tuple);
-                TupleIterator::$variant(SortedTupleIterator::new(filter_mapped, tuple_positions, variable_modes))
-            }
-        }
-        )*
-    };
-}
-
-trait DynamicBinaryIterator {
+trait DynamicBinaryIterator : Sized {
     type Element;
-    type IteratorUnbound: BecomesSortedTupleIterator<Self::Element>;
-    type IteratorUnboundInverted: BecomesSortedTupleIterator<Self::Element>;
-    type IteratorUnboundInvertedMerged: BecomesSortedTupleIterator<Self::Element>;
-
-    // TODO: If it's always the same as IteratorUnbound, we should just do defaults.
-    type IteratorBoundFrom: BecomesSortedTupleIterator<Self::Element>;
-    // type IteratorBoundFromOnFrom;// TODO, Can we derive this automatically?
-    //
-    // type IteratorBoundToOnFrom;
-    // type IteratorBoundToOnTo; // TODO, Can we derive this automatically?
-    //
-    // type IteratorCheckTo; // TODO, Can we derive this automatically?
-
     fn from(&self) -> &Vertex<ExecutorVariable>;
     fn to(&self) -> &Vertex<ExecutorVariable>;
 
@@ -1237,29 +1196,24 @@ trait DynamicBinaryIterator {
         let to = may_get_from_row(self.to(), &row);
 
         let iterator = match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::UnboundOnFrom => self.get_iterator_unbound(context, row)?.into_tuple_iterator(
-                filter_for_row,
-                Self::TUPLE_FROM_TO,
-                tuple_positions,
-                variable_modes,
-            ),
-            DynamicBinaryIterateMode::UnboundOnTo => match self.get_iterator_unbound_inverted(context)? {
-                Either::First(single) => {
-                    single.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
-                }
-                Either::Second(merged) => {
-                    merged.into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
+            DynamicBinaryIterateMode::UnboundOnFrom => {
+                self.get_iterator_unbound(context, row)?
+                    .unbound_into_tuple_iterator(filter_for_row, Self::TUPLE_FROM_TO, tuple_positions, variable_modes)
+            },
+            DynamicBinaryIterateMode::UnboundOnTo => {
+                match self.get_iterator_unbound_inverted(context)? {
+                    Either::First(single) => {
+                        single.unbound_inverted_into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
+                    }
+                    Either::Second(merged) => {
+                        merged.unbound_inverted_into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
+                    }
                 }
             },
             DynamicBinaryIterateMode::BoundFromOnTo => {
                 // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
                 // So this function should take charge of the direction and allow the delegates to return their standard direction
-                self.get_iterator_bound_from(context, row.as_reference())?.into_tuple_iterator(
-                    filter_for_row,
-                    Self::TUPLE_TO_FROM,
-                    tuple_positions,
-                    variable_modes,
-                )
+                self.get_iterator_bound_from(context, row.as_reference())?.bound_from_into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes)
             }
             // DynamicBinaryIterateMode::BoundFromSwapped => {}
             // DynamicBinaryIterateMode::BoundToUsingReverse => {}
@@ -1282,17 +1236,17 @@ trait DynamicBinaryIterator {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>>;
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>>;
     fn get_iterator_unbound_inverted(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>>;
+    ) -> Result<Either<impl ExecutorIteratorUnboundInverted<Self>,  impl ExecutorIteratorUnboundInverted<Self>>, Box<ConceptReadError>>;
 
     fn get_iterator_bound_from(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>>;
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>>;
 
     fn get_iterator_check(
         &self,
@@ -1310,4 +1264,92 @@ fn may_get_from_row<'a>(
         .and_then(|var| var.as_position())
         .and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos)))
         .filter(|v| !v.is_empty())
+}
+
+type CheckedAndTupledIter<It, T> = std::iter::Map<std::iter::FilterMap<It, Box<FilterMapUnchangedFn<T>>>, MapToTupleFn<T>>;
+type ExecutorResult<T> = Result<T, Box<ConceptReadError>>;
+trait ExecutorIteratorUnbound<Executor: DynamicBinaryIterator> : Iterator<Item=ExecutorResult<Executor::Element>> + Sized {
+    fn unbound_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<Executor::Element>>, to_tuple: MapToTupleFn<Executor::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator;
+}
+
+trait ExecutorIteratorUnboundInverted<Executor: DynamicBinaryIterator>  : Iterator<Item=ExecutorResult<Executor::Element>> + Sized {
+    fn unbound_inverted_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<Executor::Element>>, to_tuple: MapToTupleFn<Executor::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator;
+}
+
+trait ExecutorIteratorBoundFrom<Executor: DynamicBinaryIterator>  : Iterator<Item=ExecutorResult<Executor::Element>> + Sized {
+    fn bound_from_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<Executor::Element>>, to_tuple: MapToTupleFn<Executor::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator;
+}
+
+macro_rules! impl_iterator_unbound {
+    ($($executor:ty : $iter:ty => $variant:ident,)*) => {
+        $(
+            impl ExecutorIteratorUnbound<$executor> for $iter {
+                fn unbound_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<<$executor as DynamicBinaryIterator>::Element>>, to_tuple: MapToTupleFn<<$executor as DynamicBinaryIterator>::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
+                    let checked_tupled = self.filter_map(filter_for_row).map(to_tuple);
+                    TupleIterator::$variant(SortedTupleIterator::new(checked_tupled, tuple_positions, variable_modes))
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_iterator_unbound_inverted {
+    ($($executor:ty : $iter:ty => $variant:ident,)*) => {
+        $(
+            impl ExecutorIteratorUnboundInverted<$executor> for $iter {
+                fn unbound_inverted_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<<$executor as DynamicBinaryIterator>::Element>>, to_tuple: MapToTupleFn<<$executor as DynamicBinaryIterator>::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
+                    let checked_tupled = self.filter_map(filter_for_row).map(to_tuple);
+                    TupleIterator::$variant(SortedTupleIterator::new(checked_tupled, tuple_positions, variable_modes))
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_iterator_bound_from {
+    ($($executor:ty : $iter:ty => $variant:ident,)*) => {
+        $(
+            impl ExecutorIteratorBoundFrom<$executor> for $iter {
+                fn bound_from_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<<$executor as DynamicBinaryIterator>::Element>>, to_tuple: MapToTupleFn<<$executor as DynamicBinaryIterator>::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
+                    let checked_tupled = self.filter_map(filter_for_row).map(to_tuple);
+                    TupleIterator::$variant(SortedTupleIterator::new(checked_tupled, tuple_positions, variable_modes))
+                }
+            }
+        )*
+    };
+}
+
+
+impl_iterator_unbound! {
+    HasExecutor: HasIterator => HasSingle,
+    HasReverseExecutor : ChainedHasReverseIterator => HasReverseChained,
+    IsaExecutor: isa_executor::MultipleTypeIsaIterator => IsaUnbounded,
+    IsaReverseExecutor: isa_reverse_executor::MultipleTypeIsaIterator => IsaReverseUnbounded,
+
+    OwnsExecutor: OwnsFlattenedVectorInner => OwnsUnbounded,
+    OwnsReverseExecutor: OwnsFlattenedVectorInner => OwnsReverseUnbounded,
+}
+
+impl_iterator_unbound_inverted! {
+    HasExecutor: HasIterator => HasSingle,
+    HasExecutor: KMergeBy<HasIterator, HasOrderingFn> => HasMerged,
+
+    HasReverseExecutor : HasReverseIterator => HasReverseSingle,
+    HasReverseExecutor : KMergeBy<HasReverseIterator, HasOrderingFn> => HasReverseMerged,
+}
+
+
+impl_iterator_bound_from! {
+    HasExecutor: HasIterator => HasSingle,
+    HasReverseExecutor : HasReverseIterator => HasReverseSingle,
+    IsaExecutor: IsaBoundedInner => IsaBounded,
+    IsaReverseExecutor: isa_reverse_executor::MultipleTypeIsaIterator => IsaReverseBounded,
+    OwnsExecutor: OwnsVectorInner => OwnsBounded,
+    OwnsReverseExecutor: OwnsVectorInner => OwnsReverseBounded,
+}
+
+impl<T: DynamicBinaryIterator> ExecutorIteratorUnboundInverted<T> for UnreachableIteratorType<T::Element> {
+    fn unbound_inverted_into_tuple_iterator(self, filter_for_row: Box<FilterMapUnchangedFn<T::Element>>, to_tuple: MapToTupleFn<T::Element>, tuple_positions: TuplePositions, variable_modes: &VariableModes) -> TupleIterator {
+        unreachable!()
+    }
 }

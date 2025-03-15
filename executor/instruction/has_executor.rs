@@ -31,19 +31,17 @@ use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
-    impl_becomes_sorted_tuple_iterator,
     instruction::{
-        has_reverse_executor::HasReverseExecutor,
         iterator::{SortedTupleIterator, TupleIterator},
         min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator, FilterFn, FilterMapUnchangedFn,
+        BinaryIterateMode, Checker, DynamicBinaryIterator, FilterFn, FilterMapUnchangedFn,
         MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::may_get_from_row;
+use crate::instruction::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, may_get_from_row};
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -212,11 +210,6 @@ fn compare_has_by_attribute_then_owner(
 impl DynamicBinaryIterator for HasExecutor {
     type Element = (Has, u64);
 
-    type IteratorUnbound = HasIterator;
-    type IteratorUnboundInverted = HasIterator;
-    type IteratorUnboundInvertedMerged = KMergeBy<HasIterator, HasOrderingFn>;
-    type IteratorBoundFrom = HasIterator;
-
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.has.owner()
     }
@@ -234,9 +227,9 @@ impl DynamicBinaryIterator for HasExecutor {
 
     fn get_iterator_unbound(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot>,
-        _row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
 
         // TODO: in the HasReverse case, we look up N iterators (one per type) and link them - here we scan and post-filter
@@ -247,7 +240,7 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_unbound_inverted(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<Self::IteratorUnbound, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+    ) -> Result<Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>, Box<ConceptReadError>> {
         if let Some([owner]) = self.owner_cache.as_deref() {
             // no heap allocs needed if there is only 1 iterator
             let iterator = owner.get_has_types_range_unordered(
@@ -283,7 +276,7 @@ impl DynamicBinaryIterator for HasExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         // TODO: inject value ranges
         let owner = may_get_from_row(self.from(), &row).unwrap();
         let iterator = match owner {
@@ -316,7 +309,3 @@ impl DynamicBinaryIterator for HasExecutor {
     }
 }
 
-impl_becomes_sorted_tuple_iterator! {
-    HasIterator[(Has,u64)] => HasSingle,
-    KMergeBy<HasIterator, HasOrderingFn>[(Has,u64)] => HasMerged,
-}

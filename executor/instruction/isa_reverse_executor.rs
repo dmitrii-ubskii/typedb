@@ -28,20 +28,19 @@ use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
-    impl_becomes_sorted_tuple_iterator,
     instruction::{
         isa_executor::{
             AttributeEraseFn, IsaExecutor, IsaFilterMapFn, IsaTupleIterator, ObjectEraseFn, EXTRACT_THING, EXTRACT_TYPE,
         },
         iterator::{SortedTupleIterator, TupleIterator},
         tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BecomesSortedTupleIterator, BinaryIterateMode, Checker, DynamicBinaryIterator,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterator,
         FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, UnreachableIteratorType, VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::may_get_from_row;
+use crate::instruction::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, may_get_from_row};
 
 #[derive(Debug)]
 pub(crate) struct IsaReverseExecutor {
@@ -194,10 +193,10 @@ pub(super) fn instances_of_types_chained<'a>(
 
 impl DynamicBinaryIterator for IsaReverseExecutor {
     type Element = (Thing, Type);
-    type IteratorUnbound = MultipleTypeIsaIterator;
-    type IteratorUnboundInverted = UnreachableIteratorType;
-    type IteratorUnboundInvertedMerged = UnreachableIteratorType;
-    type IteratorBoundFrom = MultipleTypeIsaIterator;
+    // type IteratorUnbound = MultipleTypeIsaIterator;
+    // type IteratorUnboundInverted = UnreachableIteratorType;
+    // type IteratorUnboundInvertedMerged = UnreachableIteratorType;
+    // type IteratorBoundFrom = MultipleTypeIsaIterator;
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.isa.type_()
@@ -218,7 +217,7 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorUnbound, Box<ConceptReadError>> {
+    ) -> Result<MultipleTypeIsaIterator, Box<ConceptReadError>> {
         let range =
             self.checker.value_range_for(context, Some(row.as_reference()), self.isa.thing().as_variable().unwrap())?;
         instances_of_types_chained(
@@ -233,8 +232,8 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
 
     fn get_iterator_unbound_inverted(
         &self,
-        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<Self::IteratorUnboundInverted, Self::IteratorUnboundInvertedMerged>, Box<ConceptReadError>> {
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
         unreachable!()
     }
 
@@ -242,18 +241,19 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
-    ) -> Result<Self::IteratorBoundFrom, Box<ConceptReadError>> {
+    ) -> Result<MultipleTypeIsaIterator, Box<ConceptReadError>> {
         let range =
             self.checker.value_range_for(context, Some(row.as_reference()), self.isa.thing().as_variable().unwrap())?;
         let type_ = type_from_row_or_annotations(self.isa.type_(), row, self.type_to_instance_types.keys());
-        instances_of_types_chained(
+        let iterator : MultipleTypeIsaIterator = instances_of_types_chained(
             &*context.snapshot,
             &*context.thing_manager,
             [&type_].into_iter(),
             self.type_to_instance_types.as_ref(),
             self.isa.isa_kind(),
             &range,
-        )
+        )?;
+        Ok(iterator)
         //  TODO: I don't see this as being needed. Verify with a debug assert in the pre-refactor setting
         // iterator
         //     .filter_map(Box::new(move |res| match res {
@@ -275,6 +275,6 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
     }
 }
 
-impl_becomes_sorted_tuple_iterator! {
-    MultipleTypeIsaIterator[(Thing, Type)] => IsaReverseUnified,
-}
+// impl_becomes_sorted_tuple_iterator! {
+//     MultipleTypeIsaIterator[(Thing, Type)] => IsaReverseUnified,
+// }
