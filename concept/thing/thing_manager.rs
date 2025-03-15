@@ -55,7 +55,7 @@ use encoding::{
     },
 };
 use iterator::minmax_or;
-use lending_iterator::Peekable;
+use lending_iterator::{LendingIterator, Peekable};
 use primitive::either::Either;
 use resource::constants::{
     encoding::StructFieldIDUInt,
@@ -703,6 +703,8 @@ impl ThingManager {
             RangeEnd::EndPrefixInclusive(end),
             ThingEdgeHas::FIXED_WIDTH_ENCODING
         );
+        let mut iterator = HasIterator::new(snapshot.iterate_range(&key_range, StorageCounters::DISABLED));
+        let count = iterator.count_as_ref();
         HasIterator::new(snapshot.iterate_range(&key_range, storage_counters))
     }
 
@@ -1397,12 +1399,11 @@ impl ThingManager {
 
     fn indexed_relation_prefix_in_relation_type(
         relation_type: RelationType,
-        start_player_type_inclusive: ObjectType
+        start_player_type: ObjectType
     ) -> StorageKey<'static, {ThingEdgeIndexedRelation::LENGTH_PREFIX_REL_TYPE_ID_START_TYPE}> {
         ThingEdgeIndexedRelation::prefix_relation_type_start_type(
             relation_type.vertex().type_id_(),
-            start_player_type_inclusive.vertex().prefix(),
-            start_player_type_inclusive.vertex().type_id_(),
+            start_player_type.vertex()
         )
     }
 
@@ -1422,7 +1423,7 @@ impl ThingManager {
             Some(end_player_type) => Self::indexed_relation_prefix_in_relation_type(relation_type, end_player_type)
         };
         let range = &KeyRange::new(RangeStart::Inclusive(start), RangeEnd::EndPrefixInclusive(end), ThingEdgeIndexedRelation::FIXED_WIDTH_ENCODING);
-        self.iterate_indexed_relations( snapshot, &range, relation_type, storage_counters )
+        self.iterate_indexed_relations(snapshot, &range, relation_type, storage_counters)
     }
 
     pub(crate) fn has_indexed_relation_player(
@@ -1586,7 +1587,7 @@ impl ThingManager {
         let bound_inclusive = match start_bound {
             Bound::Included(type_) => *type_,
             Bound::Excluded(type_) => type_.previous_possible()?,
-            Bound::Unbounded => T::MAX,
+            Bound::Unbounded => T::MIN,
         };
         Some(bound_inclusive)
     }

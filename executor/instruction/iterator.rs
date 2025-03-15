@@ -92,7 +92,6 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> 
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         // TODO: this is close to a copy-paste of the Seek() implementation for Peekable<I> where I is seekable
         if self.item.is_some() {
-            // println!("TupleSeekable.seek(): peekable iterator has item...");
             let item = self.item.as_ref().unwrap().as_ref().map_err(|err| err.clone())?;
             let ordering = match PartialOrd::partial_cmp(item, &target) {
                 None => Err(Box::new(ConceptReadError::InternalIncomparableTypes {}))?,
@@ -100,12 +99,10 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> 
             };
             match ordering {
                 Ordering::Less => {
-                    // println!("... ordering is less");
                     // fallthrough to seek operation
                     ()
                 },
                 Ordering::Equal => {
-                    // println!("... ordering is equal, so we do nothing");
                     // do nothing
                     return Ok(());
                 },
@@ -446,14 +443,12 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
         &mut self,
         target: &VariableValue<'_>,
     ) -> Result<Option<Ordering>, Box<ConceptReadError>> {
-        // println!("Skipping to target: {}", target);
         // TODO: this should use seek if index == self.first_unbound()
         // let index = self.first_unbound_index();
         // loop {
         //     match self.peek() {
         //         None => return Ok(None),
         //         Some(Ok(tuple)) => {
-        //             // println!(" --> Skipping over tuple {:?}", tuple);
         //             let value = &tuple.values()[index as usize];
         //             match value.partial_cmp(target).unwrap() {
         //                 Ordering::Less => self.advance_single()?,
