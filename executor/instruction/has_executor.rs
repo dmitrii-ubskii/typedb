@@ -32,16 +32,15 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        iterator::{SortedTupleIterator, TupleIterator},
-        min_max_types,
-        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BinaryIterateMode, Checker, DynamicBinaryIterator, FilterFn, FilterMapUnchangedFn,
-        MapToTupleFn, TupleSortMode, VariableModes,
+        iterator::TupleIterator,
+        may_get_from_row, min_max_types,
+        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, TuplePositions},
+        BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
+        ExecutorIteratorUnboundInverted, FilterFn, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, may_get_from_row};
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -228,7 +227,7 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
+        _row: MaybeOwnedRow<'_>,
     ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
 
@@ -240,7 +239,10 @@ impl DynamicBinaryIterator for HasExecutor {
     fn get_iterator_unbound_inverted(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>, Box<ConceptReadError>> {
+    ) -> Result<
+        Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>,
+        Box<ConceptReadError>,
+    > {
         if let Some([owner]) = self.owner_cache.as_deref() {
             // no heap allocs needed if there is only 1 iterator
             let iterator = owner.get_has_types_range_unordered(
@@ -305,7 +307,6 @@ impl DynamicBinaryIterator for HasExecutor {
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
-            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1 as u64)))
+            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1u64)))
     }
 }
-

@@ -11,19 +11,22 @@ use std::{
     vec,
 };
 
-use answer::{variable_value::VariableValue, Type, Thing};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{executable::match_::instructions::thing::HasReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
-    thing::{attribute::Attribute, has::Has, object::HasReverseIterator, thing_manager::ThingManager},
+    thing::{
+        attribute::Attribute,
+        has::Has,
+        object::{HasReverseIterator, ObjectAPI},
+        thing_manager::ThingManager,
+        ThingAPI,
+    },
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
-use encoding::value::value::Value;
+use encoding::{graph::thing::edge::ThingEdgeHas, value::value::Value};
 use ir::pattern::Vertex;
 use itertools::{kmerge_by, Itertools, KMergeBy};
-use concept::thing::object::ObjectAPI;
-use concept::thing::ThingAPI;
-use encoding::graph::thing::edge::ThingEdgeHas;
 use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
@@ -32,17 +35,15 @@ use super::has_executor::{HasExecutor, HasFilterMapFn};
 use crate::{
     instruction::{
         has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
-        iid_executor::IidExecutor,
-        iterator::{SortedTupleIterator, TupleIterator},
-        min_max_types,
-        tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, Tuple, TuplePositions},
-        BinaryIterateMode, Checker, DynamicBinaryIterator, FilterMapUnchangedFn,
-        MapToTupleFn, TupleSortMode, UnreachableIteratorType, VariableModes,
+        iterator::TupleIterator,
+        may_get_from_row, min_max_types,
+        tuple::TuplePositions,
+        BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
+        ExecutorIteratorUnboundInverted, MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, may_get_from_row};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -228,10 +229,6 @@ fn compare_has_by_owner_then_attribute(
 
 impl DynamicBinaryIterator for HasReverseExecutor {
     type Element = (Has, u64);
-    // type IteratorUnbound = ChainedHasReverseIterator;
-    // type IteratorUnboundInverted = HasReverseIterator;
-    // type IteratorUnboundInvertedMerged = KMergeBy<HasReverseIterator, HasOrderingFn>;
-    // type IteratorBoundFrom = HasReverseIterator;
 
     fn from(&self) -> &Vertex<ExecutorVariable> {
         self.has.attribute()
@@ -269,7 +266,10 @@ impl DynamicBinaryIterator for HasReverseExecutor {
     fn get_iterator_unbound_inverted(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>, Box<ConceptReadError>> {
+    ) -> Result<
+        Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>,
+        Box<ConceptReadError>,
+    > {
         debug_assert!(self.attribute_cache.get().is_some());
         if self.attribute_cache.get().unwrap().len() == 1 {
             let attribute = &self.attribute_cache.get().unwrap()[0];
@@ -316,17 +316,13 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let VariableValue::Thing(Thing::Attribute(attr)) = may_get_from_row(self.from(), &row).unwrap() else { panic!() };
+        let VariableValue::Thing(Thing::Attribute(attr)) = may_get_from_row(self.from(), &row).unwrap() else {
+            panic!()
+        };
         let VariableValue::Thing(owner_obj) = may_get_from_row(self.to(), &row).unwrap() else { panic!() };
         Ok(owner_obj
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
-            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1 as u64)))
+            .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1u64)))
     }
 }
-
-// impl_becomes_sorted_tuple_iterator! {
-//     HasReverseIterator[(Has,u64)] => HasReverseSingle,
-//     ChainedHasReverseIterator[(Has,u64)] => HasReverseChained,
-//     KMergeBy<HasReverseIterator, HasOrderingFn>[(Has,u64)] => HasReverseMerged,
-// }
