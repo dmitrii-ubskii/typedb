@@ -34,12 +34,13 @@ use crate::{
         iterator::TupleIterator,
         may_get_from_row,
         tuple::TuplePositions,
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterator, MapToTupleFn, TupleSortMode,
-        UnreachableIteratorType, VariableModes, TYPES_EMPTY,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, MapToTupleFn, TupleSortMode,
+        VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::helpers::{DynamicBinaryIterator, UnreachableIteratorType};
 
 #[derive(Debug)]
 pub(crate) struct IsaReverseExecutor {

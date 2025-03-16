@@ -24,6 +24,8 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{DynamicBinaryIterator,
+                  ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType},
         iterator::{SortedTupleIterator, TupleIterator},
         owns_executor::{
             OwnsExecutor, OwnsFilterFn, OwnsFilterMapFn, OwnsFlattenedVectorInner, OwnsTupleIterator,
@@ -31,9 +33,8 @@ use crate::{
         },
         plays_executor::PlaysExecutor,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterateMode, DynamicBinaryIterator,
-        ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, MapToTupleFn,
-        TupleSortMode, UnreachableIteratorType, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterateMode,  MapToTupleFn,
+        TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,

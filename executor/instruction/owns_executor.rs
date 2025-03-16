@@ -27,12 +27,13 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{ DynamicBinaryIterator, ExecutorIteratorBoundFrom,
+                   ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType},
         iterator::{SortedTupleIterator, TupleIterator},
         owns_reverse_executor::OwnsReverseExecutor,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom,
-        ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, FilterFn, FilterMapUnchangedFn, MapToTupleFn,
-        TupleSortMode, UnreachableIteratorType, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn,
+        TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,

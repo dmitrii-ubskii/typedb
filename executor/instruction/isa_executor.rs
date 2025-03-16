@@ -29,11 +29,12 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom,
+                  ExecutorIteratorUnbound, UnreachableIteratorType},
         iterator::TupleIterator,
         may_get_from_row,
         tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom,
-        ExecutorIteratorUnbound, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, UnreachableIteratorType,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode,
         VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,

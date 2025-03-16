@@ -34,12 +34,13 @@ use storage::snapshot::ReadableSnapshot;
 use super::has_executor::{HasExecutor, HasFilterMapFn};
 use crate::{
     instruction::{
+        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
+                  ExecutorIteratorUnboundInverted},
         has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
         iterator::TupleIterator,
         may_get_from_row, min_max_types,
         tuple::TuplePositions,
-        BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
-        ExecutorIteratorUnboundInverted, MapToTupleFn, TupleSortMode, VariableModes,
+        BinaryIterateMode, Checker, MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,

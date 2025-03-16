@@ -32,11 +32,11 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted},
         iterator::TupleIterator,
         may_get_from_row, min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, TuplePositions},
-        BinaryIterateMode, Checker, DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
-        ExecutorIteratorUnboundInverted, FilterFn, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, VariableModes,
+        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
