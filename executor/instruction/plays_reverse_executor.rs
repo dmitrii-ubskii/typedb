@@ -18,6 +18,8 @@ use concept::{
     type_::{object_type::ObjectType, role_type::RoleType},
 };
 use itertools::Itertools;
+use ir::pattern::Vertex;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -34,6 +36,9 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
+use crate::instruction::{MapToTupleFn, TupleSortMode};
+use crate::instruction::plays_executor::PlaysExecutor;
 
 pub(crate) struct PlaysReverseExecutor {
     plays: ir::pattern::constraint::Plays<ExecutorVariable>,
@@ -129,60 +134,7 @@ impl PlaysReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-
-        let snapshot = &**context.snapshot();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let type_manager = context.type_manager();
-                let plays: Vec<_> = self
-                    .role_player_types
-                    .keys()
-                    .map(|role| {
-                        let role_type = role.as_role_type();
-                        role_type
-                            .get_player_types(snapshot, type_manager)
-                            .map(|res| res.to_owned().keys().map(|object_type| (*object_type, role_type)).collect())
-                    })
-                    .try_collect()?;
-                let iterator = plays.into_iter().flatten().map(Ok as _);
-                let as_tuples: PlaysReverseUnboundedSortedRole =
-                    iterator.filter_map(filter_for_row).map(plays_to_tuple_role_player as _);
-                Ok(TupleIterator::PlaysReverseUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-
-            BinaryIterateMode::UnboundInverted => {
-                // is this ever relevant?
-                return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
-                    functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
-                }));
-            }
-
-            BinaryIterateMode::BoundFrom => {
-                let role_type =
-                    type_from_row_or_annotations(self.plays.role_type(), row, self.role_player_types.keys())
-                        .as_role_type();
-                let type_manager = context.type_manager();
-                let plays = role_type
-                    .get_player_types(snapshot, type_manager)?
-                    .to_owned()
-                    .into_keys()
-                    .map(|object_type| (object_type, role_type));
-
-                let iterator = plays.into_iter().sorted_by_key(|&(player, _)| player).map(Ok as _);
-                let as_tuples: PlaysReverseBoundedSortedPlayer =
-                    iterator.filter_map(filter_for_row).map(plays_to_tuple_player_role as _);
-                Ok(TupleIterator::PlaysReverseBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for(context, &self.variable_modes, todo!("self.sort_mode"), row, filter_for_row)
     }
 }
 
@@ -207,4 +159,64 @@ fn create_plays_filter_role(player_types: Arc<BTreeSet<Type>>) -> Arc<PlaysFilte
         Ok((player, _)) => Ok(player_types.contains(&Type::from(*player))),
         Err(err) => Err(err.clone()),
     })
+}
+
+impl DynamicBinaryIterator for PlaysReverseExecutor {
+    type Element = (ObjectType, RoleType);
+
+    fn from(&self) -> &Vertex<ExecutorVariable> {
+        self.plays.role_type()
+    }
+
+    fn to(&self) -> &Vertex<ExecutorVariable> {
+        self.plays.player()
+    }
+
+    fn sort_mode(&self) -> TupleSortMode {
+        todo!()
+    }
+
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = PlaysExecutor::TUPLE_TO_FROM;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = PlaysExecutor::TUPLE_FROM_TO;
+
+    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+        let type_manager = context.type_manager();
+        let plays: Vec<_> = self
+            .role_player_types
+            .keys()
+            .map(|role| {
+                let role_type = role.as_role_type();
+                role_type
+                    .get_player_types(&*context.snapshot, type_manager)
+                    .map(|res| res.to_owned().keys().map(|object_type| (*object_type, role_type)).collect())
+            })
+            .try_collect()?;
+        let iterator = plays.into_iter().flatten().map(Ok as _);
+        Ok(iterator)
+    }
+
+    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
+        return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
+            functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
+        }));
+    }
+
+    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+        let role_type =
+            type_from_row_or_annotations(self.plays.role_type(), row, self.role_player_types.keys())
+                .as_role_type();
+        let type_manager = context.type_manager();
+        let plays = role_type
+            .get_player_types(&*context.snapshot, type_manager)?
+            .to_owned()
+            .into_keys()
+            .map(|object_type| (object_type, role_type));
+
+        let iterator = plays.into_iter().sorted_by_key(|&(player, _)| player).map(Ok as _);
+        Ok(iterator)
+    }
+
+    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        todo!()
+    }
 }

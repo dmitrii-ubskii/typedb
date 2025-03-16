@@ -21,6 +21,12 @@ use crate::instruction::isa_reverse_executor::IsaReverseExecutor;
 use crate::instruction::iterator::{SortedTupleIterator, TupleIterator};
 use crate::instruction::owns_executor::{OwnsExecutor, OwnsFlattenedVectorInner, OwnsVectorInner};
 use crate::instruction::owns_reverse_executor::OwnsReverseExecutor;
+use crate::instruction::plays_executor::{PlaysExecutor, PlaysFlattenedVectorInner, PlaysVectorInner};
+use crate::instruction::plays_reverse_executor::PlaysReverseExecutor;
+use crate::instruction::relates_executor::{RelatesExecutor, RelatesFlattenedVectorInner, RelatesVectorInner};
+use crate::instruction::relates_reverse_executor::RelatesReverseExecutor;
+use crate::instruction::sub_executor::{SubExecutor, SubVectorInner};
+use crate::instruction::sub_reverse_executor::SubReverseExecutor;
 use crate::instruction::tuple::TuplePositions;
 use crate::pipeline::stage::ExecutionContext;
 use crate::row::MaybeOwnedRow;
@@ -212,6 +218,12 @@ impl_iterator_unbound! {
 
     OwnsExecutor: OwnsFlattenedVectorInner => OwnsUnbounded,
     OwnsReverseExecutor: OwnsFlattenedVectorInner => OwnsReverseUnbounded,
+    RelatesExecutor: RelatesFlattenedVectorInner => RelatesUnbounded,
+    RelatesReverseExecutor: RelatesFlattenedVectorInner => RelatesReverseUnbounded,
+    PlaysExecutor: PlaysFlattenedVectorInner => PlaysUnbounded,
+    PlaysReverseExecutor: PlaysFlattenedVectorInner => PlaysReverseUnbounded,
+    SubExecutor: SubVectorInner => SubUnbounded,
+    SubReverseExecutor: SubVectorInner => SubReverseUnbounded,
 }
 
 impl_iterator_unbound_inverted! {
@@ -229,6 +241,12 @@ impl_iterator_bound_from! {
     IsaReverseExecutor: isa_reverse_executor::MultipleTypeIsaIterator => IsaReverseBounded,
     OwnsExecutor: OwnsVectorInner => OwnsBounded,
     OwnsReverseExecutor: OwnsVectorInner => OwnsReverseBounded,
+    RelatesExecutor: RelatesVectorInner => RelatesBounded,
+    RelatesReverseExecutor: RelatesVectorInner => RelatesReverseBounded,
+    PlaysExecutor: PlaysVectorInner => PlaysBounded,
+    PlaysReverseExecutor: PlaysVectorInner => PlaysReverseBounded,
+    SubExecutor: SubVectorInner => SubBounded,
+    SubReverseExecutor: SubVectorInner => SubReverseBounded,
 }
 
 pub(super) struct UnreachableIteratorType<T> {
