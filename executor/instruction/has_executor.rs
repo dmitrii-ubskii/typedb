@@ -27,7 +27,9 @@ use concept::{
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
 use concept::thing::attribute::Attribute;
+use concept::type_::TypeAPI;
 use encoding::graph::type_::vertex::TypeVertexEncoding;
+use encoding::value::value::Value;
 use encoding::value::value_type::ValueTypeCategory;
 use lending_iterator::{LendingIterator, Peekable};
 use lending_iterator::kmerge::KMergeBy;
@@ -197,12 +199,14 @@ impl HasExecutor {
                 //        we should determine which strategy we want long-term
                 let has_iterator: HasIterator  = thing_manager
                     .get_has_from_owner_type_range_unordered(snapshot, &self.owner_type_range, storage_counters);
+                let attribute_type_lower_bound_inclusive = ThingManager::start_type_bound_to_range_start_included_type(self.attribute_type_range.0.as_ref())
+                    .unwrap_or(AttributeType::MIN);
                 let as_tuples = HasTupleIterator::new(
                     has_iterator,
                     filter_for_row,
                     has_to_tuple_owner_attribute,
                     tuple_owner_attribute_to_has_canonical,
-                    FixedHasBounds::None,
+                    FixedHasBounds::NoneWithLowerBounds(attribute_type_lower_bound_inclusive, value_range.0.clone().map(|v| v.into_owned())),
                 );
                 Ok(TupleIterator::HasSingle(SortedTupleIterator::new(
                     as_tuples,
@@ -322,7 +326,7 @@ impl fmt::Display for HasExecutor {
 }
 
 pub(crate) enum FixedHasBounds {
-    None,
+    NoneWithLowerBounds(AttributeType, Bound<Value<'static>>),
     Owner(Object),
     Attribute(Attribute),
 }
