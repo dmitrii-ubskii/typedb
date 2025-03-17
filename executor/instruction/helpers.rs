@@ -41,6 +41,35 @@ pub(super) trait DynamicBinaryIterator: Sized {
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element>;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element>;
 
+
+    // Methods to implement
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>>;
+
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>,
+        Box<ConceptReadError>,
+    >;
+
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>>;
+
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>>;
+
+    // Common method to handle the dynamic mode logic.
     fn get_iterator_for(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
@@ -108,31 +137,6 @@ pub(super) trait DynamicBinaryIterator: Sized {
         };
         Ok(iterator)
     }
-
-    fn get_iterator_unbound(
-        &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
-    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>>;
-    fn get_iterator_unbound_inverted(
-        &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-    ) -> Result<
-        Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>,
-        Box<ConceptReadError>,
-    >;
-
-    fn get_iterator_bound_from(
-        &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
-    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>>;
-
-    fn get_iterator_check(
-        &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
-    ) -> Result<Option<Self::Element>, Box<ConceptReadError>>;
 }
 type ExecutorResult<T> = Result<T, Box<ConceptReadError>>;
 pub(super) trait ExecutorIteratorUnbound<Executor: DynamicBinaryIterator>:
