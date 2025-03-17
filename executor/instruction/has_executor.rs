@@ -393,7 +393,9 @@ fn create_has_filter_owners_attributes(owner_attribute_types: Arc<BTreeMap<Type,
         match result {
             Ok((has, _)) => match owner_attribute_types.get(&Type::from(has.owner().type_())) {
                 Some(attribute_types) => {
-                    Ok(attribute_types.contains(&Type::Attribute(has.attribute().type_())))
+                    let attribute_type = has.attribute().type_();
+                    println!("Checking if attribute type {:?} is within allowed types {:?}", attribute_type, attribute_types);
+                    Ok(attribute_types.contains(&Type::Attribute(attribute_type)))
                 },
                 None => Ok(false),
             },
