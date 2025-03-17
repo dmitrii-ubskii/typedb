@@ -302,6 +302,7 @@ impl DynamicBinaryIterator for HasExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+        // TODO: Is this duplication of filter_has? Should we be trying to combine them?
         let VariableValue::Thing(owner_obj) = may_get_from_row(self.from(), &row).unwrap() else { panic!() };
         let VariableValue::Thing(Thing::Attribute(attr)) = may_get_from_row(self.to(), &row).unwrap() else { panic!() };
         Ok(owner_obj

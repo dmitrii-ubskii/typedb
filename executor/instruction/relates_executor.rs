@@ -228,6 +228,9 @@ impl DynamicBinaryIterator for RelatesExecutor {
     }
 
     fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let relation = type_from_row_or_annotations(self.from(), row.as_reference(), self.relation_role_types.keys());
+        let role = type_from_row_or_annotations(self.to(), row, self.role_types.iter());
+        Ok(self.relation_role_types.get(&relation).unwrap().contains(&role)
+            .then(|| (relation.as_relation_type(), role.as_role_type())))
     }
 }

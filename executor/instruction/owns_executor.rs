@@ -253,9 +253,9 @@ impl DynamicBinaryIterator for OwnsExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        let owner = type_from_row_or_annotations(self.from(), row.as_reference(), self.owner_attribute_types.keys())
-            .as_object_type();
-        let attribute = type_from_row_or_annotations(self.to(), row, self.attribute_types.iter()).as_attribute_type();
-        Ok(owner.has_owns_attribute(&*context.snapshot, context.type_manager(), attribute)?.then(|| (owner, attribute)))
+        let owner = type_from_row_or_annotations(self.from(), row.as_reference(), self.owner_attribute_types.keys());
+        let attribute = type_from_row_or_annotations(self.to(), row, self.attribute_types.iter());
+        Ok(self.owner_attribute_types.get(&owner).unwrap().contains(&attribute)
+            .then(|| (owner.as_object_type(), attribute.as_attribute_type())))
     }
 }

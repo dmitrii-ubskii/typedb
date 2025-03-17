@@ -265,6 +265,7 @@ impl DynamicBinaryIterator for IsaExecutor {
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let VariableValue::Thing(thing) = may_get_from_row(self.from(), &row).unwrap() else { panic!() };
+        // TODO: Wouldn't lowering have picked the ReverseExecutor had 'to' been a label?
         debug_assert!(self.to().is_label() || self.instance_type_to_types.values().all(|x| x.len() == 1));
         let type_ = type_from_row_or_annotations(
             self.to(),

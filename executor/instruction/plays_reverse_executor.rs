@@ -18,6 +18,7 @@ use concept::{
     type_::{object_type::ObjectType, role_type::RoleType},
 };
 use itertools::Itertools;
+use concept::type_::PlayerAPI;
 use ir::pattern::Vertex;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
@@ -217,6 +218,9 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
     }
 
     fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let role = type_from_row_or_annotations(self.from(), row.as_reference(), self.role_player_types.keys());
+        let player = type_from_row_or_annotations(self.to(), row, self.player_types.iter());
+        Ok(self.role_player_types.get(&role).unwrap().contains(&player)
+            .then(|| (player.as_object_type(), role.as_role_type())))
     }
 }

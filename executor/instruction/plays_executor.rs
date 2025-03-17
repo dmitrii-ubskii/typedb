@@ -227,6 +227,9 @@ impl DynamicBinaryIterator for PlaysExecutor {
     }
 
     fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let player = type_from_row_or_annotations(self.from(), row.as_reference(), self.player_role_types.keys());
+        let role = type_from_row_or_annotations(self.to(), row, self.role_types.iter());
+        Ok(self.player_role_types.get(&player).unwrap().contains(&role)
+           .then(|| (player.as_object_type(), role.as_role_type())))
     }
 }

@@ -191,6 +191,9 @@ impl DynamicBinaryIterator for SubExecutor {
     }
 
     fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
-        todo!()
+        let subtype = type_from_row_or_annotations(self.from(), row.as_reference(), self.sub_to_supertypes.keys());
+        let supertype = type_from_row_or_annotations(self.to(), row, self.supertypes.iter());
+        Ok(self.sub_to_supertypes.get(&subtype).unwrap().contains(&supertype)
+            .then(|| (subtype, supertype)))
     }
 }
