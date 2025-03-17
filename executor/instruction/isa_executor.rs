@@ -273,7 +273,7 @@ impl DynamicBinaryIterator for IsaExecutor {
             self.instance_type_to_types.values().next().unwrap().iter(),
         );
         Ok(self
-            .instance_type_to_types
+            .instance_type_to_types // TODO: Confirm it safe to assume that this reflects the IsaKind?
             .get(&thing.type_())
             .unwrap()
             .contains(&type_)
