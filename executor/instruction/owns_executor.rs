@@ -33,15 +33,16 @@ use crate::{
         owns_reverse_executor::OwnsReverseExecutor,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions},
         type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn,
-        TupleSortMode, VariableModes,
+        BinaryTupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::sort_mode_and_tuple_positions;
 
 pub(crate) struct OwnsExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
-    sort_mode: TupleSortMode,
+    sort_mode: BinaryTupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -92,7 +93,7 @@ impl OwnsExecutor {
         let OwnsInstruction { owns, checks, .. } = owns;
 
         let iterate_mode = BinaryIterateMode::new(owns.owner(), owns.attribute(), &variable_modes, sort_by);
-        let sort_mode = todo!();
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(owns.owner(), owns.attribute(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_owns_filter_owner_attribute(owner_attribute_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -102,12 +103,6 @@ impl OwnsExecutor {
 
         let owner = owns.owner().as_variable();
         let attribute = owns.attribute().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([owner, attribute]),
-            _ => TuplePositions::Pair([attribute, owner]),
-        };
-
         let checker = Checker::<(ObjectType, AttributeType)>::new(
             checks,
             [(owner, EXTRACT_OWNER), (attribute, EXTRACT_ATTRIBUTE)]
@@ -144,7 +139,7 @@ impl OwnsExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 
     fn get_owns_for_owner(
@@ -201,7 +196,7 @@ impl DynamicBinaryIterator for OwnsExecutor {
         self.owns.attribute()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
+    fn sort_mode(&self) -> BinaryTupleSortMode {
         self.sort_mode
     }
 

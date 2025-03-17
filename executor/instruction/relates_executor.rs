@@ -33,7 +33,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, TupleSortMode};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 
 pub(crate) struct RelatesExecutor {
     relates: ir::pattern::constraint::Relates<ExecutorVariable>,
@@ -44,6 +44,7 @@ pub(crate) struct RelatesExecutor {
     role_types: Arc<BTreeSet<Type>>,
     filter_fn: Arc<RelatesFilterFn>,
     checker: Checker<(RelationType, RoleType)>,
+    sort_mode: BinaryTupleSortMode,
 }
 
 impl fmt::Debug for RelatesExecutor {
@@ -87,6 +88,7 @@ impl RelatesExecutor {
         let RelatesInstruction { relates, checks, .. } = relates;
 
         let iterate_mode = BinaryIterateMode::new(relates.relation(), relates.role_type(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(relates.relation(), relates.role_type(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_relates_filter_relation_role_type(relation_role_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -96,11 +98,6 @@ impl RelatesExecutor {
 
         let relation = relates.relation().as_variable();
         let role_type = relates.role_type().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([relation, role_type]),
-            _ => TuplePositions::Pair([role_type, relation]),
-        };
 
         let checker = Checker::<(RelationType, RoleType)>::new(
             checks,
@@ -112,6 +109,7 @@ impl RelatesExecutor {
 
         Self {
             relates,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -137,7 +135,7 @@ impl RelatesExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, todo!("self.sort_mode"),  row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 
     fn get_relates_for_relation(
@@ -192,8 +190,8 @@ impl DynamicBinaryIterator for RelatesExecutor {
         self.relates.role_type()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
-        todo!()
+    fn sort_mode(&self) -> BinaryTupleSortMode {
+        self.sort_mode
     }
 
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = relates_to_tuple_relation_role;

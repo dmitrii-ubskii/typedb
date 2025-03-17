@@ -40,15 +40,16 @@ use crate::{
         iterator::TupleIterator,
         may_get_from_row, min_max_types,
         tuple::TuplePositions,
-        BinaryIterateMode, Checker, MapToTupleFn, TupleSortMode, VariableModes,
+        BinaryIterateMode, Checker, MapToTupleFn, BinaryTupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::sort_mode_and_tuple_positions;
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
-    sort_mode: TupleSortMode,
+    sort_mode: BinaryTupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -94,7 +95,7 @@ impl HasReverseExecutor {
 
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
-        let sort_mode = if attribute == sort_by { TupleSortMode::From } else { TupleSortMode::To };
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(has.attribute(), has.owner(), sort_by);
 
         let attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>> = attribute_owner_types
             .iter()
@@ -113,11 +114,6 @@ impl HasReverseExecutor {
         let (min_owner_type, max_owner_type) = min_max_types(&*owner_types);
         let owner_type_range =
             (Bound::Included(min_owner_type.as_object_type()), Bound::Included(max_owner_type.as_object_type()));
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([Some(attribute), Some(owner)]),
-            _ => TuplePositions::Pair([Some(owner), Some(attribute)]),
-        };
 
         let checker =
             Checker::<(Has, _)>::new(checks, HashMap::from([(owner, EXTRACT_OWNER), (attribute, EXTRACT_ATTRIBUTE)]));
@@ -171,7 +167,7 @@ impl HasReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 
     fn all_has_reverse_chained(
@@ -239,7 +235,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         self.has.owner()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
+    fn sort_mode(&self) -> BinaryTupleSortMode {
         self.sort_mode
     }
 

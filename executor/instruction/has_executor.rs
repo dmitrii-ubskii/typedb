@@ -36,15 +36,16 @@ use crate::{
         iterator::TupleIterator,
         may_get_from_row, min_max_types,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, TuplePositions},
-        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode, VariableModes,
+        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn, BinaryTupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::sort_mode_and_tuple_positions;
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
-    sort_mode: TupleSortMode,
+    sort_mode: BinaryTupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -100,16 +101,9 @@ impl HasExecutor {
                 create_has_filter_attributes(attribute_types.clone())
             }
         };
-
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(has.owner(), has.attribute(), sort_by);
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
-
-        let sort_mode = if owner == sort_by { TupleSortMode::From } else { TupleSortMode::To };
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([Some(owner), Some(attribute)]),
-            _ => TuplePositions::Pair([Some(attribute), Some(owner)]),
-        };
-
         let checker =
             Checker::<(Has, _)>::new(checks, HashMap::from([(owner, EXTRACT_OWNER), (attribute, EXTRACT_ATTRIBUTE)]));
 
@@ -168,7 +162,7 @@ impl HasExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 }
 
@@ -217,7 +211,7 @@ impl DynamicBinaryIterator for HasExecutor {
         self.has.attribute()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
+    fn sort_mode(&self) -> BinaryTupleSortMode {
         self.sort_mode
     }
 

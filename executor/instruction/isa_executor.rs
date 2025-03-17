@@ -34,17 +34,18 @@ use crate::{
         iterator::TupleIterator,
         may_get_from_row,
         tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterMapUnchangedFn, MapToTupleFn, TupleSortMode,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterMapUnchangedFn, MapToTupleFn, BinaryTupleSortMode,
         VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::sort_mode_and_tuple_positions;
 
 #[derive(Debug)]
 pub(crate) struct IsaExecutor {
     isa: Isa<ExecutorVariable>,
-    sort_mode: TupleSortMode,
+    sort_mode: BinaryTupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -94,15 +95,10 @@ impl IsaExecutor {
         let IsaInstruction { isa, checks, instance_type_to_types, .. } = isa;
         debug_assert!(instance_type_to_types.len() > 0);
         let iterate_mode = BinaryIterateMode::new(isa.thing(), isa.type_(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(isa.thing(), isa.type_(), sort_by);
 
         let thing = isa.thing().as_variable();
         let type_ = isa.type_().as_variable();
-        let sort_mode = if thing == Some(sort_by) { TupleSortMode::From } else { TupleSortMode::To };
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([thing, type_]),
-            _ => TuplePositions::Pair([type_, thing]),
-        };
-
         let checker = Checker::<(Thing, Type)>::new(
             checks,
             [(thing, EXTRACT_THING), (type_, EXTRACT_TYPE)]
@@ -132,7 +128,7 @@ impl IsaExecutor {
             Ok(true) | Err(_) => Some(item),
             Ok(false) => None,
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 }
 
@@ -210,7 +206,7 @@ impl DynamicBinaryIterator for IsaExecutor {
         self.isa.type_()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
+    fn sort_mode(&self) -> BinaryTupleSortMode {
         self.sort_mode
     }
 

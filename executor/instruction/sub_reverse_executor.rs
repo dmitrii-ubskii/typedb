@@ -31,7 +31,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, TupleSortMode};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 
 pub(crate) struct SubReverseExecutor {
     sub: ir::pattern::constraint::Sub<ExecutorVariable>,
@@ -42,6 +42,7 @@ pub(crate) struct SubReverseExecutor {
     subtypes: Arc<BTreeSet<Type>>,
     filter_fn: Arc<SubFilterFn>,
     checker: Checker<(Type, Type)>,
+    sort_mode: BinaryTupleSortMode,
 }
 
 impl fmt::Debug for SubReverseExecutor {
@@ -68,6 +69,7 @@ impl SubReverseExecutor {
         let SubReverseInstruction { sub, checks, .. } = sub;
 
         let iterate_mode = BinaryIterateMode::new(sub.supertype(), sub.subtype(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(sub.supertype(), sub.subtype(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_sub_filter_super_sub(super_to_subtypes.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -77,12 +79,6 @@ impl SubReverseExecutor {
 
         let subtype = sub.subtype().as_variable();
         let supertype = sub.supertype().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([supertype, subtype]),
-            _ => TuplePositions::Pair([subtype, supertype]),
-        };
-
         let checker = Checker::<(Type, Type)>::new(
             checks,
             [(subtype, EXTRACT_SUB), (supertype, EXTRACT_SUPER)]
@@ -93,6 +89,7 @@ impl SubReverseExecutor {
 
         Self {
             sub,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -119,7 +116,7 @@ impl SubReverseExecutor {
             Err(_) => Some(item),
         });
 
-        self.get_iterator_for(context, &self.variable_modes, todo!("self.sort_mode"), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 }
 
@@ -157,8 +154,8 @@ impl DynamicBinaryIterator for SubReverseExecutor {
         self.sub.subtype()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
-        todo!()
+    fn sort_mode(&self) -> BinaryTupleSortMode {
+        self.sort_mode
     }
 
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = SubExecutor::TUPLE_TO_FROM;

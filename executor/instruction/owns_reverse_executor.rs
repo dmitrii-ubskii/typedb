@@ -33,16 +33,17 @@ use crate::{
         },
         plays_executor::PlaysExecutor,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterateMode,  MapToTupleFn,
-        TupleSortMode, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterateMode, MapToTupleFn,
+        BinaryTupleSortMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
+use crate::instruction::sort_mode_and_tuple_positions;
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
-    sort_mode: TupleSortMode,
+    sort_mode: BinaryTupleSortMode,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
     tuple_positions: TuplePositions,
@@ -83,8 +84,8 @@ impl OwnsReverseExecutor {
 
         let OwnsReverseInstruction { owns, checks, .. } = owns;
 
-        let sort_mode = todo!();
         let iterate_mode = BinaryIterateMode::new(owns.attribute(), owns.owner(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(owns.attribute(), owns.owner(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_owns_filter_owner_attribute(attribute_owner_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -94,12 +95,6 @@ impl OwnsReverseExecutor {
 
         let owner = owns.owner().as_variable();
         let attribute = owns.attribute().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([attribute, owner]),
-            _ => TuplePositions::Pair([owner, attribute]),
-        };
-
         let checker = Checker::<(ObjectType, AttributeType)>::new(
             checks,
             [(owner, EXTRACT_OWNER), (attribute, EXTRACT_ATTRIBUTE)]
@@ -228,7 +223,7 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
         todo!()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
+    fn sort_mode(&self) -> BinaryTupleSortMode {
         self.sort_mode
     }
 

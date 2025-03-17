@@ -13,7 +13,7 @@ use concept::thing::object::{HasIterator, HasReverseIterator};
 use ir::pattern::Vertex;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
-use crate::instruction::{DynamicBinaryIterateMode, FilterMapUnchangedFn, isa_executor, isa_reverse_executor, MapToTupleFn, may_get_from_row, TupleSortMode};
+use crate::instruction::{DynamicBinaryIterateMode, FilterMapUnchangedFn, isa_executor, isa_reverse_executor, MapToTupleFn, may_get_from_row, BinaryTupleSortMode};
 use crate::instruction::has_executor::{HasExecutor, HasOrderingFn};
 use crate::instruction::has_reverse_executor::{ChainedHasReverseIterator, HasReverseExecutor};
 use crate::instruction::isa_executor::{IsaBoundedInner, IsaExecutor};
@@ -36,7 +36,7 @@ pub(super) trait DynamicBinaryIterator: Sized {
     fn from(&self) -> &Vertex<ExecutorVariable>;
     fn to(&self) -> &Vertex<ExecutorVariable>;
 
-    fn sort_mode(&self) -> TupleSortMode;
+    fn sort_mode(&self) -> BinaryTupleSortMode;
 
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element>;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element>;
@@ -74,16 +74,11 @@ pub(super) trait DynamicBinaryIterator: Sized {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         variable_modes: &VariableModes,
-        sort_mode: TupleSortMode,
+        sort_mode: BinaryTupleSortMode,
+        tuple_positions: TuplePositions,
         row: MaybeOwnedRow<'_>,
         filter_for_row: Box<FilterMapUnchangedFn<Self::Element>>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let tuple_positions = match sort_mode {
-            TupleSortMode::From => [self.from().as_variable(), self.to().as_variable()],
-            TupleSortMode::To => [self.to().as_variable(), self.from().as_variable()],
-        };
-        let tuple_positions = TuplePositions::Pair(tuple_positions);
-
         let dynamic_iterate_mode = DynamicBinaryIterateMode::new(self.from(), self.to(), sort_mode, row.as_reference());
         let from = may_get_from_row(self.from(), &row);
         let to = may_get_from_row(self.to(), &row);
@@ -107,8 +102,6 @@ pub(super) trait DynamicBinaryIterator: Sized {
                 ),
             },
             DynamicBinaryIterateMode::BoundFromOnTo => {
-                // TODO: We ensure the function does the mapping. But we need to undo it for BoundFromSwapped anyway?
-                // So this function should take charge of the direction and allow the delegates to return their standard direction
                 self.get_iterator_bound_from(context, row.as_reference())?.bound_from_into_tuple_iterator(
                     filter_for_row,
                     Self::TUPLE_TO_FROM,

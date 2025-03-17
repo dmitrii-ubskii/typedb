@@ -36,7 +36,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, TupleSortMode};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 use crate::instruction::relates_executor::RelatesExecutor;
 
 pub(crate) struct RelatesReverseExecutor {
@@ -48,6 +48,7 @@ pub(crate) struct RelatesReverseExecutor {
     relation_types: Arc<BTreeSet<Type>>,
     filter_fn: Arc<RelatesFilterFn>,
     checker: Checker<(RelationType, RoleType)>,
+    sort_mode: BinaryTupleSortMode,
 }
 
 impl fmt::Debug for RelatesReverseExecutor {
@@ -82,6 +83,7 @@ impl RelatesReverseExecutor {
         let RelatesReverseInstruction { relates, checks, .. } = relates;
 
         let iterate_mode = BinaryIterateMode::new(relates.role_type(), relates.relation(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(relates.role_type(), relates.relation(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_relates_filter_relation_role(role_relation_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -91,12 +93,6 @@ impl RelatesReverseExecutor {
 
         let relation = relates.relation().as_variable();
         let role_type = relates.role_type().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([role_type, relation]),
-            _ => TuplePositions::Pair([relation, role_type]),
-        };
-
         let checker = Checker::<(RelationType, RoleType)>::new(
             checks,
             [(relation, EXTRACT_RELATION), (role_type, EXTRACT_ROLE)]
@@ -107,6 +103,7 @@ impl RelatesReverseExecutor {
 
         Self {
             relates,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -132,7 +129,7 @@ impl RelatesReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, todo!("self.sort_mode"), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 }
 
@@ -170,8 +167,8 @@ impl DynamicBinaryIterator for RelatesReverseExecutor {
         self.relates.relation()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
-        todo!()
+    fn sort_mode(&self) -> BinaryTupleSortMode {
+        self.sort_mode
     }
 
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = RelatesExecutor::TUPLE_TO_FROM;

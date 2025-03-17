@@ -1080,9 +1080,26 @@ fn min_max_types<'a>(types: impl IntoIterator<Item = &'a Type>) -> (&'a Type, &'
 // Note: The Tuples always hold the same variable in the same position.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TupleSortMode {
+pub(crate) enum BinaryTupleSortMode {
     From,
     To,
+}
+
+fn sort_mode_and_tuple_positions(
+    from_vertex: &Vertex<ExecutorVariable>,
+    to_vertex: &Vertex<ExecutorVariable>,
+    sort_by: ExecutorVariable,
+) -> (BinaryTupleSortMode, TuplePositions)  {
+    debug_assert!(to_vertex.is_variable());
+    let sort_mode = match to_vertex.as_variable().unwrap() == sort_by {
+        true => BinaryTupleSortMode::To,
+        false => BinaryTupleSortMode::From,
+    };
+    let tuple_positions = match sort_mode == BinaryTupleSortMode::To {
+        true => [to_vertex.as_variable(), from_vertex.as_variable()],
+        false => [from_vertex.as_variable(), to_vertex.as_variable()],
+    };
+    (sort_mode, TuplePositions::Pair(tuple_positions))
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -1109,7 +1126,7 @@ impl DynamicBinaryIterateMode {
     fn new(
         from: &Vertex<ExecutorVariable>,
         to: &Vertex<ExecutorVariable>,
-        sorted_on: TupleSortMode,
+        sorted_on: BinaryTupleSortMode,
         row: MaybeOwnedRow<'_>,
     ) -> Self {
         let from_bound: bool = !from.is_variable() || may_get_from_row(from, &row).is_some();
@@ -1118,14 +1135,14 @@ impl DynamicBinaryIterateMode {
         // TODO: Remove this short-circuit
         // BinaryIterateMode also considers Label & Param bound for BoundFrom
         let actual_mode = match (from_bound, to_bound, sorted_on) {
-            (false, false, TupleSortMode::From) => Self::UnboundOnFrom,
-            (false, false, TupleSortMode::To) => Self::UnboundOnTo,
-            (true, false, TupleSortMode::From) => Self::BoundFromOnFrom,
-            (true, false, TupleSortMode::To) => Self::BoundFromOnTo,
-            (false, true, TupleSortMode::From) => Self::BoundToOnFromUsingReverse,
-            (false, true, TupleSortMode::To) => Self::BoundToOnToUsingReverse,
-            (true, true, TupleSortMode::From) => Self::CheckOnFrom,
-            (true, true, TupleSortMode::To) => Self::CheckOnTo,
+            (false, false, BinaryTupleSortMode::From) => Self::UnboundOnFrom,
+            (false, false, BinaryTupleSortMode::To) => Self::UnboundOnTo,
+            (true, false, BinaryTupleSortMode::From) => Self::BoundFromOnFrom,
+            (true, false, BinaryTupleSortMode::To) => Self::BoundFromOnTo,
+            (false, true, BinaryTupleSortMode::From) => Self::BoundToOnFromUsingReverse,
+            (false, true, BinaryTupleSortMode::To) => Self::BoundToOnToUsingReverse,
+            (true, true, BinaryTupleSortMode::From) => Self::CheckOnFrom,
+            (true, true, BinaryTupleSortMode::To) => Self::CheckOnTo,
         };
 
         // TODO: return actual_mode;

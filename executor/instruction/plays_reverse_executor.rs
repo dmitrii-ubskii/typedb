@@ -38,7 +38,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, TupleSortMode};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 use crate::instruction::plays_executor::PlaysExecutor;
 
 pub(crate) struct PlaysReverseExecutor {
@@ -50,6 +50,7 @@ pub(crate) struct PlaysReverseExecutor {
     player_types: Arc<BTreeSet<Type>>,
     filter_fn: Arc<PlaysFilterFn>,
     checker: Checker<(ObjectType, RoleType)>,
+    sort_mode: BinaryTupleSortMode,
 }
 
 impl fmt::Debug for PlaysReverseExecutor {
@@ -85,6 +86,7 @@ impl PlaysReverseExecutor {
         let PlaysReverseInstruction { plays, checks, .. } = plays;
 
         let iterate_mode = BinaryIterateMode::new(plays.role_type(), plays.player(), &variable_modes, sort_by);
+        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(plays.role_type(), plays.player(), sort_by);
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_plays_filter_player_role(role_player_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -94,12 +96,6 @@ impl PlaysReverseExecutor {
 
         let player = plays.player().as_variable();
         let role_type = plays.role_type().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([role_type, player]),
-            _ => TuplePositions::Pair([player, role_type]),
-        };
-
         let checker = Checker::<(ObjectType, RoleType)>::new(
             checks,
             [(player, EXTRACT_PLAYER), (role_type, EXTRACT_ROLE)]
@@ -110,6 +106,7 @@ impl PlaysReverseExecutor {
 
         Self {
             plays,
+            sort_mode,
             iterate_mode,
             variable_modes,
             tuple_positions: output_tuple_positions,
@@ -135,7 +132,7 @@ impl PlaysReverseExecutor {
             Ok(false) => None,
             Err(_) => Some(item),
         });
-        self.get_iterator_for(context, &self.variable_modes, todo!("self.sort_mode"), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
     }
 }
 
@@ -173,8 +170,8 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
         self.plays.player()
     }
 
-    fn sort_mode(&self) -> TupleSortMode {
-        todo!()
+    fn sort_mode(&self) -> BinaryTupleSortMode {
+        self.sort_mode
     }
 
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = PlaysExecutor::TUPLE_TO_FROM;
