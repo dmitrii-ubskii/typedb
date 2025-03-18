@@ -14,22 +14,26 @@ use std::{
 use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::SubInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
-use itertools::Itertools;
 use ir::pattern::Vertex;
+use itertools::Itertools;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
+        sort_mode_and_tuple_positions,
         tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, SubToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 
 pub(crate) struct SubExecutor {
     sub: ir::pattern::constraint::Sub<ExecutorVariable>,
@@ -38,7 +42,8 @@ pub(crate) struct SubExecutor {
     tuple_positions: TuplePositions,
     sub_to_supertypes: Arc<BTreeMap<Type, Vec<Type>>>,
     supertypes: Arc<BTreeSet<Type>>,
-    filter_fn_unbound: Arc<SubFilterFn>, filter_fn_bound: Arc<SubFilterFn>,
+    filter_fn_unbound: Arc<SubFilterFn>,
+    filter_fn_bound: Arc<SubFilterFn>,
     checker: Checker<(Type, Type)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -74,7 +79,8 @@ impl SubExecutor {
         let SubInstruction { sub, checks, .. } = sub;
 
         let iterate_mode = BinaryIterateMode::new(sub.subtype(), sub.supertype(), &variable_modes, sort_by);
-        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(sub.subtype(), sub.supertype(), sort_by);
+        let (sort_mode, output_tuple_positions) =
+            sort_mode_and_tuple_positions(sub.subtype(), sub.supertype(), sort_by);
         let filter_fn_unbound = create_sub_filter_sub_super(sub_to_supertypes.clone());
         let filter_fn_bound = create_sub_filter_super(supertypes.clone());
         let subtype = sub.subtype().as_variable();
@@ -95,7 +101,8 @@ impl SubExecutor {
             tuple_positions: output_tuple_positions,
             sub_to_supertypes,
             supertypes,
-            filter_fn_unbound, filter_fn_bound,
+            filter_fn_unbound,
+            filter_fn_bound,
             checker,
         }
     }
@@ -105,7 +112,14 @@ impl SubExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 }
 
@@ -150,7 +164,11 @@ impl DynamicBinaryIterator for SubExecutor {
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = sub_to_tuple_sub_super;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = sub_to_tuple_super_sub;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let sub_with_super = self
             .sub_to_supertypes
             .iter()
@@ -159,31 +177,44 @@ impl DynamicBinaryIterator for SubExecutor {
         Ok(sub_with_super.into_iter())
     }
 
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
         return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
             functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
         }));
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let subtype = type_from_row_or_annotations(self.sub.subtype(), row, self.sub_to_supertypes.keys());
         let supertypes = self.sub_to_supertypes.get(&subtype).unwrap_or(const { &Vec::new() });
         let sub_with_super = supertypes.iter().map(|sup| Ok((subtype, *sup))).collect_vec(); // TODO cache this
         Ok(sub_with_super.into_iter())
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let subtype = type_from_row_or_annotations(self.from(), row.as_reference(), self.sub_to_supertypes.keys());
         let supertype = type_from_row_or_annotations(self.to(), row, self.supertypes.iter());
-        Ok(self.sub_to_supertypes.get(&subtype).unwrap().contains(&supertype)
-            .then(|| (subtype, supertype)))
+        Ok(self.sub_to_supertypes.get(&subtype).unwrap().contains(&supertype).then(|| (subtype, supertype)))
     }
 
     fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }

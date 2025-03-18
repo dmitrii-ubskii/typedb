@@ -15,31 +15,33 @@ use answer::Type;
 use compiler::{executable::match_::instructions::type_::PlaysReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
-    type_::{object_type::ObjectType, role_type::RoleType},
+    type_::{object_type::ObjectType, role_type::RoleType, PlayerAPI},
 };
-use itertools::Itertools;
-use concept::type_::PlayerAPI;
 use ir::pattern::Vertex;
+use itertools::Itertools;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         plays_executor::{
-            PlaysFilterFn, PlaysFilterMapFn, PlaysTupleIterator, PlaysVariableValueExtractor, EXTRACT_PLAYER,
-            EXTRACT_ROLE,
+            PlaysExecutor, PlaysFilterFn, PlaysFilterMapFn, PlaysTupleIterator, PlaysVariableValueExtractor,
+            EXTRACT_PLAYER, EXTRACT_ROLE,
         },
         relates_executor::RelatesExecutor,
+        sort_mode_and_tuple_positions,
         tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, MapToTupleFn,
+        VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions, FilterFn};
-use crate::instruction::plays_executor::PlaysExecutor;
 
 pub(crate) struct PlaysReverseExecutor {
     plays: ir::pattern::constraint::Plays<ExecutorVariable>,
@@ -48,7 +50,8 @@ pub(crate) struct PlaysReverseExecutor {
     tuple_positions: TuplePositions,
     role_player_types: Arc<BTreeMap<Type, Vec<Type>>>,
     player_types: Arc<BTreeSet<Type>>,
-    filter_fn_unbound: Arc<PlaysFilterFn>, filter_fn_bound: Arc<PlaysFilterFn>,
+    filter_fn_unbound: Arc<PlaysFilterFn>,
+    filter_fn_bound: Arc<PlaysFilterFn>,
     checker: Checker<(ObjectType, RoleType)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -86,7 +89,8 @@ impl PlaysReverseExecutor {
         let PlaysReverseInstruction { plays, checks, .. } = plays;
 
         let iterate_mode = BinaryIterateMode::new(plays.role_type(), plays.player(), &variable_modes, sort_by);
-        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(plays.role_type(), plays.player(), sort_by);
+        let (sort_mode, output_tuple_positions) =
+            sort_mode_and_tuple_positions(plays.role_type(), plays.player(), sort_by);
         let filter_fn_unbound = create_plays_filter_player_role(role_player_types.clone());
         let filter_fn_bound = create_plays_filter_role(player_types.clone());
 
@@ -108,7 +112,8 @@ impl PlaysReverseExecutor {
             tuple_positions: output_tuple_positions,
             role_player_types,
             player_types,
-            filter_fn_unbound, filter_fn_bound,
+            filter_fn_unbound,
+            filter_fn_bound,
             checker,
         }
     }
@@ -118,7 +123,14 @@ impl PlaysReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 }
 
@@ -163,7 +175,11 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = PlaysExecutor::TUPLE_TO_FROM;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = PlaysExecutor::TUPLE_FROM_TO;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let type_manager = context.type_manager();
         let plays: Vec<_> = self
             .role_player_types
@@ -179,16 +195,25 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
         Ok(iterator)
     }
 
-    fn get_iterator_unbound_inverted(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
         return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
             functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
         }));
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let role_type =
-            type_from_row_or_annotations(self.plays.role_type(), row, self.role_player_types.keys())
-                .as_role_type();
+            type_from_row_or_annotations(self.plays.role_type(), row, self.role_player_types.keys()).as_role_type();
         let type_manager = context.type_manager();
         let plays = role_type
             .get_player_types(&*context.snapshot, type_manager)?
@@ -200,10 +225,18 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
         Ok(iterator)
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let role = type_from_row_or_annotations(self.from(), row.as_reference(), self.role_player_types.keys());
         let player = type_from_row_or_annotations(self.to(), row, self.player_types.iter());
-        Ok(self.role_player_types.get(&role).unwrap().contains(&player)
+        Ok(self
+            .role_player_types
+            .get(&role)
+            .unwrap()
+            .contains(&player)
             .then(|| (player.as_object_type(), role.as_role_type())))
     }
 
@@ -211,7 +244,7 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }

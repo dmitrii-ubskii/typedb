@@ -29,18 +29,16 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom,
-                  ExecutorIteratorUnbound, UnreachableIteratorType},
+        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, UnreachableIteratorType},
         iterator::TupleIterator,
-        may_get_from_row,
+        may_get_from_row, sort_mode_and_tuple_positions,
         tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterMapUnchangedFn, MapToTupleFn, BinaryTupleSortMode,
-        VariableModes, TYPES_EMPTY,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 #[derive(Debug)]
 pub(crate) struct IsaExecutor {
@@ -128,7 +126,14 @@ impl IsaExecutor {
             Ok(true) | Err(_) => Some(item),
             Ok(false) => None,
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 }
 
@@ -276,12 +281,11 @@ impl DynamicBinaryIterator for IsaExecutor {
             .then(|| (thing.clone(), type_.clone())))
     }
 
-
     fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         None
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         None
     }
 }

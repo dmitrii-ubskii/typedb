@@ -32,16 +32,17 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted},
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+        },
         iterator::TupleIterator,
-        may_get_from_row, min_max_types,
+        may_get_from_row, min_max_types, sort_mode_and_tuple_positions,
         tuple::{has_to_tuple_attribute_owner, has_to_tuple_owner_attribute, HasToTupleFn, TuplePositions},
-        BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn, BinaryTupleSortMode, VariableModes,
+        BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::sort_mode_and_tuple_positions;
 
 pub(crate) struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -150,7 +151,14 @@ impl HasExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 }
 
@@ -297,7 +305,7 @@ impl DynamicBinaryIterator for HasExecutor {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }

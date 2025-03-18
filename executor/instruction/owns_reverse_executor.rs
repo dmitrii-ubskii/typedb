@@ -24,22 +24,24 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        helpers::{DynamicBinaryIterator,
-                  ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType},
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         owns_executor::{
             OwnsExecutor, OwnsFilterFn, OwnsFilterMapFn, OwnsFlattenedVectorInner, OwnsTupleIterator,
             OwnsVariableValueExtractor, OwnsVectorInner, EXTRACT_ATTRIBUTE, EXTRACT_OWNER,
         },
         plays_executor::PlaysExecutor,
+        sort_mode_and_tuple_positions,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, DynamicBinaryIterateMode, MapToTupleFn,
-        BinaryTupleSortMode, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterateMode,
+        FilterFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
@@ -49,7 +51,8 @@ pub(crate) struct OwnsReverseExecutor {
     tuple_positions: TuplePositions,
     attribute_owner_types: Arc<BTreeMap<Type, Vec<Type>>>,
     owner_types: Arc<BTreeSet<Type>>,
-    filter_fn_unbound: Arc<OwnsFilterFn>, filter_fn_bound: Arc<OwnsFilterFn>,
+    filter_fn_unbound: Arc<OwnsFilterFn>,
+    filter_fn_bound: Arc<OwnsFilterFn>,
     checker: Checker<(ObjectType, AttributeType)>,
 }
 
@@ -85,9 +88,10 @@ impl OwnsReverseExecutor {
         let OwnsReverseInstruction { owns, checks, .. } = owns;
 
         let iterate_mode = BinaryIterateMode::new(owns.attribute(), owns.owner(), &variable_modes, sort_by);
-        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(owns.attribute(), owns.owner(), sort_by);
+        let (sort_mode, output_tuple_positions) =
+            sort_mode_and_tuple_positions(owns.attribute(), owns.owner(), sort_by);
         let filter_fn_unbound = create_owns_filter_owner_attribute(attribute_owner_types.clone());
-        let filter_fn_bound =create_owns_filter_attribute(owner_types.clone());
+        let filter_fn_bound = create_owns_filter_attribute(owner_types.clone());
 
         let owner = owns.owner().as_variable();
         let attribute = owns.attribute().as_variable();
@@ -107,7 +111,8 @@ impl OwnsReverseExecutor {
             tuple_positions: output_tuple_positions,
             attribute_owner_types,
             owner_types,
-            filter_fn_unbound, filter_fn_bound,
+            filter_fn_unbound,
+            filter_fn_bound,
             checker,
         }
     }
@@ -117,7 +122,14 @@ impl OwnsReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 }
 
@@ -221,16 +233,19 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
         let attribute =
             type_from_row_or_annotations(self.from(), row.as_reference(), self.attribute_owner_types.keys());
         let owner = type_from_row_or_annotations(self.to(), row, self.owner_types.iter());
-        Ok(self.attribute_owner_types.get(&attribute).unwrap().contains(&owner)
+        Ok(self
+            .attribute_owner_types
+            .get(&attribute)
+            .unwrap()
+            .contains(&owner)
             .then(|| (owner.as_object_type(), attribute.as_attribute_type())))
     }
-
 
     fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }

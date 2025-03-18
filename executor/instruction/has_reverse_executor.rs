@@ -34,18 +34,18 @@ use storage::snapshot::ReadableSnapshot;
 use super::has_executor::{HasExecutor, HasFilterMapFn};
 use crate::{
     instruction::{
-        helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound,
-                  ExecutorIteratorUnboundInverted},
         has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+        },
         iterator::TupleIterator,
-        may_get_from_row, min_max_types,
+        may_get_from_row, min_max_types, sort_mode_and_tuple_positions,
         tuple::TuplePositions,
-        BinaryIterateMode, Checker, MapToTupleFn, BinaryTupleSortMode, VariableModes,
+        BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -56,7 +56,8 @@ pub(crate) struct HasReverseExecutor {
     attribute_owner_types: Arc<BTreeMap<Type, Vec<Type>>>,
     attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>>,
     owner_type_range: Bounds<ObjectType>,
-    filter_fn_unbound: Arc<HasFilterFn>, filter_fn_bound: Arc<HasFilterFn>,
+    filter_fn_unbound: Arc<HasFilterFn>,
+    filter_fn_bound: Arc<HasFilterFn>,
     attribute_cache: OnceLock<Vec<Attribute>>,
     checker: Checker<(Has, u64)>,
 }
@@ -123,7 +124,8 @@ impl HasReverseExecutor {
             attribute_owner_types,
             attribute_owner_types_range,
             owner_type_range,
-            filter_fn_unbound, filter_fn_bound,
+            filter_fn_unbound,
+            filter_fn_bound,
             attribute_cache: OnceLock::new(),
             checker,
         })
@@ -152,7 +154,14 @@ impl HasReverseExecutor {
             }
             self.attribute_cache.get_or_init(|| cache);
         }
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 
     fn all_has_reverse_chained(
@@ -175,6 +184,7 @@ impl HasReverseExecutor {
         Ok(iterators.into_iter().flatten())
     }
 }
+
 impl fmt::Display for HasReverseExecutor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Reverse[{}], mode={}", &self.has, &self.iterate_mode)
@@ -312,7 +322,7 @@ impl DynamicBinaryIterator for HasReverseExecutor {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }

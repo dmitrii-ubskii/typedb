@@ -66,9 +66,9 @@ use crate::{
     row::MaybeOwnedRow,
 };
 
-mod helpers;
 mod has_executor;
 mod has_reverse_executor;
+mod helpers;
 mod iid_executor;
 mod indexed_relation_executor;
 mod is_executor;
@@ -1089,7 +1089,7 @@ fn sort_mode_and_tuple_positions(
     from_vertex: &Vertex<ExecutorVariable>,
     to_vertex: &Vertex<ExecutorVariable>,
     sort_by: ExecutorVariable,
-) -> (BinaryTupleSortMode, TuplePositions)  {
+) -> (BinaryTupleSortMode, TuplePositions) {
     debug_assert!(to_vertex.is_variable());
     let sort_mode = match to_vertex.as_variable().unwrap() == sort_by {
         true => BinaryTupleSortMode::To,

@@ -17,23 +17,27 @@ use concept::{
     error::ConceptReadError,
     type_::{object_type::ObjectType, role_type::RoleType, type_manager::TypeManager, ObjectTypeAPI, PlayerAPI},
 };
-use itertools::Itertools;
 use ir::pattern::Vertex;
+use itertools::Itertools;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         plays_reverse_executor::PlaysReverseExecutor,
+        sort_mode_and_tuple_positions,
         tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, PlaysToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
 
 pub(crate) struct PlaysExecutor {
     plays: ir::pattern::constraint::Plays<ExecutorVariable>,
@@ -42,7 +46,8 @@ pub(crate) struct PlaysExecutor {
     tuple_positions: TuplePositions,
     player_role_types: Arc<BTreeMap<Type, Vec<Type>>>,
     role_types: Arc<BTreeSet<Type>>,
-    filter_fn_unbound: Arc<PlaysFilterFn>, filter_fn_bound: Arc<PlaysFilterFn>,
+    filter_fn_unbound: Arc<PlaysFilterFn>,
+    filter_fn_bound: Arc<PlaysFilterFn>,
     checker: Checker<(ObjectType, RoleType)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -54,19 +59,18 @@ impl fmt::Debug for PlaysExecutor {
 }
 
 pub(super) type PlaysFlattenedVectorInner = iter::Map<
-        iter::Flatten<vec::IntoIter<BTreeSet<(ObjectType, RoleType)>>>,
-        fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
+    iter::Flatten<vec::IntoIter<BTreeSet<(ObjectType, RoleType)>>>,
+    fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
 >;
 
 pub(super) type PlaysVectorInner = iter::Map<
-        vec::IntoIter<(ObjectType, RoleType)>,
-        fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
+    vec::IntoIter<(ObjectType, RoleType)>,
+    fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
 >;
 
 pub(super) type PlaysTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<PlaysFilterMapFn>>, PlaysToTupleFn>;
 pub(super) type PlaysUnboundedSortedPlayer = PlaysTupleIterator<PlaysFlattenedVectorInner>;
 pub(super) type PlaysBoundedSortedRole = PlaysTupleIterator<PlaysVectorInner>;
-
 
 pub(super) type PlaysFilterFn = FilterFn<(ObjectType, RoleType)>;
 pub(super) type PlaysFilterMapFn = FilterMapUnchangedFn<(ObjectType, RoleType)>;
@@ -88,7 +92,8 @@ impl PlaysExecutor {
         let PlaysInstruction { plays, checks, .. } = plays;
 
         let iterate_mode = BinaryIterateMode::new(plays.player(), plays.role_type(), &variable_modes, sort_by);
-        let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(plays.player(), plays.role_type(), sort_by);
+        let (sort_mode, output_tuple_positions) =
+            sort_mode_and_tuple_positions(plays.player(), plays.role_type(), sort_by);
         let filter_fn_unbound = create_plays_filter_player_role_type(player_role_types.clone());
         let filter_fn_bound = create_plays_filter_role_type(role_types.clone());
 
@@ -110,7 +115,8 @@ impl PlaysExecutor {
             tuple_positions: output_tuple_positions,
             player_role_types,
             role_types,
-            filter_fn_unbound, filter_fn_bound,
+            filter_fn_unbound,
+            filter_fn_bound,
             checker,
         }
     }
@@ -120,7 +126,14 @@ impl PlaysExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
+        self.get_iterator_for(
+            context,
+            &self.variable_modes,
+            self.sort_mode,
+            self.tuple_positions.clone(),
+            row,
+            &self.checker,
+        )
     }
 
     fn get_plays_for_player(
@@ -184,7 +197,11 @@ impl DynamicBinaryIterator for PlaysExecutor {
     const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = plays_to_tuple_player_role;
     const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = plays_to_tuple_role_player;
 
-    fn get_iterator_unbound(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let type_manager = context.type_manager();
         let plays: Vec<_> = self
             .player_role_types
@@ -195,13 +212,23 @@ impl DynamicBinaryIterator for PlaysExecutor {
         Ok(iterator)
     }
 
-    fn get_iterator_unbound_inverted(&self, _context: &ExecutionContext<impl ReadableSnapshot + Sized>) -> Result<Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>, Box<ConceptReadError>> {
+    fn get_iterator_unbound_inverted(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
         return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
             functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
         }));
     }
 
-    fn get_iterator_bound_from(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let player = type_from_row_or_annotations(self.plays.player(), row, self.player_role_types.keys());
         let type_manager = context.type_manager();
         let plays = self.get_plays_for_player(&*context.snapshot, type_manager, player)?;
@@ -209,18 +236,26 @@ impl DynamicBinaryIterator for PlaysExecutor {
         Ok(iterator)
     }
 
-    fn get_iterator_check(&self, context: &ExecutionContext<impl ReadableSnapshot + Sized>, row: MaybeOwnedRow<'_>) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
+    fn get_iterator_check(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let player = type_from_row_or_annotations(self.from(), row.as_reference(), self.player_role_types.keys());
         let role = type_from_row_or_annotations(self.to(), row, self.role_types.iter());
-        Ok(self.player_role_types.get(&player).unwrap().contains(&role)
-           .then(|| (player.as_object_type(), role.as_role_type())))
+        Ok(self
+            .player_role_types
+            .get(&player)
+            .unwrap()
+            .contains(&role)
+            .then(|| (player.as_object_type(), role.as_role_type())))
     }
 
     fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_unbound.clone())
     }
 
-    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+    fn filter_fn_bound_from(&self) -> Option<Arc<FilterFn<Self::Element>>> {
         Some(self.filter_fn_bound.clone())
     }
 }
