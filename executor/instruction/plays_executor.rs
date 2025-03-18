@@ -25,15 +25,15 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     instruction::{
         helpers::{
-            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
             UnreachableIteratorType,
         },
         iterator::{SortedTupleIterator, TupleIterator},
         plays_reverse_executor::PlaysReverseExecutor,
         sort_mode_and_tuple_positions,
         tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, PlaysToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn,
-        MapToTupleFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterator, FilterFn,
+        FilterMapUnchangedFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -200,7 +200,7 @@ impl DynamicBinaryIterator for PlaysExecutor {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
+        _row: MaybeOwnedRow<'_>,
     ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let type_manager = context.type_manager();
         let plays: Vec<_> = self
@@ -238,7 +238,7 @@ impl DynamicBinaryIterator for PlaysExecutor {
 
     fn get_iterator_check(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let player = type_from_row_or_annotations(self.from(), row.as_reference(), self.player_role_types.keys());

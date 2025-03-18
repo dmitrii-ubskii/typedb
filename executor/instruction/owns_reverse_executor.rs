@@ -25,7 +25,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     instruction::{
         helpers::{
-            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
             UnreachableIteratorType,
         },
         iterator::{SortedTupleIterator, TupleIterator},
@@ -37,7 +37,7 @@ use crate::{
         sort_mode_and_tuple_positions,
         tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
         type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterateMode,
-        FilterFn, MapToTupleFn, VariableModes,
+        DynamicBinaryIterator, FilterFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -227,7 +227,7 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
 
     fn get_iterator_check(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let attribute =

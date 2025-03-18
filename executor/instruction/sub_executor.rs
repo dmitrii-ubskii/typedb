@@ -22,14 +22,14 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     instruction::{
         helpers::{
-            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
             UnreachableIteratorType,
         },
         iterator::{SortedTupleIterator, TupleIterator},
         sort_mode_and_tuple_positions,
         tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, SubToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, FilterMapUnchangedFn,
-        MapToTupleFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterator, FilterFn,
+        FilterMapUnchangedFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -166,8 +166,8 @@ impl DynamicBinaryIterator for SubExecutor {
 
     fn get_iterator_unbound(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _row: MaybeOwnedRow<'_>,
     ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let sub_with_super = self
             .sub_to_supertypes
@@ -179,7 +179,7 @@ impl DynamicBinaryIterator for SubExecutor {
 
     fn get_iterator_unbound_inverted(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
     ) -> Result<
         Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
         Box<ConceptReadError>,
@@ -191,7 +191,7 @@ impl DynamicBinaryIterator for SubExecutor {
 
     fn get_iterator_bound_from(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
         let subtype = type_from_row_or_annotations(self.sub.subtype(), row, self.sub_to_supertypes.keys());
@@ -202,7 +202,7 @@ impl DynamicBinaryIterator for SubExecutor {
 
     fn get_iterator_check(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let subtype = type_from_row_or_annotations(self.from(), row.as_reference(), self.sub_to_supertypes.keys());

@@ -28,15 +28,15 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        helpers::{DynamicBinaryIterator, UnreachableIteratorType},
+        helpers::UnreachableIteratorType,
         isa_executor::{
             AttributeEraseFn, IsaExecutor, IsaFilterMapFn, IsaTupleIterator, ObjectEraseFn, EXTRACT_THING, EXTRACT_TYPE,
         },
         iterator::TupleIterator,
         may_get_from_row, sort_mode_and_tuple_positions,
         tuple::TuplePositions,
-        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, MapToTupleFn,
-        VariableModes, TYPES_EMPTY,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterator, FilterFn,
+        MapToTupleFn, VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -108,11 +108,6 @@ impl IsaReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<IsaFilterMapFn> = Box::new(move |item| match check(&item) {
-            Ok(true) | Err(_) => Some(item),
-            Ok(false) => None,
-        });
         self.get_iterator_for(
             context,
             &self.variable_modes,

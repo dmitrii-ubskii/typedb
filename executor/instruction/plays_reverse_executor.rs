@@ -25,7 +25,7 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     instruction::{
         helpers::{
-            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
             UnreachableIteratorType,
         },
         iterator::{SortedTupleIterator, TupleIterator},
@@ -36,8 +36,8 @@ use crate::{
         relates_executor::RelatesExecutor,
         sort_mode_and_tuple_positions,
         tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, MapToTupleFn,
-        VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterator, FilterFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -178,7 +178,7 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
     fn get_iterator_unbound(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + Sized>,
-        row: MaybeOwnedRow<'_>,
+        _row: MaybeOwnedRow<'_>,
     ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
         let type_manager = context.type_manager();
         let plays: Vec<_> = self
@@ -197,7 +197,7 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
 
     fn get_iterator_unbound_inverted(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
     ) -> Result<
         Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
         Box<ConceptReadError>,
@@ -227,7 +227,7 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
 
     fn get_iterator_check(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>> {
         let role = type_from_row_or_annotations(self.from(), row.as_reference(), self.role_player_types.keys());

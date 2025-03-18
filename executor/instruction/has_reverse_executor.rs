@@ -31,17 +31,15 @@ use primitive::{either::Either, Bounds};
 use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
 use storage::snapshot::ReadableSnapshot;
 
-use super::has_executor::{HasExecutor, HasFilterMapFn};
+use super::has_executor::HasExecutor;
 use crate::{
     instruction::{
         has_executor::{HasFilterFn, HasOrderingFn, HasTupleIterator, EXTRACT_ATTRIBUTE, EXTRACT_OWNER},
-        helpers::{
-            DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
-        },
+        helpers::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted},
         iterator::TupleIterator,
         may_get_from_row, min_max_types, sort_mode_and_tuple_positions,
         tuple::TuplePositions,
-        BinaryIterateMode, BinaryTupleSortMode, Checker, FilterFn, MapToTupleFn, VariableModes,
+        BinaryIterateMode, BinaryTupleSortMode, Checker, DynamicBinaryIterator, FilterFn, MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
