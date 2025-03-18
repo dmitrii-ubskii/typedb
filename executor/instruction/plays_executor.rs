@@ -42,7 +42,7 @@ pub(crate) struct PlaysExecutor {
     tuple_positions: TuplePositions,
     player_role_types: Arc<BTreeMap<Type, Vec<Type>>>,
     role_types: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<PlaysFilterFn>,
+    filter_fn_unbound: Arc<PlaysFilterFn>, filter_fn_bound: Arc<PlaysFilterFn>,
     checker: Checker<(ObjectType, RoleType)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -89,12 +89,8 @@ impl PlaysExecutor {
 
         let iterate_mode = BinaryIterateMode::new(plays.player(), plays.role_type(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(plays.player(), plays.role_type(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_plays_filter_player_role_type(player_role_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_plays_filter_role_type(role_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_plays_filter_player_role_type(player_role_types.clone());
+        let filter_fn_bound = create_plays_filter_role_type(role_types.clone());
 
         let player = plays.player().as_variable();
         let role_type = plays.role_type().as_variable();
@@ -114,7 +110,7 @@ impl PlaysExecutor {
             tuple_positions: output_tuple_positions,
             player_role_types,
             role_types,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -124,17 +120,7 @@ impl PlaysExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<PlaysFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 
     fn get_plays_for_player(
@@ -228,5 +214,13 @@ impl DynamicBinaryIterator for PlaysExecutor {
         let role = type_from_row_or_annotations(self.to(), row, self.role_types.iter());
         Ok(self.player_role_types.get(&player).unwrap().contains(&role)
            .then(|| (player.as_object_type(), role.as_role_type())))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

@@ -39,7 +39,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::sort_mode_and_tuple_positions;
+use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
@@ -49,7 +49,7 @@ pub(crate) struct OwnsReverseExecutor {
     tuple_positions: TuplePositions,
     attribute_owner_types: Arc<BTreeMap<Type, Vec<Type>>>,
     owner_types: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<OwnsFilterFn>,
+    filter_fn_unbound: Arc<OwnsFilterFn>, filter_fn_bound: Arc<OwnsFilterFn>,
     checker: Checker<(ObjectType, AttributeType)>,
 }
 
@@ -86,12 +86,8 @@ impl OwnsReverseExecutor {
 
         let iterate_mode = BinaryIterateMode::new(owns.attribute(), owns.owner(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(owns.attribute(), owns.owner(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_owns_filter_owner_attribute(attribute_owner_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_owns_filter_attribute(owner_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_owns_filter_owner_attribute(attribute_owner_types.clone());
+        let filter_fn_bound =create_owns_filter_attribute(owner_types.clone());
 
         let owner = owns.owner().as_variable();
         let attribute = owns.attribute().as_variable();
@@ -111,7 +107,7 @@ impl OwnsReverseExecutor {
             tuple_positions: output_tuple_positions,
             attribute_owner_types,
             owner_types,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -121,71 +117,7 @@ impl OwnsReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<OwnsFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-
-        let snapshot = &**context.snapshot();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let type_manager = context.type_manager();
-                let owns: Vec<_> = self
-                    .attribute_owner_types
-                    .keys()
-                    .map(|attribute| {
-                        let attribute_type = attribute.as_attribute_type();
-                        attribute_type.get_owner_types(snapshot, type_manager).map(|res| {
-                            res.to_owned().keys().map(|object_type| (*object_type, attribute_type)).collect()
-                        })
-                    })
-                    .try_collect()?;
-                let iterator = owns.into_iter().flatten().map(Ok as _);
-                let as_tuples: OwnsReverseUnboundedSortedAttribute =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_attribute_owner as _);
-                Ok(TupleIterator::OwnsReverseUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-
-            BinaryIterateMode::UnboundInverted => {
-                // is this ever relevant?
-                return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
-                    functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
-                }));
-            }
-
-            BinaryIterateMode::BoundFrom => {
-                let attribute_type =
-                    type_from_row_or_annotations(self.owns.attribute(), row, self.attribute_owner_types.keys())
-                        .as_attribute_type();
-                let type_manager = context.type_manager();
-                let owns = attribute_type
-                    .get_owner_types(snapshot, type_manager)?
-                    .to_owned()
-                    .into_keys()
-                    .map(|object_type| (object_type, attribute_type));
-
-                let iterator = owns.sorted_by_key(|(owner, _)| *owner).map(Ok as _);
-                let as_tuples: OwnsReverseBoundedSortedOwner =
-                    iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
-
-                Ok(TupleIterator::OwnsReverseBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -291,5 +223,14 @@ impl DynamicBinaryIterator for OwnsReverseExecutor {
         let owner = type_from_row_or_annotations(self.to(), row, self.owner_types.iter());
         Ok(self.attribute_owner_types.get(&attribute).unwrap().contains(&owner)
             .then(|| (owner.as_object_type(), attribute.as_attribute_type())))
+    }
+
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

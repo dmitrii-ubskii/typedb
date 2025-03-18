@@ -38,7 +38,7 @@ pub(crate) struct SubExecutor {
     tuple_positions: TuplePositions,
     sub_to_supertypes: Arc<BTreeMap<Type, Vec<Type>>>,
     supertypes: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<SubFilterFn>,
+    filter_fn_unbound: Arc<SubFilterFn>, filter_fn_bound: Arc<SubFilterFn>,
     checker: Checker<(Type, Type)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -75,13 +75,8 @@ impl SubExecutor {
 
         let iterate_mode = BinaryIterateMode::new(sub.subtype(), sub.supertype(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(sub.subtype(), sub.supertype(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_sub_filter_sub_super(sub_to_supertypes.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_sub_filter_super(supertypes.clone())
-            }
-        };
-
+        let filter_fn_unbound = create_sub_filter_sub_super(sub_to_supertypes.clone());
+        let filter_fn_bound = create_sub_filter_super(supertypes.clone());
         let subtype = sub.subtype().as_variable();
         let supertype = sub.supertype().as_variable();
         let checker = Checker::<(Type, Type)>::new(
@@ -100,7 +95,7 @@ impl SubExecutor {
             tuple_positions: output_tuple_positions,
             sub_to_supertypes,
             supertypes,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -110,17 +105,7 @@ impl SubExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<SubFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -192,5 +177,13 @@ impl DynamicBinaryIterator for SubExecutor {
         let supertype = type_from_row_or_annotations(self.to(), row, self.supertypes.iter());
         Ok(self.sub_to_supertypes.get(&subtype).unwrap().contains(&supertype)
             .then(|| (subtype, supertype)))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

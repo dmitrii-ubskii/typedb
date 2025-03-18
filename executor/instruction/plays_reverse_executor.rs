@@ -38,7 +38,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions, FilterFn};
 use crate::instruction::plays_executor::PlaysExecutor;
 
 pub(crate) struct PlaysReverseExecutor {
@@ -48,7 +48,7 @@ pub(crate) struct PlaysReverseExecutor {
     tuple_positions: TuplePositions,
     role_player_types: Arc<BTreeMap<Type, Vec<Type>>>,
     player_types: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<PlaysFilterFn>,
+    filter_fn_unbound: Arc<PlaysFilterFn>, filter_fn_bound: Arc<PlaysFilterFn>,
     checker: Checker<(ObjectType, RoleType)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -87,12 +87,8 @@ impl PlaysReverseExecutor {
 
         let iterate_mode = BinaryIterateMode::new(plays.role_type(), plays.player(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(plays.role_type(), plays.player(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_plays_filter_player_role(role_player_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_plays_filter_role(player_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_plays_filter_player_role(role_player_types.clone());
+        let filter_fn_bound = create_plays_filter_role(player_types.clone());
 
         let player = plays.player().as_variable();
         let role_type = plays.role_type().as_variable();
@@ -112,7 +108,7 @@ impl PlaysReverseExecutor {
             tuple_positions: output_tuple_positions,
             role_player_types,
             player_types,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -122,17 +118,7 @@ impl PlaysReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<PlaysFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -219,5 +205,13 @@ impl DynamicBinaryIterator for PlaysReverseExecutor {
         let player = type_from_row_or_annotations(self.to(), row, self.player_types.iter());
         Ok(self.role_player_types.get(&role).unwrap().contains(&player)
             .then(|| (player.as_object_type(), role.as_role_type())))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

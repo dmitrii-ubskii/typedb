@@ -52,7 +52,8 @@ pub(crate) struct HasExecutor {
     owner_attribute_types: Arc<BTreeMap<Type, Vec<Type>>>,
     owner_type_range: Bounds<ObjectType>,
     attribute_type_range: Bounds<AttributeType>,
-    filter_fn: Arc<HasFilterFn>,
+    filter_fn_unbound: Arc<HasFilterFn>,
+    filter_fn_bound: Arc<HasFilterFn>,
     owner_cache: Option<Vec<Object>>,
     checker: Checker<(Has, u64)>,
 }
@@ -95,12 +96,8 @@ impl HasExecutor {
         let attribute_types = has.attribute_types().clone();
         let HasInstruction { has, checks, .. } = has;
         let iterate_mode = BinaryIterateMode::new(has.owner(), has.attribute(), &variable_modes, sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_has_filter_owners_attributes(owner_attribute_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_has_filter_attributes(attribute_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_has_filter_owners_attributes(owner_attribute_types.clone());
+        let filter_fn_bound = create_has_filter_attributes(attribute_types.clone());
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(has.owner(), has.attribute(), sort_by);
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
@@ -141,7 +138,8 @@ impl HasExecutor {
             owner_attribute_types,
             owner_type_range,
             attribute_type_range,
-            filter_fn,
+            filter_fn_unbound,
+            filter_fn_bound,
             owner_cache,
             checker,
         })
@@ -152,17 +150,7 @@ impl HasExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<HasFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -303,5 +291,13 @@ impl DynamicBinaryIterator for HasExecutor {
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
             .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1u64)))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

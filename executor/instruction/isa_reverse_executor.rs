@@ -41,7 +41,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, UnreachableIteratorType};
-use crate::instruction::sort_mode_and_tuple_positions;
+use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 #[derive(Debug)]
 pub(crate) struct IsaReverseExecutor {
@@ -114,7 +114,7 @@ impl IsaReverseExecutor {
             Ok(true) | Err(_) => Some(item),
             Ok(false) => None,
         });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -272,5 +272,13 @@ impl DynamicBinaryIterator for IsaReverseExecutor {
             .unwrap()
             .contains(&thing.type_())
             .then(|| (thing.clone(), type_.clone())))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        None
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        None
     }
 }

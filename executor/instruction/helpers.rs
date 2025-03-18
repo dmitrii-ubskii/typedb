@@ -5,6 +5,7 @@
  */
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 use itertools::KMergeBy;
 use compiler::executable::match_::instructions::VariableModes;
 use compiler::ExecutorVariable;
@@ -13,7 +14,7 @@ use concept::thing::object::{HasIterator, HasReverseIterator};
 use ir::pattern::Vertex;
 use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
-use crate::instruction::{DynamicBinaryIterateMode, FilterMapUnchangedFn, isa_executor, isa_reverse_executor, MapToTupleFn, may_get_from_row, BinaryTupleSortMode};
+use crate::instruction::{DynamicBinaryIterateMode, FilterMapUnchangedFn, isa_executor, isa_reverse_executor, MapToTupleFn, may_get_from_row, BinaryTupleSortMode, FilterFn, Checker};
 use crate::instruction::has_executor::{HasExecutor, HasOrderingFn};
 use crate::instruction::has_reverse_executor::{ChainedHasReverseIterator, HasReverseExecutor};
 use crate::instruction::isa_executor::{IsaBoundedInner, IsaExecutor};
@@ -21,7 +22,7 @@ use crate::instruction::isa_reverse_executor::IsaReverseExecutor;
 use crate::instruction::iterator::{SortedTupleIterator, TupleIterator};
 use crate::instruction::owns_executor::{OwnsExecutor, OwnsFlattenedVectorInner, OwnsVectorInner};
 use crate::instruction::owns_reverse_executor::OwnsReverseExecutor;
-use crate::instruction::plays_executor::{PlaysExecutor, PlaysFlattenedVectorInner, PlaysVectorInner};
+use crate::instruction::plays_executor::{PlaysExecutor, PlaysFilterMapFn, PlaysFlattenedVectorInner, PlaysVectorInner};
 use crate::instruction::plays_reverse_executor::PlaysReverseExecutor;
 use crate::instruction::relates_executor::{RelatesExecutor, RelatesFlattenedVectorInner, RelatesVectorInner};
 use crate::instruction::relates_reverse_executor::RelatesReverseExecutor;
@@ -69,6 +70,35 @@ pub(super) trait DynamicBinaryIterator: Sized {
         row: MaybeOwnedRow<'_>,
     ) -> Result<Option<Self::Element>, Box<ConceptReadError>>;
 
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>>;
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>>;
+
+    fn create_filter_for_row(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        row: MaybeOwnedRow<'_>,
+        filter_fn_opt: Option<Arc<FilterFn<Self::Element>>>,
+        checker: &Checker<Self::Element>
+    ) -> Box<FilterMapUnchangedFn<Self::Element>> {
+        let check = checker.filter_for_row(context, &row);
+        if let Some(filter_fn) = filter_fn_opt {
+            let filter = filter_fn.clone();
+            Box::new(move |item| match filter(&item) {
+                Ok(true) => match check(&item) {
+                    Ok(true) | Err(_) => Some(item),
+                    Ok(false) => None,
+                },
+                Ok(false) => None,
+                Err(_) => Some(item),
+            })
+        } else {
+            Box::new(move |item| match check(&item) {
+                Ok(true) | Err(_) => Some(item),
+                Ok(false) => None,
+            })
+        }
+    }
+
     // Common method to handle the dynamic mode logic.
     fn get_iterator_for(
         &self,
@@ -77,31 +107,38 @@ pub(super) trait DynamicBinaryIterator: Sized {
         sort_mode: BinaryTupleSortMode,
         tuple_positions: TuplePositions,
         row: MaybeOwnedRow<'_>,
-        filter_for_row: Box<FilterMapUnchangedFn<Self::Element>>,
+        checker: &Checker<Self::Element>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let dynamic_iterate_mode = DynamicBinaryIterateMode::new(self.from(), self.to(), sort_mode, row.as_reference());
         let from = may_get_from_row(self.from(), &row);
         let to = may_get_from_row(self.to(), &row);
 
         let iterator = match dynamic_iterate_mode {
-            DynamicBinaryIterateMode::UnboundOnFrom => self
-                .get_iterator_unbound(context, row)?
-                .unbound_into_tuple_iterator(filter_for_row, Self::TUPLE_FROM_TO, tuple_positions, variable_modes),
-            DynamicBinaryIterateMode::UnboundOnTo => match self.get_iterator_unbound_inverted(context)? {
-                Either::First(single) => single.unbound_inverted_into_tuple_iterator(
-                    filter_for_row,
-                    Self::TUPLE_TO_FROM,
-                    tuple_positions,
-                    variable_modes,
-                ),
-                Either::Second(merged) => merged.unbound_inverted_into_tuple_iterator(
-                    filter_for_row,
-                    Self::TUPLE_TO_FROM,
-                    tuple_positions,
-                    variable_modes,
-                ),
+            DynamicBinaryIterateMode::UnboundOnFrom => {
+                let filter_for_row = self.create_filter_for_row(context, row.as_reference(), self.filter_fn_unbound(), checker);
+                self
+                    .get_iterator_unbound(context, row)?
+                    .unbound_into_tuple_iterator(filter_for_row, Self::TUPLE_FROM_TO, tuple_positions, variable_modes)
+            },
+            DynamicBinaryIterateMode::UnboundOnTo => {
+                let filter_for_row = self.create_filter_for_row(context, row.as_reference(), self.filter_fn_bound(), checker);
+                match self.get_iterator_unbound_inverted(context)? {
+                    Either::First(single) => single.unbound_inverted_into_tuple_iterator(
+                        filter_for_row,
+                        Self::TUPLE_TO_FROM,
+                        tuple_positions,
+                        variable_modes,
+                    ),
+                    Either::Second(merged) => merged.unbound_inverted_into_tuple_iterator(
+                        filter_for_row,
+                        Self::TUPLE_TO_FROM,
+                        tuple_positions,
+                        variable_modes,
+                    ),
+                }
             },
             DynamicBinaryIterateMode::BoundFromOnTo => {
+                let filter_for_row = self.create_filter_for_row(context, row.as_reference(), self.filter_fn_bound(), checker);
                 self.get_iterator_bound_from(context, row.as_reference())?.bound_from_into_tuple_iterator(
                     filter_for_row,
                     Self::TUPLE_TO_FROM,
@@ -113,6 +150,7 @@ pub(super) trait DynamicBinaryIterator: Sized {
             // DynamicBinaryIterateMode::BoundToUsingReverse => {}
             // DynamicBinaryIterateMode::BoundToUsingReverseSwapped => {}
             DynamicBinaryIterateMode::CheckOnFrom => {
+                let filter_for_row = self.create_filter_for_row(context, row.as_reference(), self.filter_fn_bound(), checker);
                 debug_assert!(from.is_some() && to.is_some());
                 let optional_element = self.get_iterator_check(context, row)?;
                 let optional_tuple_result =

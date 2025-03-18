@@ -45,7 +45,7 @@ use crate::{
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::sort_mode_and_tuple_positions;
+use crate::instruction::{FilterFn, sort_mode_and_tuple_positions};
 
 pub(crate) struct HasReverseExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
@@ -56,7 +56,7 @@ pub(crate) struct HasReverseExecutor {
     attribute_owner_types: Arc<BTreeMap<Type, Vec<Type>>>,
     attribute_owner_types_range: BTreeMap<AttributeType, Bounds<ObjectType>>,
     owner_type_range: Bounds<ObjectType>,
-    filter_fn: Arc<HasFilterFn>,
+    filter_fn_unbound: Arc<HasFilterFn>, filter_fn_bound: Arc<HasFilterFn>,
     attribute_cache: OnceLock<Vec<Attribute>>,
     checker: Checker<(Has, u64)>,
 }
@@ -86,12 +86,8 @@ impl HasReverseExecutor {
         let owner_types = has_reverse.owner_types().clone();
         let HasReverseInstruction { has, checks, .. } = has_reverse;
         let iterate_mode = BinaryIterateMode::new(has.attribute(), has.owner(), &variable_modes, sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_has_filter_attributes_owners(attribute_owner_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_has_filter_owners(owner_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_has_filter_attributes_owners(attribute_owner_types.clone());
+        let filter_fn_bound = create_has_filter_owners(owner_types.clone());
 
         let owner = has.owner().as_variable().unwrap();
         let attribute = has.attribute().as_variable().unwrap();
@@ -127,7 +123,7 @@ impl HasReverseExecutor {
             attribute_owner_types,
             attribute_owner_types_range,
             owner_type_range,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             attribute_cache: OnceLock::new(),
             checker,
         })
@@ -156,18 +152,7 @@ impl HasReverseExecutor {
             }
             self.attribute_cache.get_or_init(|| cache);
         }
-
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<HasFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 
     fn all_has_reverse_chained(
@@ -321,5 +306,13 @@ impl DynamicBinaryIterator for HasReverseExecutor {
             .as_object()
             .has_attribute(&*context.snapshot, &*context.thing_manager, attr)?
             .then(|| (Has::Edge(ThingEdgeHas::new(owner_obj.as_object().vertex(), attr.vertex())), 1u64)))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

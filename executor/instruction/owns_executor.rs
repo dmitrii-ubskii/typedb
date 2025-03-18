@@ -48,7 +48,7 @@ pub(crate) struct OwnsExecutor {
     tuple_positions: TuplePositions,
     owner_attribute_types: Arc<BTreeMap<Type, Vec<Type>>>,
     attribute_types: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<OwnsFilterFn>,
+    filter_fn_unbound: Arc<OwnsFilterFn>, filter_fn_bound: Arc<OwnsFilterFn>,
     checker: Checker<(ObjectType, AttributeType)>,
 }
 
@@ -94,12 +94,8 @@ impl OwnsExecutor {
 
         let iterate_mode = BinaryIterateMode::new(owns.owner(), owns.attribute(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(owns.owner(), owns.attribute(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_owns_filter_owner_attribute(owner_attribute_types.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_owns_filter_attribute(attribute_types.clone())
-            }
-        };
+        let filter_fn_unbound = create_owns_filter_owner_attribute(owner_attribute_types.clone());
+        let filter_fn_bound = create_owns_filter_attribute(attribute_types.clone());
 
         let owner = owns.owner().as_variable();
         let attribute = owns.attribute().as_variable();
@@ -119,7 +115,7 @@ impl OwnsExecutor {
             tuple_positions: output_tuple_positions,
             owner_attribute_types,
             attribute_types,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -129,17 +125,7 @@ impl OwnsExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<OwnsFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 
     fn get_owns_for_owner(
@@ -252,5 +238,13 @@ impl DynamicBinaryIterator for OwnsExecutor {
         let attribute = type_from_row_or_annotations(self.to(), row, self.attribute_types.iter());
         Ok(self.owner_attribute_types.get(&owner).unwrap().contains(&attribute)
             .then(|| (owner.as_object_type(), attribute.as_attribute_type())))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }

@@ -31,7 +31,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 use crate::instruction::helpers::{DynamicBinaryIterator, ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted, UnreachableIteratorType};
-use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions};
+use crate::instruction::{MapToTupleFn, BinaryTupleSortMode, sort_mode_and_tuple_positions, FilterFn};
 
 pub(crate) struct SubReverseExecutor {
     sub: ir::pattern::constraint::Sub<ExecutorVariable>,
@@ -40,7 +40,7 @@ pub(crate) struct SubReverseExecutor {
     tuple_positions: TuplePositions,
     super_to_subtypes: Arc<BTreeMap<Type, Vec<Type>>>,
     subtypes: Arc<BTreeSet<Type>>,
-    filter_fn: Arc<SubFilterFn>,
+    filter_fn_unbound: Arc<SubFilterFn>, filter_fn_bound: Arc<SubFilterFn>,
     checker: Checker<(Type, Type)>,
     sort_mode: BinaryTupleSortMode,
 }
@@ -70,12 +70,8 @@ impl SubReverseExecutor {
 
         let iterate_mode = BinaryIterateMode::new(sub.supertype(), sub.subtype(), &variable_modes, sort_by);
         let (sort_mode, output_tuple_positions) = sort_mode_and_tuple_positions(sub.supertype(), sub.subtype(), sort_by);
-        let filter_fn = match iterate_mode {
-            BinaryIterateMode::Unbound => create_sub_filter_super_sub(super_to_subtypes.clone()),
-            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
-                create_sub_filter_sub(subtypes.clone())
-            }
-        };
+        let filter_fn_unbound = create_sub_filter_super_sub(super_to_subtypes.clone());
+        let filter_fn_bound = create_sub_filter_sub(subtypes.clone());
 
         let subtype = sub.subtype().as_variable();
         let supertype = sub.supertype().as_variable();
@@ -95,7 +91,7 @@ impl SubReverseExecutor {
             tuple_positions: output_tuple_positions,
             super_to_subtypes,
             subtypes,
-            filter_fn,
+            filter_fn_unbound, filter_fn_bound,
             checker,
         }
     }
@@ -105,18 +101,7 @@ impl SubReverseExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<SubFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-
-        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, filter_for_row)
+        self.get_iterator_for(context, &self.variable_modes, self.sort_mode, self.tuple_positions.clone(), row, &self.checker)
     }
 }
 
@@ -190,5 +175,13 @@ impl DynamicBinaryIterator for SubReverseExecutor {
         let subtype = type_from_row_or_annotations(self.to(), row, self.subtypes.iter());
         Ok(self.super_to_subtypes.get(&supertype).unwrap().contains(&subtype)
             .then(|| (subtype, supertype)))
+    }
+
+    fn filter_fn_unbound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_unbound.clone())
+    }
+
+    fn filter_fn_bound(&self) -> Option<Arc<FilterFn<Self::Element>>> {
+        Some(self.filter_fn_bound.clone())
     }
 }
