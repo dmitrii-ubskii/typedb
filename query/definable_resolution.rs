@@ -6,13 +6,20 @@
 
 // TODO: not sure if these go elsewhere, or are useful in lower level packges outside //query
 
+use typeql::{
+    common::{error::TypeQLError, Spanned},
+    schema::definable::struct_::Field,
+    type_::{BuiltinValueType, NamedType, NamedTypeAny, NamedTypeOptional},
+    TypeRef, TypeRefAny,
+};
+
 use answer::Type;
 use concept::{
     error::ConceptReadError,
     type_::{
-        attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType, owns::Owns, plays::Plays,
-        relates::Relates, relation_type::RelationType, role_type::RoleType, type_manager::TypeManager, ObjectTypeAPI,
-        Ordering, OwnerAPI, PlayerAPI, TypeAPI,
+        attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType, ObjectTypeAPI, Ordering,
+        OwnerAPI, owns::Owns, PlayerAPI, plays::Plays, relates::Relates,
+        relation_type::RelationType, role_type::RoleType, type_manager::TypeManager, TypeAPI,
     },
 };
 use encoding::{
@@ -21,12 +28,6 @@ use encoding::{
 };
 use error::typedb_error;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
-use typeql::{
-    common::{error::TypeQLError, Spanned},
-    schema::definable::struct_::Field,
-    type_::{BuiltinValueType, NamedType, NamedTypeAny, NamedTypeOptional},
-    TypeRef, TypeRefAny,
-};
 
 macro_rules! filter_variants {
     ($variant:path : $iterable:expr) => {
@@ -43,7 +44,7 @@ fn checked_identifier(ident: &typeql::Identifier) -> Result<&str, Box<SymbolReso
 }
 
 pub(crate) fn type_ref_to_label_and_ordering(
-    label: &Label,
+    _label: &Label,
     type_ref: &TypeRefAny,
 ) -> Result<(Label, Ordering), Box<SymbolResolutionError>> {
     match type_ref {
@@ -444,7 +445,7 @@ pub(crate) fn try_resolve_plays_role_label(
 
 // TODO: ideally these all have TypeQL declarations, so we can pinpoint line number in these errors!
 typedb_error! {
-    pub(crate) SymbolResolutionError(component = "Symbol resolution", prefix = "SYR") {
+    pub SymbolResolutionError(component = "Symbol resolution", prefix = "SYR") {
         TypeNotFound(1, "The type '{label}' was not found.", label: Label),
         StructNotFound(2, "The struct value type '{name}' was not found.", name: String),
         StructFieldIllegalList(3, "Struct fields cannot be lists.\nSource:\n{declaration}", declaration: Field),

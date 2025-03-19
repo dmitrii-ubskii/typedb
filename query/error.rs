@@ -5,7 +5,7 @@
  */
 
 use compiler::{
-    annotation::{expression::ExpressionCompileError, AnnotationError},
+    annotation::{AnnotationError, expression::ExpressionCompileError},
     executable::{ExecutableCompilationError, WriteCompilationError},
     transformation::StaticOptimiserError,
 };

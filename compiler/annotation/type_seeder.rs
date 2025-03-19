@@ -10,7 +10,6 @@ use std::{
     iter::zip,
     sync::Arc,
 };
-
 use answer::{variable::Variable, Type as TypeAnnotation, Type};
 use concept::{
     error::ConceptReadError,
@@ -39,6 +38,8 @@ use crate::annotation::{
     match_inference::{NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations},
     TypeInferenceError,
 };
+use resource::profile::StorageCounters;
+
 
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
@@ -1685,6 +1686,7 @@ pub mod tests {
         pipeline::{block::Block, ParameterRegistry},
         translation::TranslationContext,
     };
+    use resource::profile::StorageCounters;
     use storage::snapshot::CommittableSnapshot;
 
     use crate::annotation::{
@@ -1862,7 +1864,7 @@ pub mod tests {
                     Ordering::Unordered,
                 )
                 .unwrap();
-            snapshot.commit().unwrap();
+            snapshot.commit(StorageCounters::DISABLED).unwrap();
             (TypeAnnotation::Entity(type_owner), TypeAnnotation::Attribute(type_age))
         };
 

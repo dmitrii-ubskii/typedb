@@ -154,7 +154,7 @@ impl<'a, FIDType: FunctionIDAPI> FunctionCallCostProvider for FunctionCompiler<'
 pub(crate) fn compile_functions<FIDType: FunctionIDAPI>(
     statistics: &Statistics,
     cached_plans: &ExecutableFunctionRegistry,
-    mut to_compile: HashMap<FIDType, AnnotatedFunction>,
+    to_compile: HashMap<FIDType, AnnotatedFunction>,
 ) -> Result<HashMap<FIDType, ExecutableFunction>, ExecutableCompilationError> {
     // TODO: Cache compiled schema functions?
     let mut planner = FunctionCompiler::new(cached_plans, to_compile);

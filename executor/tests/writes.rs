@@ -95,7 +95,7 @@ fn setup_schema(storage: Arc<MVCCStorage<WALClient>>) {
     person_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_member_type).unwrap();
     group_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_group_type).unwrap();
 
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 }
 
 struct ShimStage<Snapshot> {
@@ -321,11 +321,11 @@ fn has() {
         vec![vec![]],
     )
     .unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_read();
     let age_type = type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
-    let attr_age_10 = thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
+    let attr_age_10 = thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10),  StorageCounters::DISABLED).unwrap().unwrap();
     assert_eq!(1, attr_age_10.get_owners(&snapshot, &thing_manager, StorageCounters::DISABLED).count());
     snapshot.close_resources()
 }
@@ -345,7 +345,7 @@ fn test() {
          (member: $p, group: $g) isa membership;
     ";
     let (_, snapshot) = execute_insert(snapshot, type_manager, thing_manager, query_str, &[], vec![vec![]]).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 }
 
 #[test]
@@ -364,7 +364,7 @@ fn relation() {
     ";
     let (_, snapshot) =
         execute_insert(snapshot, type_manager.clone(), thing_manager.clone(), query_str, &[], vec![vec![]]).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_read();
     let person_type = type_manager.get_entity_type(&snapshot, &PERSON_LABEL).unwrap().unwrap();
@@ -412,7 +412,7 @@ fn relation_with_inferred_roles() {
     ";
     let (_, snapshot) =
         execute_insert(snapshot, type_manager.clone(), thing_manager.clone(), query_str, &[], vec![vec![]]).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_read();
     let person_type = type_manager.get_entity_type(&snapshot, &PERSON_LABEL).unwrap().unwrap();
@@ -472,7 +472,7 @@ fn test_has_with_input_rows() {
     )
     .unwrap();
     let a10 = inserted_rows[0][1].clone();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_read();
     let age_type = type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
@@ -522,7 +522,7 @@ fn delete_has() {
     )
     .unwrap();
     let a10 = inserted_rows[0][1].clone().into_owned();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_write();
     assert_eq!(1, Iterator::count(p10.as_thing().as_object().get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap()));
@@ -536,7 +536,7 @@ fn delete_has() {
         vec![vec![p10.clone(), a10.clone()]],
     )
     .unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = storage.clone().open_snapshot_read();
     assert_eq!(0, Iterator::count(p10.as_thing().as_object().get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap()));

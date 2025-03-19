@@ -10,9 +10,10 @@ use std::{
     hash::{DefaultHasher, Hasher},
 };
 
+use itertools::Itertools;
+
 use answer::variable::Variable;
 use error::unimplemented_feature;
-use itertools::Itertools;
 use structural_equality::StructuralEquality;
 
 use crate::{

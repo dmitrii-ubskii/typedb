@@ -6,21 +6,23 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use itertools::Either;
+
 use compiler::VariablePosition;
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use encoding::graph::definition::definition_key_generator::DefinitionKeyGenerator;
 use error::UnimplementedFeature;
 use executor::{
-    pipeline::{stage::ExecutionContext, PipelineExecutionError},
-    row::MaybeOwnedRow,
     ExecutionInterrupt,
+    pipeline::{PipelineExecutionError, stage::ExecutionContext},
+    row::MaybeOwnedRow,
 };
 use function::function_manager::FunctionManager;
 use ir::{pipeline::FunctionRepresentationError, RepresentationError};
-use itertools::Either;
 use lending_iterator::LendingIterator;
 use query::{error::QueryError, query_cache::QueryCache, query_manager::QueryManager};
-use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
+use resource::profile::StorageCounters;
+use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
 use test_utils::TempDir;
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
@@ -47,7 +49,7 @@ fn setup_common(schema: &str) -> Context {
     query_manager
         .execute_schema(&mut snapshot, &type_manager, &thing_manager, &function_manager, define, schema)
         .unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let query_manager = QueryManager::new(Some(Arc::new(QueryCache::new())));
     // reload to obtain latest vertex generators and statistics entries
@@ -107,7 +109,7 @@ fn run_write_query(
     let snapshot = Arc::into_inner(snapshot).unwrap();
     let result: Result<Vec<MaybeOwnedRow<'static>>, Box<PipelineExecutionError>> =
         iterator.map_static(|row| row.map(|row| row.into_owned()).map_err(|err| err.clone())).collect();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
     result.map(move |rows| (rows, rows_positions))
 }
 

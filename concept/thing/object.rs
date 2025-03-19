@@ -7,7 +7,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
-    ops::{RangeBounds},
+    ops::RangeBounds,
 };
 use std::iter::Map;
 

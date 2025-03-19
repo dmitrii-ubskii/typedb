@@ -13,10 +13,11 @@ use std::{
     ops::BitXor,
 };
 
+use typeql::common::Span;
+
 use answer::variable::Variable;
 use encoding::value::label::Label;
 use structural_equality::StructuralEquality;
-use typeql::common::Span;
 
 use crate::pipeline::VariableRegistry;
 

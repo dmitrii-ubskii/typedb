@@ -6,12 +6,7 @@
 
 use std::{collections::HashMap, fmt, sync::Arc};
 
-use answer::variable::Variable;
-use bytes::byte_array::ByteArray;
-use encoding::{graph::thing::THING_VERTEX_MAX_LENGTH, value::value::Value};
-use error::typedb_error;
 use itertools::Itertools;
-use storage::snapshot::{iterator::SnapshotIteratorError, SnapshotGetError};
 use typeql::{
     common::Span,
     schema::definable::function::{
@@ -19,11 +14,17 @@ use typeql::{
     },
 };
 
+use answer::variable::Variable;
+use bytes::byte_array::ByteArray;
+use encoding::{graph::thing::THING_VERTEX_MAX_LENGTH, value::value::Value};
+use error::typedb_error;
+use storage::snapshot::{iterator::SnapshotIteratorError, SnapshotGetError};
+
 use crate::{
     pattern::{
         constraint::Constraint,
-        variable_category::{VariableCategory, VariableOptionality},
         ParameterID,
+        variable_category::{VariableCategory, VariableOptionality},
     },
     pipeline::{function_signature::FunctionID, reduce::Reducer},
     RepresentationError,

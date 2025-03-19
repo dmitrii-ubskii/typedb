@@ -10,14 +10,15 @@ use std::{
     mem,
 };
 
-use answer::variable::Variable;
-use primitive::either::Either;
-use storage::snapshot::ReadableSnapshot;
-use structural_equality::StructuralEquality;
 use typeql::{
     common::{Span, Spanned},
     query::stage::{Operator as TypeQLOperator, Stage as TypeQLStage, Stage},
 };
+
+use answer::variable::Variable;
+use primitive::either::Either;
+use storage::snapshot::ReadableSnapshot;
+use structural_equality::StructuralEquality;
 
 use crate::{
     pipeline::{
@@ -26,9 +27,10 @@ use crate::{
         function::Function,
         function_signature::FunctionSignatureIndex,
         modifier::{Distinct, Limit, Offset, Require, Select, Sort},
-        reduce::Reduce,
-        ParameterRegistry, VariableRegistry,
+        ParameterRegistry,
+        reduce::Reduce, VariableRegistry,
     },
+    RepresentationError,
     translation::{
         fetch::translate_fetch,
         function::translate_typeql_function,
@@ -37,10 +39,9 @@ use crate::{
             translate_distinct, translate_limit, translate_offset, translate_require, translate_select, translate_sort,
         },
         reduce::translate_reduce,
-        writes::{translate_delete, translate_insert, translate_update},
         TranslationContext,
+        writes::{translate_delete, translate_insert, translate_update},
     },
-    RepresentationError,
 };
 
 #[derive(Debug, Clone)]

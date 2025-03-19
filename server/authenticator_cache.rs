@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 use moka::sync::Cache;
+
 use resource::constants::server::{AUTHENTICATOR_CACHE_TTI, AUTHENTICATOR_CACHE_TTL};
 
 #[derive(Clone, Debug)]

@@ -51,7 +51,7 @@ fn test_commit_increments_watermark() {
     let mut snapshot_0 = storage.clone().open_snapshot_write();
     let key_1 = StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1));
     snapshot_0.put_val(key_1.clone(), ByteArray::copy(&VALUE_1));
-    snapshot_0.commit().unwrap();
+    snapshot_0.commit(StorageCounters::DISABLED).unwrap();
 
     assert_eq!(wm_initial.number() + 1, storage.snapshot_watermark().number());
 }
@@ -66,7 +66,7 @@ fn test_reading_snapshots() {
 
     let mut snapshot_write_0 = storage.clone().open_snapshot_write();
     snapshot_write_0.put_val(StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1)), ByteArray::copy(&VALUE_0));
-    snapshot_write_0.commit().unwrap();
+    snapshot_write_0.commit(StorageCounters::DISABLED).unwrap();
 
     let watermark_0 = storage.snapshot_watermark();
 
@@ -79,7 +79,7 @@ fn test_reading_snapshots() {
     assert_eq!(*snapshot_read_0.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
     assert_eq!(*snapshot_read_01.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
 
-    let result_write_1 = snapshot_write_1.commit();
+    let result_write_1 = snapshot_write_1.commit(StorageCounters::DISABLED);
     assert!(result_write_1.is_ok());
 
     let snapshot_read_1 = storage.clone().open_snapshot_read();
@@ -108,7 +108,7 @@ fn test_conflicting_update_fails() {
 
     let mut snapshot_write_0 = storage.clone().open_snapshot_write();
     snapshot_write_0.put_val(key_1.clone().into_owned_array(), ByteArray::copy(&VALUE_0));
-    snapshot_write_0.commit().unwrap();
+    snapshot_write_0.commit(StorageCounters::DISABLED).unwrap();
 
     let watermark_after_initial_write = storage.snapshot_watermark();
 
@@ -118,9 +118,9 @@ fn test_conflicting_update_fails() {
         snapshot_write_11.delete(key_1.clone().into_owned_array());
         snapshot_write_21.get_required(key_1.clone(), StorageCounters::DISABLED).unwrap();
         snapshot_write_21.put_val(key_2.clone().into_owned_array(), ByteArray::copy(&VALUE_2));
-        let result_write_11 = snapshot_write_11.commit();
+        let result_write_11 = snapshot_write_11.commit(StorageCounters::DISABLED);
         assert!(result_write_11.is_ok());
-        let result_write_21 = snapshot_write_21.commit();
+        let result_write_21 = snapshot_write_21.commit(StorageCounters::DISABLED);
         assert!(result_write_21.is_err());
     }
 
@@ -129,7 +129,7 @@ fn test_conflicting_update_fails() {
         let mut snapshot_write_at_0 = storage.open_snapshot_write_at(watermark_after_initial_write);
         snapshot_write_at_0.get_required(key_1.clone(), StorageCounters::DISABLED).unwrap();
         snapshot_write_at_0.put_val(key_2.clone().into_owned_array(), ByteArray::copy(&VALUE_2));
-        let result_write_at_0 = snapshot_write_at_0.commit();
+        let result_write_at_0 = snapshot_write_at_0.commit(StorageCounters::DISABLED);
         assert!(result_write_at_0.is_err());
     }
 }
@@ -145,7 +145,7 @@ fn test_open_snapshot_write_at() {
 
     let mut snapshot_write_0 = storage.clone().open_snapshot_write();
     snapshot_write_0.put_val(StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1)), ByteArray::copy(&VALUE_0));
-    snapshot_write_0.commit().unwrap();
+    snapshot_write_0.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot_read_0 = storage.clone().open_snapshot_read();
     assert_eq!(*snapshot_read_0.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
@@ -153,7 +153,7 @@ fn test_open_snapshot_write_at() {
 
     let mut snapshot_write_1 = storage.clone().open_snapshot_write_at(watermark_init);
     snapshot_write_1.put_val(StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1)), ByteArray::copy(&VALUE_1));
-    snapshot_write_1.commit().unwrap();
+    snapshot_write_1.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot_read_1 = storage.open_snapshot_read();
     assert_eq!(*snapshot_read_1.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0); // FIXME: value overwrite currently unsupported

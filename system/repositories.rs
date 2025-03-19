@@ -9,6 +9,9 @@ pub const SCHEMA: &str = include_str!("schema.tql");
 pub mod user_repository {
     use std::{collections::HashMap, sync::Arc};
 
+    use typeql::{common::identifier::is_valid_identifier, parse_query};
+    use uuid::Uuid;
+
     use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager, type_::type_manager::TypeManager};
     use database::transaction::TransactionRead;
@@ -17,8 +20,6 @@ pub mod user_repository {
     use query::query_manager::QueryManager;
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
     use thing_manager::ThingManager;
-    use typeql::{common::identifier::is_valid_identifier, parse_query};
-    use uuid::Uuid;
 
     use crate::{
         concepts::{Credential, PasswordHash, User},

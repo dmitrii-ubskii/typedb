@@ -4,6 +4,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use typeql::{
+    common::{error::TypeQLError, Span, Spanned},
+    Definable,
+    query::schema::Redefine,
+    schema::definable::{
+        function::Function,
+        Struct,
+        Type, type_::{Capability, capability::Relates as TypeQLRelates, CapabilityBase},
+    },
+    token::Keyword,
+};
+
 use answer::Type as TypeEnum;
 use concept::{
     error::{ConceptReadError, ConceptWriteError},
@@ -11,11 +23,11 @@ use concept::{
     type_::{
         annotation::{Annotation, AnnotationError},
         attribute_type::AttributeType,
+        KindAPI,
+        Ordering,
         owns::Owns,
         plays::Plays,
-        relates::Relates,
-        type_manager::TypeManager,
-        KindAPI, Ordering, TypeAPI,
+        relates::Relates, type_manager::TypeManager, TypeAPI,
     },
 };
 use encoding::{
@@ -24,30 +36,19 @@ use encoding::{
 };
 use error::typedb_error;
 use function::{function::SchemaFunction, function_manager::FunctionManager, FunctionError};
-use ir::{translation::tokens::translate_annotation, LiteralParseError};
+use ir::{LiteralParseError, translation::tokens::translate_annotation};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
-use typeql::{
-    common::{error::TypeQLError, Span, Spanned},
-    query::schema::Redefine,
-    schema::definable::{
-        function::Function,
-        type_::{capability::Relates as TypeQLRelates, Capability, CapabilityBase},
-        Struct, Type,
-    },
-    token::Keyword,
-    Definable,
-};
 
 use crate::{
     definable_resolution::{
         filter_variants, get_struct_field_value_type_optionality, resolve_attribute_type, resolve_relates,
         resolve_role_type, resolve_struct_definition_key, resolve_typeql_type, resolve_value_type,
-        type_ref_to_label_and_ordering, type_to_object_type, SymbolResolutionError,
+        SymbolResolutionError, type_ref_to_label_and_ordering, type_to_object_type,
     },
     definable_status::{
-        get_capability_annotation_status, get_owns_status, get_plays_status, get_relates_status,
-        get_struct_field_status, get_sub_status, get_type_annotation_status, get_value_type_status, DefinableStatus,
-        DefinableStatusMode,
+        DefinableStatus, DefinableStatusMode, get_capability_annotation_status, get_owns_status,
+        get_plays_status, get_relates_status, get_struct_field_status, get_sub_status, get_type_annotation_status,
+        get_value_type_status,
     },
 };
 
@@ -297,9 +298,9 @@ fn redefine_type_annotations(
 }
 
 fn redefine_alias(
-    snapshot: &mut impl WritableSnapshot,
-    type_manager: &TypeManager,
-    anything_redefined: &mut bool,
+    _snapshot: &mut impl WritableSnapshot,
+    _type_manager: &TypeManager,
+    _anything_redefined: &mut bool,
     type_declaration: &Type,
 ) -> Result<(), RedefineError> {
     for capability in &type_declaration.capabilities {
@@ -313,7 +314,7 @@ fn redefine_alias(
     Ok(())
 }
 
-fn redefine_alias_annotations(typeql_capability: &Capability) -> Result<(), RedefineError> {
+fn redefine_alias_annotations(_typeql_capability: &Capability) -> Result<(), RedefineError> {
     Err(RedefineError::Unimplemented { description: "Alias redefinition is not yet implemented.".to_string() })
     // verify_empty_annotations_for_capability!(typeql_capability, AnnotationError::UnsupportedAnnotationForAlias)
 }

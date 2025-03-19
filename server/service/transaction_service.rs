@@ -14,6 +14,29 @@ use std::{
     time::Instant,
 };
 
+use itertools::{Either, Itertools};
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{channel, Receiver, Sender},
+        watch,
+    },
+    task::{JoinHandle, spawn_blocking},
+};
+use tokio_stream::StreamExt;
+use tonic::{Status, Streaming};
+use tracing::{event, Level};
+use typedb_protocol::{
+    query::Type::{Read, Write},
+    transaction::{Server as ProtocolServer, stream_signal::Req},
+};
+use typeql::{
+    parse_query,
+    query::{SchemaQuery, stage::Stage},
+    Query,
+};
+use uuid::Uuid;
+
 use compiler::VariablePosition;
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use database::{
@@ -23,53 +46,31 @@ use database::{
     },
 };
 use diagnostics::{
-    diagnostics_manager::{run_with_diagnostics_async, DiagnosticsManager},
+    diagnostics_manager::{DiagnosticsManager, run_with_diagnostics_async},
     metrics::{ActionKind, LoadKind},
 };
 use error::typedb_error;
 use executor::{
     batch::Batch,
     document::ConceptDocument,
-    pipeline::{
+    ExecutionInterrupt,
+    InterruptType, pipeline::{
         pipeline::Pipeline,
-        stage::{ExecutionContext, ReadPipelineStage, StageIterator},
         PipelineExecutionError,
+        stage::{ExecutionContext, ReadPipelineStage, StageIterator},
     },
-    ExecutionInterrupt, InterruptType,
 };
 use function::function_manager::FunctionManager;
 use ir::pipeline::ParameterRegistry;
-use itertools::{Either, Itertools};
 use lending_iterator::LendingIterator;
 use options::TransactionOptions;
 use query::{error::QueryError, query_manager::QueryManager};
 use resource::constants::server::{DEFAULT_PREFETCH_SIZE, DEFAULT_TRANSACTION_TIMEOUT_MILLIS};
+use resource::profile::StorageCounters;
 use storage::{
     durability_client::WALClient,
-    snapshot::{ReadSnapshot, ReadableSnapshot, WritableSnapshot},
+    snapshot::{ReadableSnapshot, ReadSnapshot, WritableSnapshot},
 };
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{channel, Receiver, Sender},
-        watch,
-    },
-    task::{spawn_blocking, JoinHandle},
-};
-use tokio_stream::StreamExt;
-use tonic::{Status, Streaming};
-use tracing::{event, Level};
-use typedb_protocol::{
-    query::Type::{Read, Write},
-    transaction::{stream_signal::Req, Server as ProtocolServer},
-};
-use typeql::{
-    parse_query,
-    query::{stage::Stage, SchemaQuery},
-    Query,
-};
-use uuid::Uuid;
-use resource::profile::StorageCounters;
 
 use crate::service::{
     document::encode_document,

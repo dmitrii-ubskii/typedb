@@ -6,41 +6,42 @@
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use answer::{variable_value::VariableValue, Thing};
+use cucumber::gherkin::Step;
+use itertools::Itertools;
+use macro_rules_attribute::apply;
+
+use answer::{Thing, variable_value::VariableValue};
 use compiler::VariablePosition;
 use concept::{
     thing::{object::ObjectAPI, ThingAPI},
     type_::TypeAPI,
 };
-use cucumber::gherkin::Step;
+use concept::error::ConceptReadError;
+use concept::thing::attribute::Attribute;
 use encoding::{
-    value::{label::Label, value_type::ValueType, ValueEncodable},
     AsBytes,
+    value::{label::Label, value_type::ValueType, ValueEncodable},
 };
 use executor::{
     batch::Batch,
-    pipeline::stage::{ExecutionContext, StageIterator},
     ExecutionInterrupt,
+    pipeline::stage::{ExecutionContext, StageIterator},
 };
-use itertools::Itertools;
 use lending_iterator::LendingIterator;
-use macro_rules_attribute::apply;
-use concept::error::ConceptReadError;
-use concept::thing::attribute::Attribute;
 use query::error::QueryError;
+use resource::profile::StorageCounters;
 use test_utils::assert_matches;
 
 use crate::{
-    generic_step, params,
-    query_answer_context::{with_rows_answer, QueryAnswer},
-    transaction_context::{
-        with_read_tx, with_schema_tx, with_write_tx_deconstructed,
-        ActiveTransaction::{Read, Schema},
-    },
-    util::{iter_table_map, list_contains_json, parse_json},
     BehaviourTestExecutionError, Context,
+    generic_step,
+    params,
+    query_answer_context::{QueryAnswer, with_rows_answer},
+    transaction_context::{
+        ActiveTransaction::{Read, Schema}, with_read_tx, with_schema_tx,
+        with_write_tx_deconstructed,
+    }, util::{iter_table_map, list_contains_json, parse_json},
 };
-use resource::profile::StorageCounters;
 
 fn row_batch_result_to_answer(
     batch: Batch,
@@ -385,7 +386,7 @@ fn does_key_match(var: &str, id: &str, var_value: &VariableValue<'_>, context: &
             .unwrap_or_else(|| panic!("no attributes of type {key_label} found for {var}: {thing}"))
             .unwrap();
         assert_eq!(count, 1, "expected exactly one {key_label} for {var}, found {count}");
-        let actual = attr.get_value(&*tx.snapshot, &tx.thing_manager);
+        let actual = attr.get_value(&*tx.snapshot, &tx.thing_manager, StorageCounters::DISABLED);
         if actual.unwrap() != expected {
             return false;
         }
@@ -411,7 +412,7 @@ fn does_attribute_match(id: &str, var_value: &VariableValue<'_>, context: &Conte
                 .unwrap()
                 .unwrap_or_else(|| panic!("expected the key type {label} to have a value type")),
         );
-        let actual = attr.get_value(&*tx.snapshot, &tx.thing_manager).unwrap();
+        let actual = attr.get_value(&*tx.snapshot, &tx.thing_manager, StorageCounters::DISABLED).unwrap();
         actual == expected
     })
 }

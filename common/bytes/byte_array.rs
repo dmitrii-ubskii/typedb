@@ -12,10 +12,11 @@ use std::{
     ops::{Deref, DerefMut, Range},
 };
 
-use primitive::prefix::Prefix;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::util::{increment, BytesError, HexBytesFormatter};
+use primitive::prefix::Prefix;
+
+use crate::util::{BytesError, HexBytesFormatter, increment};
 
 #[derive(Clone)]
 pub enum ByteArray<const INLINE_BYTES: usize> {

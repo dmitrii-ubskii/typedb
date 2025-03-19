@@ -479,6 +479,7 @@ fn attribute_cleanup_on_concurrent_detach() {
                         &thing_manager,
                         name_type,
                         Value::String(Cow::Borrowed(name_bob_value)),
+                        StorageCounters::DISABLED
                     )
                     .unwrap()
             })
@@ -508,6 +509,7 @@ fn attribute_cleanup_on_concurrent_detach() {
                         &thing_manager,
                         name_type,
                         Value::String(Cow::Borrowed(name_alice_value)),
+                        StorageCounters::DISABLED
                     )
                     .unwrap()
             })
@@ -1448,7 +1450,7 @@ fn read_attribute_struct_by_field() {
                 .resolve_struct_field(&snapshot, &["f_nested", "nested_string"], struct_def.clone())
                 .unwrap();
             let attr_by_field_iterator = thing_manager
-                .get_attributes_by_struct_field(&snapshot, attr_type, field_path, Value::String(Cow::Borrowed(val)))
+                .get_attributes_by_struct_field(&snapshot, attr_type, field_path, Value::String(Cow::Borrowed(val)), StorageCounters::DISABLED)
                 .unwrap();
             let mut attr_by_field: Vec<Attribute> = Vec::new();
             for res in attr_by_field_iterator {

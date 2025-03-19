@@ -80,7 +80,7 @@ pub(crate) fn validate_has_insertable(
     type_manager: &TypeManager,
     has: &Has<Variable>,
     input_annotations_variables: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
-    input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
+    _input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
     left_right: &LeftRightAnnotations,
 ) -> Result<(), TypeInferenceError> {
     // TODO: Improve. This is extremely coarse and likely to rule out many valid combinations
@@ -137,7 +137,7 @@ pub(crate) fn validate_links_insertable(
     type_manager: &TypeManager,
     links: &Links<Variable>,
     input_annotations_variables: &BTreeMap<Variable, Arc<BTreeSet<answer::Type>>>,
-    input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
+    _input_annotations_constraints: &HashMap<Constraint<Variable>, ConstraintTypeAnnotations>, // Future use
     left_right_filtered: &LinksAnnotations,
 ) -> Result<(), TypeInferenceError> {
     // TODO: Should we check uniqueness of inferred role-types here instead of at compilation?

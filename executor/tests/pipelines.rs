@@ -56,7 +56,7 @@ fn setup_common() -> Context {
     query_manager
         .execute_schema(&mut snapshot, &type_manager, &thing_manager, &function_manager, define, schema)
         .unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     // reload to obtain latest vertex generators and statistics entries
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
@@ -87,12 +87,12 @@ fn test_insert() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = context.storage.clone().open_snapshot_read();
     let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
     let attr_age_10 =
-        context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
+        context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10), StorageCounters::DISABLED).unwrap().unwrap();
     assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
     snapshot.close_resources()
 }
@@ -125,7 +125,7 @@ fn test_insert_insert() {
         pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
     while iterator.next().is_some() {}
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = context.storage.clone().open_snapshot_read();
     let membership_type = context.type_manager.get_relation_type(&snapshot, &MEMBERSHIP_LABEL).unwrap().unwrap();
@@ -160,7 +160,7 @@ fn test_match() {
     let _ = iterator.count();
     // must consume iterator to ensure operation completed
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = Arc::new(context.storage.open_snapshot_read());
     let query = "match $p isa person;";
@@ -227,7 +227,7 @@ fn test_match_match() {
     let _ = iterator.count();
     // must consume iterator to ensure operation completed
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = Arc::new(context.storage.open_snapshot_read());
     let query = "
@@ -293,13 +293,13 @@ fn test_match_delete_has() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     {
         let snapshot = context.storage.clone().open_snapshot_read();
         let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
         let attr_age_10 =
-            context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
+            context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10), StorageCounters::DISABLED).unwrap().unwrap();
         assert_eq!(1, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
         snapshot.close_resources()
     }
@@ -328,13 +328,13 @@ fn test_match_delete_has() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     {
         let snapshot = context.storage.clone().open_snapshot_read();
         let age_type = context.type_manager.get_attribute_type(&snapshot, &AGE_LABEL).unwrap().unwrap();
         let attr_age_10 =
-            context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10)).unwrap().unwrap();
+            context.thing_manager.get_attribute_with_value(&snapshot, age_type, Value::Integer(10),  StorageCounters::DISABLED).unwrap().unwrap();
         assert_eq!(0, attr_age_10.get_owners(&snapshot, &context.thing_manager, StorageCounters::DISABLED).count());
         snapshot.close_resources()
     }
@@ -367,7 +367,7 @@ fn test_insert_match_insert() {
     let _ = iterator.count();
     // must consume iterator to ensure operation completed
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = context.storage.clone().open_snapshot_write();
     let query_str = r#"
@@ -396,7 +396,7 @@ fn test_insert_match_insert() {
         pipeline.into_rows_iterator(ExecutionInterrupt::new_uninterruptible()).unwrap();
     while iterator.next().is_some() {}
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = context.storage.clone().open_snapshot_read();
     let membership_type = context.type_manager.get_relation_type(&snapshot, &MEMBERSHIP_LABEL).unwrap().unwrap();
@@ -427,7 +427,7 @@ fn test_match_sort() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     let snapshot = Arc::new(context.storage.open_snapshot_read());
     let query = "match $age isa age; sort $age desc;";
@@ -456,7 +456,7 @@ fn test_match_sort() {
             res.get(pos)
                 .as_thing()
                 .as_attribute()
-                .get_value(&*snapshot, &context.thing_manager)
+                .get_value(&*snapshot, &context.thing_manager, StorageCounters::DISABLED)
                 .clone()
                 .unwrap()
                 .unwrap_integer()
@@ -490,7 +490,7 @@ fn test_select() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     {
         let snapshot = Arc::new(context.storage.clone().open_snapshot_read());
@@ -557,7 +557,7 @@ fn test_require() {
     assert_matches!(iterator.next(), Some(Ok(_)));
     assert_matches!(iterator.next(), None);
     let snapshot = Arc::into_inner(snapshot).unwrap();
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 
     {
         let snapshot = Arc::new(context.storage.clone().open_snapshot_read());

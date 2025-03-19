@@ -5,15 +5,16 @@
  */
 use std::sync::Arc;
 
-use diagnostics::{
-    diagnostics_manager::{run_with_diagnostics, DiagnosticsManager},
-    metrics::ActionKind,
-};
 use futures::future::BoxFuture;
-use resource::constants::server::{AUTHENTICATOR_PASSWORD_FIELD, AUTHENTICATOR_USERNAME_FIELD};
-use system::concepts::Credential;
 use tonic::{body::BoxBody, metadata::MetadataMap, Status};
 use tower::{Layer, Service};
+
+use diagnostics::{
+    diagnostics_manager::{DiagnosticsManager, run_with_diagnostics},
+    metrics::ActionKind,
+};
+use resource::constants::server::{AUTHENTICATOR_PASSWORD_FIELD, AUTHENTICATOR_USERNAME_FIELD};
+use system::concepts::Credential;
 use user::user_manager::UserManager;
 
 use crate::authenticator_cache::AuthenticatorCache;

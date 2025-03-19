@@ -4,14 +4,15 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use answer::variable::Variable;
-use encoding::value::value::Value;
-use error::UnimplementedFeature;
 use typeql::{
     common::{Span, Spanned},
     expression::{BuiltinFunctionName, FunctionName},
     token::{ArithmeticOperator, Function},
 };
+
+use answer::variable::Variable;
+use encoding::value::value::Value;
+use error::UnimplementedFeature;
 
 use crate::{
     pattern::{
@@ -23,12 +24,12 @@ use crate::{
         ParameterID, Vertex,
     },
     pipeline::function_signature::FunctionSignatureIndex,
+    RepresentationError,
     translation::{
         constraints::{register_typeql_var, split_out_inline_expressions},
         literal::translate_literal,
         tokens::checked_identifier,
     },
-    RepresentationError,
 };
 
 pub(super) fn add_typeql_expression(
@@ -240,9 +241,10 @@ fn to_builtin_id(
 
 #[cfg(test)]
 pub mod tests {
+    use itertools::Itertools;
+
     use answer::variable::Variable;
     use encoding::value::value::Value;
-    use itertools::Itertools;
 
     use crate::{
         pattern::{
@@ -250,8 +252,8 @@ pub mod tests {
             Vertex,
         },
         pipeline::{block::Block, function_signature::HashMapFunctionSignatureIndex, ParameterRegistry},
-        translation::{match_::translate_match, TranslationContext},
         RepresentationError,
+        translation::{match_::translate_match, TranslationContext},
     };
 
     fn parse_query_get_match(

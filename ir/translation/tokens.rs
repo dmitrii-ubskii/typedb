@@ -4,20 +4,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use concept::type_::annotation::{
-    Annotation, AnnotationAbstract, AnnotationCardinality, AnnotationCascade, AnnotationCategory, AnnotationDistinct,
-    AnnotationIndependent, AnnotationKey, AnnotationRange, AnnotationRegex, AnnotationUnique, AnnotationValues,
-};
-use encoding::{graph::type_::Kind, value::value_type::ValueType};
 use typeql::{
     annotation::CardinalityRange,
     common::{error::TypeQLError, Spanned},
     token,
 };
 
+use concept::type_::annotation::{
+    Annotation, AnnotationAbstract, AnnotationCardinality, AnnotationCascade, AnnotationCategory, AnnotationDistinct,
+    AnnotationIndependent, AnnotationKey, AnnotationRange, AnnotationRegex, AnnotationUnique, AnnotationValues,
+};
+use encoding::{graph::type_::Kind, value::value_type::ValueType};
+
 use crate::{
-    translation::literal::{translate_literal, FromTypeQLLiteral},
-    LiteralParseError, RepresentationError,
+    LiteralParseError,
+    RepresentationError, translation::literal::{FromTypeQLLiteral, translate_literal},
 };
 
 pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotation, LiteralParseError> {

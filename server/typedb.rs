@@ -8,24 +8,22 @@ use std::{
     fs, io,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
+
+use rand::seq::SliceRandom;
+use tokio::net::lookup_host;
+use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 
 use concurrency::IntervalRunner;
 use database::{database_manager::DatabaseManager, DatabaseOpenError};
-use diagnostics::{diagnostics_manager::DiagnosticsManager, Diagnostics};
+use diagnostics::{Diagnostics, diagnostics_manager::DiagnosticsManager};
 use error::typedb_error;
-use rand::seq::SliceRandom;
 use resource::constants::server::{
     DATABASE_METRICS_UPDATE_INTERVAL, GRPC_CONNECTION_KEEPALIVE, SERVER_ID_ALPHABET, SERVER_ID_FILE_NAME,
     SERVER_ID_LENGTH,
 };
 use system::initialise_system_database;
-use tokio::net::lookup_host;
-use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 use user::{initialise_default_user, user_manager::UserManager};
 
 use crate::{

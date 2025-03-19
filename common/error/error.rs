@@ -7,6 +7,7 @@
 use std::{error::Error, fmt};
 
 use ::typeql::common::Spannable;
+
 use resource::constants::common::{ERROR_QUERY_POINTER_LINES_AFTER, ERROR_QUERY_POINTER_LINES_BEFORE};
 
 mod typeql;

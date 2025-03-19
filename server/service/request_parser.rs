@@ -4,9 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use system::concepts::{Credential, PasswordHash, User};
 use tonic::Request;
-use typedb_protocol::server_manager::all::Req;
+
+use system::concepts::{Credential, User};
 use user::errors::{UserCreateError, UserUpdateError};
 
 pub fn users_create_req(

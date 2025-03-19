@@ -11,28 +11,28 @@ use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, RwLock},
     thread,
-    thread::{sleep, JoinHandle},
+    thread::{JoinHandle, sleep},
     time::{Duration, Instant},
 };
 
 use answer::variable_value::VariableValue;
 use concept::{
     thing::thing_manager::ThingManager,
-    type_::{type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI},
+    type_::{Ordering, OwnerAPI, PlayerAPI, type_manager::TypeManager},
 };
 use encoding::{
     graph::definition::definition_key_generator::DefinitionKeyGenerator,
     value::{label::Label, value_type::ValueType},
 };
-use executor::{pipeline::stage::StageIterator, ExecutionInterrupt};
+use executor::{ExecutionInterrupt, pipeline::stage::StageIterator};
 use function::function_manager::FunctionManager;
 use lending_iterator::LendingIterator;
 use query::{error::QueryError, query_cache::QueryCache, query_manager::QueryManager};
 use resource::profile::StorageCounters;
 use storage::{
     durability_client::WALClient,
-    snapshot::{CommittableSnapshot, WritableSnapshot},
     MVCCStorage,
+    snapshot::{CommittableSnapshot, WritableSnapshot},
 };
 use test_utils::init_logging;
 use test_utils_concept::{load_managers, setup_concept_storage};
@@ -85,7 +85,7 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
     person_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_member_type).unwrap();
     group_type.set_plays(&mut snapshot, &type_manager, &thing_manager, membership_group_type).unwrap();
 
-    snapshot.commit().unwrap();
+    snapshot.commit(StorageCounters::DISABLED).unwrap();
 }
 
 fn execute_insert<Snapshot: WritableSnapshot + 'static>(
@@ -167,7 +167,7 @@ fn multi_threaded_inserts() {
                     &format!("insert $p isa person, has age {age};"),
                 )
                 .unwrap();
-                snapshot.commit().unwrap();
+                snapshot.commit(StorageCounters::DISABLED).unwrap();
             }
         })
     });

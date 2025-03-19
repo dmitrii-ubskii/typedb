@@ -4,7 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::error::Error;
 
 use concept::error::ConceptReadError;
 use encoding::value::value_type::ValueTypeCategory;

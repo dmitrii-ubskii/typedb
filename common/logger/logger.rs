@@ -9,9 +9,9 @@
 use std::fs::File;
 use std::io::stdout;
 
-use tracing::{self, dispatcher::DefaultGuard, metadata::LevelFilter, Level};
+use tracing::{self, dispatcher::DefaultGuard, Level, metadata::LevelFilter};
 pub use tracing::{debug, error, info, trace};
-use tracing_subscriber::{fmt::SubscriberBuilder, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::SubscriberBuilder};
 
 pub mod result;
 

@@ -7,10 +7,12 @@
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex,
     },
 };
+
+use moka::sync::Cache;
+use tracing::{event, Level};
 
 use compiler::executable::pipeline::ExecutablePipeline;
 use concept::thing::statistics::Statistics;
@@ -18,15 +20,12 @@ use ir::{
     pipeline::{fetch::FetchObject, function::Function},
     translation::pipeline::TranslatedStage,
 };
-use moka::sync::Cache;
 use resource::{
     constants::database::{QUERY_PLAN_CACHE_FLUSH_ANY_STATISTIC_CHANGE_FRACTION, QUERY_PLAN_CACHE_SIZE},
     perf_counters::QUERY_CACHE_FLUSH,
 };
 use storage::sequence_number::SequenceNumber;
 use structural_equality::StructuralEquality;
-use tracing::{event, Level};
-use typeql::query::stage::reduce::Stat;
 
 #[derive(Debug)]
 pub struct QueryCache {

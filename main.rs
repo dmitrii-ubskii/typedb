@@ -10,6 +10,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use clap::Parser;
+
 use logger::initialise_logging_global;
 use resource::constants::server::{ASCII_LOGO, DISTRIBUTION, SENTRY_REPORTING_URI, VERSION};
 use sentry::ClientInitGuard as SentryGuard;

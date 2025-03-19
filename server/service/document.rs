@@ -6,12 +6,13 @@
 
 use std::collections::HashMap;
 
+use itertools::Itertools;
+
 use answer::{Concept, Thing, Type};
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use encoding::graph::type_::Kind;
 use executor::document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode};
 use ir::pipeline::ParameterRegistry;
-use itertools::Itertools;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 

@@ -4,18 +4,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::sync::Arc;
+
+use typeql;
+
+use database::{Database, database_manager::DatabaseManager};
+use resource::internal_database_prefix;
+use storage::durability_client::WALClient;
+
+use crate::{repositories::SCHEMA, util::transaction_util::TransactionUtil};
+
 pub mod concepts;
 pub mod repositories;
 pub mod util;
-
-use std::sync::Arc;
-
-use database::{database_manager::DatabaseManager, Database};
-use resource::internal_database_prefix;
-use storage::durability_client::WALClient;
-use typeql;
-
-use crate::{repositories::SCHEMA, util::transaction_util::TransactionUtil};
 
 const SYSTEM_DB: &'static str = concat!(internal_database_prefix!(), "system");
 

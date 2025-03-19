@@ -4,22 +4,23 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use answer::variable::Variable;
-use bytes::byte_array::ByteArray;
-use encoding::{graph::thing::THING_VERTEX_MAX_LENGTH, value::label::Label};
-use error::UnimplementedFeature;
 use itertools::Itertools;
 use typeql::{
     common::Spanned,
     expression::{FunctionCall, FunctionName},
+    ScopedLabel,
     statement::{
-        comparison::ComparisonStatement, thing::isa::IsaInstanceConstraint, type_::ValueType as TypeQLValueType,
-        Assignment, AssignmentPattern, InIterable, Is,
+        Assignment, AssignmentPattern, comparison::ComparisonStatement,
+        InIterable, Is, thing::isa::IsaInstanceConstraint, type_::ValueType as TypeQLValueType,
     },
     token::Kind,
-    type_::{BuiltinValueType, NamedType},
-    ScopedLabel, TypeRef, TypeRefAny,
+    type_::{BuiltinValueType, NamedType}, TypeRef, TypeRefAny,
 };
+
+use answer::variable::Variable;
+use bytes::byte_array::ByteArray;
+use encoding::{graph::thing::THING_VERTEX_MAX_LENGTH, value::label::Label};
+use error::UnimplementedFeature;
 
 use crate::{
     pattern::{
@@ -28,12 +29,12 @@ use crate::{
         ValueType, Vertex,
     },
     pipeline::function_signature::FunctionSignatureIndex,
+    RepresentationError,
     translation::{
         expression::{add_typeql_expression, add_user_defined_function_call, build_expression},
         literal::translate_literal,
         tokens::{checked_identifier, translate_value_type},
     },
-    RepresentationError,
 };
 
 pub(super) fn add_statement(

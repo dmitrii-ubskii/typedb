@@ -11,10 +11,11 @@ use std::{
     mem,
 };
 
+use typeql::common::Span;
+
 use answer::variable::Variable;
 use error::typedb_error;
 use structural_equality::StructuralEquality;
-use typeql::common::Span;
 
 use crate::pattern::{IrID, ParameterID};
 
