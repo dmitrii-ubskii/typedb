@@ -138,28 +138,28 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
     let membership_1 = thing_manager.create_relation(&mut snapshot, membership_type).unwrap();
     let membership_2 = thing_manager.create_relation(&mut snapshot, membership_type).unwrap();
 
-    let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10)).unwrap();
-    let age_2 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11)).unwrap();
+    let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10), ).unwrap();
+    let age_2 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11), ).unwrap();
 
     let name_1 = thing_manager
-        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Abby".to_string())))
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Abby".to_string())), )
         .unwrap();
     let name_2 = thing_manager
-        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Bobby".to_string())))
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Bobby".to_string())), )
         .unwrap();
 
-    membership_1.add_player(&mut snapshot, &thing_manager, membership_member_type, person_1.into_object()).unwrap();
-    membership_1.add_player(&mut snapshot, &thing_manager, membership_group_type, group_1.into_object()).unwrap();
-    membership_2.add_player(&mut snapshot, &thing_manager, membership_member_type, person_3.into_object()).unwrap();
-    membership_2.add_player(&mut snapshot, &thing_manager, membership_group_type, group_2.into_object()).unwrap();
+    membership_1.add_player(&mut snapshot, &thing_manager, membership_member_type, person_1.into_object(), ).unwrap();
+    membership_1.add_player(&mut snapshot, &thing_manager, membership_group_type, group_1.into_object(), ).unwrap();
+    membership_2.add_player(&mut snapshot, &thing_manager, membership_member_type, person_3.into_object(), ).unwrap();
+    membership_2.add_player(&mut snapshot, &thing_manager, membership_group_type, group_2.into_object(), ).unwrap();
 
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_2).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1, ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_2, ).unwrap();
 
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_1).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_1, ).unwrap();
 
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_1).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_2).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_1, ).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_2, ).unwrap();
 
     let finalise_result = thing_manager.finalise(&mut snapshot);
     assert!(finalise_result.is_ok(), "{:?}", finalise_result.unwrap_err());

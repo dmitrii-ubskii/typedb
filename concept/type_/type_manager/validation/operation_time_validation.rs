@@ -88,6 +88,7 @@ macro_rules! type_or_subtype_without_declared_capability_instances_existence_val
             thing_manager: &ThingManager,
             object_type: $object_type,
             interface_type: $interface_type,
+            storage_counters: StorageCounters,
         ) -> Result<Option<$object_type>, Box<ConceptReadError>> {
             let mut type_that_has_instances = None;
 
@@ -100,6 +101,7 @@ macro_rules! type_or_subtype_without_declared_capability_instances_existence_val
                     thing_manager,
                     current_object_type.clone(),
                     interface_type.clone(),
+                    storage_counters.clone(),
                 )? {
                     type_that_has_instances = Some(current_object_type.clone());
                     break; // We may want to return multiple (HashSet instead of Option)
@@ -135,6 +137,7 @@ macro_rules! cannot_unset_capability_with_existing_instances_validation {
             thing_manager: &ThingManager,
             object_type: $object_type,
             interface_type: $interface_type,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             if let Some(supertype) = object_type
                 .get_supertype(snapshot, type_manager)
@@ -154,6 +157,7 @@ macro_rules! cannot_unset_capability_with_existing_instances_validation {
                 thing_manager,
                 object_type.clone(),
                 interface_type.clone(),
+                storage_counters,
             )
             .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
@@ -184,6 +188,7 @@ macro_rules! cannot_change_supertype_as_capability_with_existing_instances_is_lo
             thing_manager: &ThingManager,
             subtype: $object_type,
             supertype: Option<$object_type>,
+            storage_counters: StorageCounters
         ) -> Result<(), Box<SchemaValidationError>> {
             let lost_capabilities = $get_lost_capabilities_func(snapshot, subtype.clone(), supertype.clone())?;
 
@@ -195,6 +200,7 @@ macro_rules! cannot_change_supertype_as_capability_with_existing_instances_is_lo
                     thing_manager,
                     subtype.clone(),
                     interface_type.clone(),
+                    storage_counters.clone(),
                 )
                 .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
@@ -223,6 +229,7 @@ macro_rules! new_acquired_capability_instances_validation {
             thing_manager: &ThingManager,
             capability: $capability_type,
             default_constraints: HashSet<CapabilityConstraint<$capability_type>>,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let affected_object_types = TypeAPI::chain_types(
                 capability.object(),
@@ -253,6 +260,7 @@ macro_rules! new_acquired_capability_instances_validation {
                 &affected_interface_types,
                 &HashMap::new(), // all interface supertypes are read from storage
                 &get_operation_time_checked_constraints(default_constraints.into_iter()),
+                storage_counters,
             )
             .map_err(|typedb_source| {
                 Box::new(SchemaValidationError::CannotAcquireCapabilityAsExistingInstancesViolateItsConstraint {
@@ -271,6 +279,7 @@ macro_rules! new_annotation_constraints_compatible_with_capability_instances_val
             thing_manager: &ThingManager,
             capability: $capability_type,
             annotation: Annotation,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let affected_object_types = TypeAPI::chain_types(
                 capability.object(),
@@ -304,6 +313,7 @@ macro_rules! new_annotation_constraints_compatible_with_capability_instances_val
                 &affected_interface_types,
                 &HashMap::new(), // all interface supertypes are read from storage
                 &constraints,
+                storage_counters,
             )
             .map_err(|typedb_source| {
                 Box::new(
@@ -324,6 +334,7 @@ macro_rules! updated_constraints_compatible_with_capability_instances_on_object_
             thing_manager: &ThingManager,
             type_: $object_type,
             new_supertype: $object_type,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let affected_object_types = TypeAPI::chain_types(
                 type_.clone(),
@@ -394,6 +405,7 @@ macro_rules! updated_constraints_compatible_with_capability_instances_on_object_
                     &affected_interface_types,
                     &HashMap::new(), // all interface supertypes are read from storage
                     &constraints,
+                    storage_counters.clone(),
                 )
                 .map_err(|typedb_source| {
                     SchemaValidationError::CannotChangeSupertypeAsUpdatedCapabilityConstraintIsViolatedByExistingInstances {
@@ -413,6 +425,7 @@ macro_rules! affected_constraints_compatible_with_capability_instances_on_interf
             type_manager: &TypeManager,
             thing_manager: &ThingManager,
             interface_type: <$capability_type as Capability>::InterfaceType,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let unset_supertype = if let Some(type_) = interface_type
                 .get_supertype(snapshot, type_manager)
@@ -479,6 +492,7 @@ macro_rules! affected_constraints_compatible_with_capability_instances_on_interf
                     &affected_interface_types,
                     &updated_supertypes,
                     &affected_constraints,
+                    storage_counters.clone(),
                 )
                 .map_err(|typedb_source| {
                     SchemaValidationError::CannotUnsetInterfaceTypeSupertypeAsUpdatedCapabilityConstraintIsViolatedByExistingInstances {
@@ -500,6 +514,7 @@ macro_rules! affected_constraints_compatible_with_capability_instances_on_interf
             thing_manager: &ThingManager,
             interface_type: <$capability_type as Capability>::InterfaceType,
             interface_supertype: <$capability_type as Capability>::InterfaceType,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             if let Some(old_supertype) = interface_type
                 .get_supertype(snapshot, type_manager)
@@ -510,7 +525,7 @@ macro_rules! affected_constraints_compatible_with_capability_instances_on_interf
                 }
             }
 
-            $unset_validation_func(snapshot, type_manager, thing_manager, interface_type.clone())?;
+            $unset_validation_func(snapshot, type_manager, thing_manager, interface_type.clone(), storage_counters.clone())?;
 
             let mut objects_with_interface_supertypes_and_constraints: HashMap<
                 <$capability_type as Capability>::ObjectType,
@@ -570,6 +585,7 @@ macro_rules! affected_constraints_compatible_with_capability_instances_on_interf
                     &affected_interface_types,
                     &updated_supertypes,
                     &get_operation_time_checked_constraints(constraints.into_iter()),
+                    storage_counters.clone(),
                 )
                 .map_err(|typedb_source| {
                     SchemaValidationError::CannotChangeInterfaceTypeSupertypeAsUpdatedCapabilityConstraintIsViolatedByExistingInstances {
@@ -591,6 +607,7 @@ macro_rules! new_annotation_constraints_compatible_with_type_and_sub_instances_v
             thing_manager: &ThingManager,
             type_: $type_,
             annotation: Annotation,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let constraints =
                 get_operation_time_checked_constraints(annotation.to_type_constraints(type_.clone()).into_iter());
@@ -604,7 +621,7 @@ macro_rules! new_annotation_constraints_compatible_with_type_and_sub_instances_v
             )
             .collect();
 
-            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints).map_err(
+            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters).map_err(
                 |typedb_source| {
                     Box::new(SchemaValidationError::CannotSetAnnotationAsExistingInstancesViolateItsConstraint {
                         typedb_source,
@@ -623,6 +640,7 @@ macro_rules! updated_constraints_compatible_with_type_and_sub_instances_on_super
             thing_manager: &ThingManager,
             type_: $type_,
             new_supertype: $type_,
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let constraints = get_operation_time_checked_constraints(
                 new_supertype
@@ -653,7 +671,7 @@ macro_rules! updated_constraints_compatible_with_type_and_sub_instances_on_super
             )
             .collect();
 
-            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints).map_err(
+            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters).map_err(
                 |typedb_source| {
                     Box::new(
                         SchemaValidationError::CannotChangeSupertypeAsUpdatedConstraintIsViolatedByExistingInstances {
@@ -896,6 +914,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         subtype: AttributeType,
         supertype: Option<AttributeType>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         let subtype_declared_value_type = subtype
             .get_value_type_declared(snapshot, type_manager)
@@ -919,6 +938,7 @@ impl OperationTimeValidation {
                 thing_manager,
                 subtype,
                 subtype_transitive_value_type,
+                storage_counters.clone()
             ),
             (Some(_), None, None) => Ok(()),
             (Some(_), Some(_), None) => Ok(()),
@@ -945,6 +965,7 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         let value_type_with_source = attribute_type
             .get_value_type(snapshot, type_manager)
@@ -975,6 +996,7 @@ impl OperationTimeValidation {
                                 thing_manager,
                                 attribute_type,
                                 Some(value_type),
+                                storage_counters.clone()
                             ),
                         }
                     }
@@ -984,6 +1006,7 @@ impl OperationTimeValidation {
                         thing_manager,
                         attribute_type,
                         Some(value_type),
+                        storage_counters,
                     ),
                 }
             }
@@ -2126,6 +2149,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
         value_type: Option<ValueType>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         let mut affected_sources: HashSet<AttributeType> = attribute_type
             .get_supertypes_transitive(snapshot, type_manager)
@@ -2147,6 +2171,7 @@ impl OperationTimeValidation {
                         thing_manager,
                         type_,
                         value_type.clone(),
+                        storage_counters.clone()
                     )?;
                 }
             }
@@ -2161,6 +2186,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
         value_type: Option<ValueType>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         match value_type {
             Some(_) => {
@@ -2183,7 +2209,7 @@ impl OperationTimeValidation {
                     attribute_type,
                     None,
                 )?;
-                Self::validate_no_instances_to_lose_value_type(snapshot, type_manager, thing_manager, attribute_type)
+                Self::validate_no_instances_to_lose_value_type(snapshot, type_manager, thing_manager, attribute_type, storage_counters)
             }
             None => Ok(()),
         }
@@ -2257,6 +2283,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
         new_supertype: Option<AttributeType>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         let subtype_constraint_source = type_get_constraints_closest_source(
             snapshot,
@@ -2308,7 +2335,7 @@ impl OperationTimeValidation {
                                 Some(sub_subtype_constraint_source) => {
                                     if lost_source == sub_subtype_constraint_source {
                                         let type_has_instances =
-                                            Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_)
+                                            Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
                                                 .map_err(|source| {
                                                 Box::new(SchemaValidationError::ConceptRead { typedb_source: source })
                                             })?;
@@ -2633,8 +2660,9 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         type_: impl KindAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
-        let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_)
+        let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters)
             .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
         if has_instances {
@@ -2651,9 +2679,10 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         for_type_and_subtypes_transitive!(snapshot, type_manager, attribute_type, |type_: AttributeType| {
-            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_)
+            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
                 .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
             if has_instances {
@@ -2672,9 +2701,10 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         for_type_and_subtypes_transitive!(snapshot, type_manager, attribute_type, |type_: AttributeType| {
-            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_)
+            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
                 .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
             if has_instances {
@@ -2693,8 +2723,9 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         role_type: RoleType,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
-        let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, role_type)
+        let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, role_type, storage_counters)
             .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
         if has_instances {
@@ -2711,8 +2742,9 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         owns: Owns,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
-        let has_instances = Self::has_instances_of_owns(snapshot, thing_manager, owns.owner(), owns.attribute())
+        let has_instances = Self::has_instances_of_owns(snapshot, thing_manager, owns.owner(), owns.attribute(), storage_counters)
             .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
         if has_instances {
@@ -2730,11 +2762,12 @@ impl OperationTimeValidation {
         type_manager: &TypeManager,
         thing_manager: &ThingManager,
         type_: T,
+        storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
         match T::KIND {
             Kind::Entity => {
                 let entity_type = EntityType::new(type_.vertex());
-                let mut iterator = thing_manager.get_entities_in(snapshot, entity_type, StorageCounters::DISABLED);
+                let mut iterator = thing_manager.get_entities_in(snapshot, entity_type, storage_counters);
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2742,7 +2775,7 @@ impl OperationTimeValidation {
             }
             Kind::Attribute => {
                 let attribute_type = AttributeType::new(type_.vertex());
-                let mut iterator = thing_manager.get_attributes_in(snapshot, attribute_type, StorageCounters::DISABLED)?;
+                let mut iterator = thing_manager.get_attributes_in(snapshot, attribute_type, storage_counters)?;
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2750,7 +2783,7 @@ impl OperationTimeValidation {
             }
             Kind::Relation => {
                 let relation_type = RelationType::new(type_.vertex());
-                let mut iterator = thing_manager.get_relations_in(snapshot, relation_type, StorageCounters::DISABLED);
+                let mut iterator = thing_manager.get_relations_in(snapshot, relation_type, storage_counters);
                 match iterator.next() {
                     None => Ok(false),
                     Some(result) => result.map(|_| true),
@@ -2759,7 +2792,7 @@ impl OperationTimeValidation {
             Kind::Role => {
                 let role_type = RoleType::new(type_.vertex());
                 let relation_type = role_type.get_relates_explicit(snapshot, type_manager)?.relation();
-                Self::has_instances_of_relates(snapshot, thing_manager, relation_type, role_type)
+                Self::has_instances_of_relates(snapshot, thing_manager, relation_type, role_type, storage_counters)
             }
         }
     }
@@ -2769,12 +2802,13 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         owner_type: ObjectType,
         attribute_type: AttributeType,
+        storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut owner_iterator = thing_manager.get_objects_in(snapshot, owner_type, StorageCounters::DISABLED);
+        let mut owner_iterator = thing_manager.get_objects_in(snapshot, owner_type, storage_counters.clone());
         while let Some(instance) = owner_iterator.next().transpose()? {
-            let mut iterator = instance.get_has_type_unordered(snapshot, thing_manager, attribute_type, &.., StorageCounters::DISABLED)?;
+            let mut iterator = instance.get_has_type_unordered(snapshot, thing_manager, attribute_type, &.., storage_counters.clone())?;
 
             if iterator.next().is_some() {
                 has_instances = true;
@@ -2790,12 +2824,13 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         player_type: ObjectType,
         role_type: RoleType,
+        storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut player_iterator = thing_manager.get_objects_in(snapshot, player_type, StorageCounters::DISABLED);
+        let mut player_iterator = thing_manager.get_objects_in(snapshot, player_type, storage_counters.clone());
         while let Some(instance) = player_iterator.next().transpose()? {
-            let mut iterator = instance.get_relations_by_role(snapshot, thing_manager, role_type, StorageCounters::DISABLED);
+            let mut iterator = instance.get_relations_by_role(snapshot, thing_manager, role_type, storage_counters.clone());
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2811,12 +2846,13 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         relation_type: RelationType,
         role_type: RoleType,
+        storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
         let mut has_instances = false;
 
-        let mut relation_iterator = thing_manager.get_relations_in(snapshot, relation_type, StorageCounters::DISABLED);
+        let mut relation_iterator = thing_manager.get_relations_in(snapshot, relation_type, storage_counters.clone());
         while let Some(instance) = relation_iterator.next().transpose()? {
-            let mut iterator = instance.get_players_role_type(snapshot, thing_manager, role_type, StorageCounters::DISABLED);
+            let mut iterator = instance.get_players_role_type(snapshot, thing_manager, role_type, storage_counters.clone());
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2833,6 +2869,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         entity_types: &HashSet<EntityType>,
         constraints: &HashSet<TypeConstraint<EntityType>>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -2846,7 +2883,7 @@ impl OperationTimeValidation {
         );
 
         for entity_type in entity_types {
-            let mut entity_iterator = thing_manager.get_entities_in(snapshot, *entity_type, StorageCounters::DISABLED);
+            let mut entity_iterator = thing_manager.get_entities_in(snapshot, *entity_type, storage_counters.clone());
             if let Some(res) = entity_iterator.next() {
                 if let Err(source) = res {
                     return Err(Box::new(DataValidationError::ConceptRead { typedb_source: source }));
@@ -2878,6 +2915,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         relation_types: &HashSet<RelationType>,
         constraints: &HashSet<TypeConstraint<RelationType>>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -2891,7 +2929,7 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, StorageCounters::DISABLED);
+            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
             if let Some(res) = relation_iterator.next() {
                 if let Err(source) = res {
                     return Err(Box::new(DataValidationError::ConceptRead { typedb_source: source }));
@@ -2923,6 +2961,7 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         attribute_types: &HashSet<AttributeType>,
         constraints: &HashSet<TypeConstraint<AttributeType>>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -2943,7 +2982,7 @@ impl OperationTimeValidation {
 
         for attribute_type in attribute_types {
             let attribute_iterator = thing_manager
-                .get_attributes_in(snapshot, *attribute_type, StorageCounters::DISABLED)
+                .get_attributes_in(snapshot, *attribute_type, storage_counters.clone())
                 .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
             for attribute in attribute_iterator {
                 let attribute =
@@ -2965,7 +3004,7 @@ impl OperationTimeValidation {
                 }
 
                 let value = attribute
-                    .get_value(snapshot, thing_manager)
+                    .get_value(snapshot, thing_manager, storage_counters.clone())
                     .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
 
                 for regex_constraint in regex_constraints.iter() {
@@ -3009,6 +3048,7 @@ impl OperationTimeValidation {
         _thing_manager: &ThingManager,
         _role_types: &HashSet<RoleType>,
         constraints: &HashSet<TypeConstraint<RoleType>>,
+        _storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -3087,6 +3127,7 @@ impl OperationTimeValidation {
         attribute_types: &HashSet<AttributeType>,
         new_attribute_supertypes: &HashMap<AttributeType, Option<AttributeType>>,
         constraints: &HashSet<CapabilityConstraint<Owns>>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -3140,7 +3181,7 @@ impl OperationTimeValidation {
         let mut unique_values = HashMap::new();
 
         for object_type in object_types {
-            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, StorageCounters::DISABLED);
+            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, storage_counters.clone());
             while let Some(object) = object_iterator
                 .next()
                 .transpose()
@@ -3151,7 +3192,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let has_attribute_iterator = object.get_has_unordered(snapshot, thing_manager, StorageCounters::DISABLED)
+                let has_attribute_iterator = object.get_has_unordered(snapshot, thing_manager, storage_counters.clone())
                     .map_err(|err| DataValidationError::ConceptRead { typedb_source: err })?;
                 for has_count in has_attribute_iterator {
                     let (has, count) = has_count
@@ -3237,7 +3278,7 @@ impl OperationTimeValidation {
                     }
 
                     let value = attribute
-                        .get_value(snapshot, thing_manager)
+                        .get_value(snapshot, thing_manager, storage_counters.clone())
                         .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
 
                     if let Some(unique_constraint) = &unique_constraint {
@@ -3377,6 +3418,7 @@ impl OperationTimeValidation {
         role_types: &HashSet<RoleType>,
         new_role_supertypes: &HashMap<RoleType, Option<RoleType>>,
         constraints: &HashSet<CapabilityConstraint<Plays>>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -3391,7 +3433,7 @@ impl OperationTimeValidation {
         );
 
         for object_type in object_types {
-            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, StorageCounters::DISABLED);
+            let mut object_iterator = thing_manager.get_objects_in(snapshot, *object_type, storage_counters.clone());
             while let Some(object) = object_iterator
                 .next()
                 .transpose()
@@ -3402,7 +3444,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let relations_iterator = object.get_relations_roles(snapshot, thing_manager, StorageCounters::DISABLED);
+                let relations_iterator = object.get_relations_roles(snapshot, thing_manager, storage_counters.clone());
                 for relation in relations_iterator {
                     let (_, role_type, count) = relation
                         .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?;
@@ -3486,6 +3528,7 @@ impl OperationTimeValidation {
         role_types: &HashSet<RoleType>,
         new_role_supertypes: &HashMap<RoleType, Option<RoleType>>,
         constraints: &HashSet<CapabilityConstraint<Relates>>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -3503,7 +3546,7 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, StorageCounters::DISABLED);
+            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
             while let Some(relation) = relation_iterator
                 .next()
                 .transpose()
@@ -3514,7 +3557,7 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let role_players_iterator = relation.get_players(snapshot, thing_manager, StorageCounters::DISABLED);
+                let role_players_iterator = relation.get_players(snapshot, thing_manager, storage_counters.clone());
 
                 for role_players in role_players_iterator {
                     let (role_player, count) = role_players

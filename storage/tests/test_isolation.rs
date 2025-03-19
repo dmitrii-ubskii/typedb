@@ -64,7 +64,7 @@ fn commits_isolated() {
     snapshot_1.put_val(key_3.clone(), value_3.clone());
     snapshot_1.commit().unwrap();
 
-    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_2.get(StorageKeyReference::from(&key_3)).unwrap();
+    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_2.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
     assert!(get.is_none());
     let prefix: StorageKey<'_, BUFFER_KEY_INLINE> =
         StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::copy(&[0x0_u8])));
@@ -73,7 +73,7 @@ fn commits_isolated() {
     assert_eq!(retrieved_count, 2);
 
     let snapshot_3 = storage.open_snapshot_read();
-    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_3.get(StorageKeyReference::from(&key_3)).unwrap();
+    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_3.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
     assert!(matches!(get, Some(_value_3)));
     let retrieved_count = snapshot_3.iterate_range(&range, StorageCounters::DISABLED).count();
     assert_eq!(retrieved_count, 3);
@@ -95,7 +95,7 @@ fn g0_update_conflicts_fail() {
 
     let key_1 = StorageKey::Reference(StorageKeyReference::new(Keyspace, &KEY_1));
 
-    snapshot_1.get_required(key_1.clone()).unwrap();
+    snapshot_1.get_required(key_1.clone(), StorageCounters::DISABLED).unwrap();
 
     snapshot_2.delete(key_1.clone().into_owned_array());
 
@@ -139,8 +139,8 @@ fn g0_dirty_writes() {
     match result_2 {
         Ok(_) => {
             let reader_after_2 = storage.clone().open_snapshot_read();
-            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap(), *value_12);
-            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_2)).unwrap().unwrap(), *value_22);
+            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap(), *value_12);
+            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap(), *value_22);
             reader_after_2.close_resources();
         }
         Err(_) => panic!(),
@@ -152,8 +152,8 @@ fn g0_dirty_writes() {
 
     if result_1.is_ok() {
         let reader_after_1 = storage.clone().open_snapshot_read();
-        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap(), *value_11);
-        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_2)).unwrap().unwrap(), *value_21);
+        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap(), *value_11);
+        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap(), *value_21);
         // reader_after_1.close();
     }
 }
@@ -177,7 +177,7 @@ fn g1a_aborted_writes() {
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let snapshot_2 = storage.clone().open_snapshot_write();
     snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1_1));
-    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1));
+    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     snapshot_1.close_resources();
     assert_eq!(*value_1_0, *read_2.unwrap().unwrap());
 }
@@ -202,7 +202,7 @@ fn g1b_intermediate_read() {
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let snapshot_2 = storage.open_snapshot_write();
     snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1_1i));
-    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1));
+    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1_1f));
     let result_1 = snapshot_1.commit();
     assert!(result_1.is_ok());
@@ -232,9 +232,9 @@ fn g1c_circular_info_flow() {
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let mut snapshot_2 = storage.open_snapshot_write();
     snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1_1));
-    let read_1_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     snapshot_2.put_val(key_2.to_owned(), ByteArray::copy(&value_2_2));
-    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
 
     assert_eq!(*value_1_0, *read_1_2.unwrap().unwrap());
     assert_eq!(*value_2_0, *read_2_1.unwrap().unwrap());
@@ -258,8 +258,8 @@ fn p4_g_cursor_lost_update() {
 
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let mut snapshot_2 = storage.clone().open_snapshot_write();
-    let read_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap();
-    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap();
+    let read_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap();
+    let read_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap();
     let to_write_1 = ByteArray::inline([read_1[0] + 1], 1);
     let to_write_2 = ByteArray::inline([read_2[0] + 1], 1);
 
@@ -270,7 +270,7 @@ fn p4_g_cursor_lost_update() {
 
     if result_1.is_ok() && result_2.is_ok() {
         let snapshot_verify = storage.open_snapshot_read();
-        let read_verify = snapshot_verify.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap();
+        let read_verify = snapshot_verify.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap();
         fails_without_serializability!(2 == read_verify[0]); // This does fail
     }
 }
@@ -299,10 +299,10 @@ fn g_single_read_skew() {
     let snapshot_1 = storage.clone().open_snapshot_write();
     let mut snapshot_2 = storage.open_snapshot_write();
 
-    let read_1_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     snapshot_2.put_val(key_1.to_owned(), ByteArray::copy(&value_1_2));
     snapshot_2.put_val(key_2.to_owned(), ByteArray::copy(&value_2_2));
-    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
 
     assert_eq!(*value_1_0, *read_1_1.unwrap().unwrap());
     assert_eq!(*value_2_0, *read_2_1.unwrap().unwrap());
@@ -334,11 +334,11 @@ fn g2_item_write_skew_disjoint_read() {
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let mut snapshot_2 = storage.clone().open_snapshot_write();
 
-    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     if read_2_1.unwrap().unwrap()[0] == 0 {
         snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1));
     }
-    let read_1_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     if read_1_2.unwrap().unwrap()[0] == 0 {
         snapshot_2.put_val(key_2.to_owned(), ByteArray::copy(&value_1));
     }
@@ -348,8 +348,8 @@ fn g2_item_write_skew_disjoint_read() {
 
     assert!(result_1.is_ok() && result_2.is_ok());
     let reader_after = storage.open_snapshot_read();
-    let sum = reader_after.get::<128>(StorageKeyReference::from(&key_1)).unwrap().unwrap()[0]
-        + reader_after.get::<128>(StorageKeyReference::from(&key_2)).unwrap().unwrap()[0];
+    let sum = reader_after.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap()[0]
+        + reader_after.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap()[0];
     fails_without_serializability!(sum <= 1);
 }
 
@@ -426,12 +426,12 @@ fn g2_antidependency_cycles_fekete() {
     let mut snapshot_1 = storage.clone().open_snapshot_write();
     let mut snapshot_2 = storage.clone().open_snapshot_write();
 
-    let read_1_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1));
-    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2));
+    let read_1_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
+    let read_2_1 = snapshot_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     assert_eq!(*value_1_0, *read_1_1.unwrap().unwrap());
     assert_eq!(*value_2_0, *read_2_1.unwrap().unwrap());
 
-    let read_2_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_2 = snapshot_2.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     let to_write_22 = ByteArray::inline([read_2_2.unwrap().unwrap()[0] + 5], 1);
     snapshot_2.put_val(key_2.to_owned(), ByteArray::copy(&to_write_22));
     let result_2 = snapshot_2.commit();
@@ -439,8 +439,8 @@ fn g2_antidependency_cycles_fekete() {
 
     let snapshot_3 = storage.open_snapshot_write();
 
-    let read_1_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_1));
-    let read_2_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_2));
+    let read_1_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
+    let read_2_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     assert_eq!(*value_1_0, *read_1_3.unwrap().unwrap());
     assert_eq!(*to_write_22, *read_2_3.unwrap().unwrap());
 
@@ -483,10 +483,10 @@ fn otv() {
     snapshot_1.put_val(key_1.to_owned(), ByteArray::copy(&value_1_1));
     snapshot_2.put_val(key_1.to_owned(), ByteArray::copy(&value_1_2));
     snapshot_1.put_val(key_2.to_owned(), ByteArray::copy(&value_2_1));
-    let read_1_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     let result_1 = snapshot_1.commit();
     snapshot_2.put_val(key_2.to_owned(), ByteArray::copy(&value_2_2));
-    let read_2_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_3 = snapshot_3.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     let result_2 = snapshot_2.commit();
     assert!(result_1.is_ok() && result_2.is_ok());
     assert_eq!(*value_1_0, *read_1_3.unwrap().unwrap());
@@ -516,19 +516,19 @@ where
     let key_1 = StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1));
     let key_2 = StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_2));
 
-    let read_1_1 = snapshot_update.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_1 = snapshot_update.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     let to_write_11 = ByteArray::inline([read_1_1.unwrap().unwrap()[0] + 10], 1);
     snapshot_update.put_val(key_1.to_owned(), ByteArray::copy(&to_write_11));
 
-    let read_2_1 = snapshot_update.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_1 = snapshot_update.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     let to_write_21 = ByteArray::inline([read_2_1.unwrap().unwrap()[0] + 10], 1);
     snapshot_update.put_val(key_2.to_owned(), ByteArray::copy(&to_write_21));
 
-    let read_1_2 = snapshot_delete.get::<128>(StorageKeyReference::from(&key_1));
+    let read_1_2 = snapshot_delete.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED);
     if read_1_2.unwrap().unwrap()[0] == 20 {
         snapshot_delete.delete(key_1.to_owned());
     }
-    let read_2_2 = snapshot_delete.get::<128>(StorageKeyReference::from(&key_2));
+    let read_2_2 = snapshot_delete.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED);
     if read_2_2.unwrap().unwrap()[0] == 20 {
         snapshot_delete.delete(key_2.to_owned());
     }
@@ -544,8 +544,8 @@ where
     let value_30 = ByteArray::inline([30], 1);
 
     let reader_after = storage.open_snapshot_read();
-    let read_1_after = reader_after.get::<128>(StorageKeyReference::from(&key_1)).unwrap();
-    let read_2_after = reader_after.get::<128>(StorageKeyReference::from(&key_2)).unwrap();
+    let read_1_after = reader_after.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap();
+    let read_2_after = reader_after.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap();
 
     let delete_went_first_1 = match read_1_after {
         Some(x) => {
@@ -634,7 +634,7 @@ fn isolation_manager_reads_evicted_from_disk() {
     }
     {
         let mut snapshot_conflicts = storage.open_snapshot_write_at(watermark_after_0);
-        snapshot_conflicts.get_required(key_1.clone()).unwrap();
+        snapshot_conflicts.get_required(key_1.clone(), StorageCounters::DISABLED).unwrap();
         snapshot_conflicts.put_val(key_2.clone().into_owned_array(), value_1.clone());
         let snapshot_conflicts_result = snapshot_conflicts.commit();
 

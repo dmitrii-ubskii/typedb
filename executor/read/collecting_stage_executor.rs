@@ -26,6 +26,7 @@ use encoding::value::value::Value;
 use error::unimplemented_feature;
 use ir::pipeline::modifier::SortVariable;
 use lending_iterator::LendingIterator;
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -246,12 +247,13 @@ impl SortCollector {
     fn get_value<'a, T: ReadableSnapshot>(
         entry: &'a VariableValue<'a>,
         context: &'a ExecutionContext<T>,
+        storage_counters: StorageCounters,
     ) -> Option<Cow<'a, Value<'a>>> {
         let snapshot: &T = &context.snapshot;
         match entry {
             VariableValue::Value(value) => Some(Cow::Borrowed(value)),
             VariableValue::Thing(Thing::Attribute(attribute)) => {
-                Some(Cow::Owned(attribute.get_value(snapshot, &context.thing_manager).unwrap()))
+                Some(Cow::Owned(attribute.get_value(snapshot, &context.thing_manager, storage_counters).unwrap()))
             }
             VariableValue::Empty => None,
             VariableValue::Type(_) | VariableValue::Thing(_) => {
@@ -291,8 +293,8 @@ impl CollectorTrait for SortCollector {
             let x_row = x_row_as_row.row();
             let y_row = y_row_as_row.row();
             for (idx, asc) in &self.sort_on {
-                let ord = Self::get_value(&x_row[*idx], context)
-                    .partial_cmp(&Self::get_value(&y_row[*idx], context))
+                let ord = Self::get_value(&x_row[*idx], context, StorageCounters::DISABLED) // TODO: bring in counters
+                    .partial_cmp(&Self::get_value(&y_row[*idx], context, StorageCounters::DISABLED)) // TODO: bring in counters
                     .expect("Sort on variable with uncomparable values should have been caught at query-compile time");
                 match (asc, ord) {
                     (true, Ordering::Less) | (false, Ordering::Greater) => return Ordering::Less,

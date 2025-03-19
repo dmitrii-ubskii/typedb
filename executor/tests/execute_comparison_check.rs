@@ -61,10 +61,10 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
     name_type.set_value_type(&mut snapshot, &type_manager, &thing_manager, ValueType::String).unwrap();
 
     let _age = [10, 11, 12, 13, 14]
-        .map(|age| thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age)).unwrap());
+        .map(|age| thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age), ).unwrap());
 
     let _name = ["John", "Alice", "Leila"].map(|name| {
-        thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name))).unwrap()
+        thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name)), ).unwrap()
     });
 
     let finalise_result = thing_manager.finalise(&mut snapshot);

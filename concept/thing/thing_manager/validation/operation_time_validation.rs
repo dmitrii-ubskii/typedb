@@ -413,6 +413,7 @@ impl OperationTimeValidation {
         owner: impl ObjectAPI,
         attribute_type: AttributeType,
         value: Value<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if let Some(constraint) = owner
             .type_()
@@ -449,7 +450,7 @@ impl OperationTimeValidation {
 
                     for checked_attribute_type in &attribute_and_subtypes {
                         if object
-                            .has_attribute_with_value(snapshot, thing_manager, *checked_attribute_type, value.clone())
+                            .has_attribute_with_value(snapshot, thing_manager, *checked_attribute_type, value.clone(), storage_counters.clone())
                             .map_err(|source| Box::new(DataValidationError::ConceptRead { typedb_source: source }))?
                         {
                             return Err(DataValidation::create_data_validation_uniqueness_error(
@@ -524,9 +525,10 @@ impl OperationTimeValidation {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         owner: impl ObjectAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, &owner)
+            .instance_exists(snapshot, &owner, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())
@@ -542,9 +544,10 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         owner: impl ObjectAPI,
         attribute: &Attribute,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, attribute)
+            .instance_exists(snapshot, attribute, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())
@@ -564,9 +567,10 @@ impl OperationTimeValidation {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         relation: Relation,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, &relation)
+            .instance_exists(snapshot, &relation, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())
@@ -582,9 +586,10 @@ impl OperationTimeValidation {
         thing_manager: &ThingManager,
         relation: Relation,
         player: impl ObjectAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, &player)
+            .instance_exists(snapshot, &player, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())
@@ -600,9 +605,10 @@ impl OperationTimeValidation {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         owner: impl ObjectAPI,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, &owner)
+            .instance_exists(snapshot, &owner, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())
@@ -617,9 +623,10 @@ impl OperationTimeValidation {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         relation: Relation,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if thing_manager
-            .instance_exists(snapshot, &relation)
+            .instance_exists(snapshot, &relation, storage_counters)
             .map_err(|typedb_source| Box::new(DataValidationError::ConceptRead { typedb_source }))?
         {
             Ok(())

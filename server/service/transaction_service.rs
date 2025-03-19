@@ -69,6 +69,7 @@ use typeql::{
     Query,
 };
 use uuid::Uuid;
+use resource::profile::StorageCounters;
 
 use crate::service::{
     document::encode_document,
@@ -1187,7 +1188,7 @@ impl TransactionService {
                 return;
             }
 
-            let encoded_row = encode_row(row, &output_descriptor, snapshot.as_ref(), &type_manager, &thing_manager);
+            let encoded_row = encode_row(row, &output_descriptor, snapshot.as_ref(), &type_manager, &thing_manager, StorageCounters::DISABLED); // TODO
             match encoded_row {
                 Ok(encoded_row) => {
                     Self::submit_response_async(&sender, StreamQueryResponse::next_row(encoded_row)).await;
@@ -1227,7 +1228,7 @@ impl TransactionService {
             }
 
             let encoded_document =
-                encode_document(document, snapshot.as_ref(), &type_manager, &thing_manager, &parameters);
+                encode_document(document, snapshot.as_ref(), &type_manager, &thing_manager, &parameters, StorageCounters::DISABLED); // TODO
             match encoded_document {
                 Ok(encoded_document) => {
                     Self::submit_response_async(&sender, StreamQueryResponse::next_document(encoded_document)).await;
@@ -1329,7 +1330,7 @@ impl TransactionService {
                 });
 
                 let encoded_document =
-                    encode_document(document, snapshot.as_ref(), type_manager, &thing_manager, &parameters);
+                    encode_document(document, snapshot.as_ref(), type_manager, &thing_manager, &parameters, StorageCounters::DISABLED); // TODO
                 match encoded_document {
                     Ok(encoded_document) => {
                         Self::submit_response_sync(sender, StreamQueryResponse::next_document(encoded_document))
@@ -1374,7 +1375,7 @@ impl TransactionService {
                     Self::submit_response_sync(sender, StreamQueryResponse::done_err(err));
                 });
 
-                let encoded_row = encode_row(row, &descriptor, snapshot.as_ref(), type_manager, &thing_manager);
+                let encoded_row = encode_row(row, &descriptor, snapshot.as_ref(), type_manager, &thing_manager, StorageCounters::DISABLED); // TODO
                 match encoded_row {
                     Ok(encoded_row) => Self::submit_response_sync(sender, StreamQueryResponse::next_row(encoded_row)),
                     Err(err) => {

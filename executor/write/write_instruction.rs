@@ -63,6 +63,7 @@ pub trait AsWriteInstruction {
         thing_manager: &ThingManager,
         parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>>;
 }
 
@@ -74,6 +75,7 @@ impl AsWriteInstruction for PutAttribute {
         thing_manager: &ThingManager,
         parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let attribute_type = try_unwrap_as!(answer::Type::Attribute: get_type(row, &self.type_)).unwrap();
         let inserted = thing_manager
@@ -92,6 +94,7 @@ impl AsWriteInstruction for PutObject {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let inserted = match get_type(row, &self.type_) {
             Type::Entity(entity_type) => {
@@ -121,12 +124,13 @@ impl AsWriteInstruction for compiler::executable::insert::instructions::Has {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let owner_thing = get_thing(row, &self.owner);
         let attribute = get_thing(row, &self.attribute);
         owner_thing
             .as_object()
-            .set_has_unordered(snapshot, thing_manager, attribute.as_attribute())
+            .set_has_unordered(snapshot, thing_manager, attribute.as_attribute(), storage_counters)
             .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
         Ok(())
     }
@@ -139,12 +143,13 @@ impl AsWriteInstruction for compiler::executable::insert::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let relation_thing = try_unwrap_as!(answer::Thing::Relation : get_thing(row, &self.relation)).unwrap();
         let player_thing = get_thing(row, &self.player).as_object();
         let role_type = try_unwrap_as!(answer::Type::RoleType : get_type(row, &self.role)).unwrap();
         relation_thing
-            .add_player(snapshot, thing_manager, *role_type, player_thing)
+            .add_player(snapshot, thing_manager, *role_type, player_thing, storage_counters)
             .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
         Ok(())
     }
@@ -157,6 +162,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Has {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let owner = get_thing(row, &self.owner).as_object();
         let new_attribute = get_thing(row, &self.attribute).as_attribute();
@@ -175,7 +181,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Has {
                         "Can only update unordered has with card up to 1 (got count {count}). Update for lists!"
                     );
                     owner
-                        .unset_has_unordered(snapshot, thing_manager, &old_attribute)
+                        .unset_has_unordered(snapshot, thing_manager, &old_attribute, storage_counters.clone())
                         .map_err(|typedb_source| Box::new(WriteError::ConceptWrite { typedb_source }))?;
                 }
                 Err(typedb_source) => return Err(Box::new(WriteError::ConceptRead { typedb_source })),
@@ -187,7 +193,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Has {
         );
 
         owner
-            .set_has_unordered(snapshot, thing_manager, new_attribute)
+            .set_has_unordered(snapshot, thing_manager, new_attribute, storage_counters)
             .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
         Ok(())
     }
@@ -200,6 +206,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let relation = try_unwrap_as!(answer::Thing::Relation : get_thing(row, &self.relation)).unwrap();
         let new_player = get_thing(row, &self.player).as_object();
@@ -210,7 +217,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Links {
             match old_player {
                 Ok(old_player) => {
                     relation
-                        .remove_player_single(snapshot, thing_manager, *role_type, old_player)
+                        .remove_player_single(snapshot, thing_manager, *role_type, old_player, storage_counters.clone())
                         .map_err(|typedb_source| Box::new(WriteError::ConceptWrite { typedb_source }))?;
                 }
                 Err(typedb_source) => return Err(Box::new(WriteError::ConceptRead { typedb_source })),
@@ -222,7 +229,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Links {
         );
 
         relation
-            .add_player(snapshot, thing_manager, *role_type, new_player)
+            .add_player(snapshot, thing_manager, *role_type, new_player, storage_counters)
             .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
         Ok(())
     }
@@ -235,22 +242,23 @@ impl AsWriteInstruction for compiler::executable::delete::instructions::ThingIns
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         let thing = get_thing(row, &self.thing).clone();
         match thing {
             Thing::Entity(entity) => {
                 entity
-                    .delete(snapshot, thing_manager)
+                    .delete(snapshot, thing_manager, storage_counters)
                     .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
             }
             Thing::Relation(relation) => {
                 relation
-                    .delete(snapshot, thing_manager)
+                    .delete(snapshot, thing_manager, storage_counters)
                     .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
             }
             Thing::Attribute(attribute) => {
                 attribute
-                    .delete(snapshot, thing_manager)
+                    .delete(snapshot, thing_manager, storage_counters)
                     .map_err(|typedb_source| WriteError::ConceptWrite { typedb_source })?;
             }
         }
@@ -267,12 +275,13 @@ impl AsWriteInstruction for compiler::executable::delete::instructions::Has {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         // TODO: Lists
         let attribute = get_thing(row, &self.attribute).as_attribute();
         let owner = get_thing(row, &self.owner).as_object();
         owner
-            .unset_has_unordered(snapshot, thing_manager, attribute)
+            .unset_has_unordered(snapshot, thing_manager, attribute, storage_counters)
             .map_err(|source| Box::new(WriteError::ConceptWrite { typedb_source: source }))
     }
 }
@@ -284,13 +293,14 @@ impl AsWriteInstruction for compiler::executable::delete::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
+        storage_counters: StorageCounters
     ) -> Result<(), Box<WriteError>> {
         // TODO: Lists
         let relation = get_thing(row, &self.relation).as_relation();
         let player = get_thing(row, &self.player).as_object();
         let answer::Type::RoleType(role_type) = get_type(row, &self.role) else { unreachable!() };
         relation
-            .remove_player_single(snapshot, thing_manager, *role_type, player)
+            .remove_player_single(snapshot, thing_manager, *role_type, player, storage_counters)
             .map_err(|source| Box::new(WriteError::ConceptWrite { typedb_source: source }))
     }
 }

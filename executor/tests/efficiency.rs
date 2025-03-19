@@ -201,92 +201,92 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
          $casting_quaternary_multi_role_player isa casting,
             links (movie: $movie_3, actor: $person_2, character: $character_2, character: $character_3);
     */
-    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10)).unwrap();
-    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11)).unwrap();
+    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10), ).unwrap();
+    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11), ).unwrap();
 
-    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0)).unwrap();
-    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1)).unwrap();
-    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2)).unwrap();
+    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0), ).unwrap();
+    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1), ).unwrap();
+    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2), ).unwrap();
 
-    let gov_id_0 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(0)).unwrap();
-    let gov_id_1 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(1)).unwrap();
-    let gov_id_2 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(2)).unwrap();
-    let gov_id_3 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(3)).unwrap();
-    let gov_id_4 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(4)).unwrap();
-    let gov_id_5 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(5)).unwrap();
-    let gov_id_6 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(6)).unwrap();
+    let gov_id_0 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(0), ).unwrap();
+    let gov_id_1 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(1), ).unwrap();
+    let gov_id_2 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(2), ).unwrap();
+    let gov_id_3 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(3), ).unwrap();
+    let gov_id_4 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(4), ).unwrap();
+    let gov_id_5 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(5), ).unwrap();
+    let gov_id_6 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(6), ).unwrap();
 
-    let name_abby = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_ABBY))).unwrap();
-    let name_bolton = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_BOLTON))).unwrap();
-    let name_uninlineable = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE))).unwrap();
-    let name_willa = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_WILLOW))).unwrap();
+    let name_abby = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_ABBY)), ).unwrap();
+    let name_bolton = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_BOLTON)), ).unwrap();
+    let name_uninlineable = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE)), ).unwrap();
+    let name_willa = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_WILLOW)), ).unwrap();
 
     let person_1 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_0).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_1).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_2).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_3).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10, ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_0, ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_1, ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_2, ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_3, ).unwrap();
 
     let person_2 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_abby).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_bolton).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_uninlineable).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_willa).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11, ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_abby, ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_bolton, ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_uninlineable, ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_willa, ).unwrap();
 
     let person_3 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &age_10).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_4).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &age_10, ).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_4, ).unwrap();
 
     let person_4 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_10).unwrap();
+    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_10, ).unwrap();
 
     let person_5 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_5.set_has_unordered(&mut snapshot, &thing_manager, &age_10).unwrap();
-    person_5.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_5).unwrap();
+    person_5.set_has_unordered(&mut snapshot, &thing_manager, &age_10, ).unwrap();
+    person_5.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_5, ).unwrap();
 
     let person_6 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_6.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_6).unwrap();
+    person_6.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_6, ).unwrap();
 
     let movie_1 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_2 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_3 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
-    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0).unwrap();
-    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1).unwrap();
-    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2).unwrap();
+    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, ).unwrap();
+    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, ).unwrap();
+    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, ).unwrap();
 
     let character_1 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_2 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_3 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
-    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0).unwrap();
-    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1).unwrap();
-    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2).unwrap();
+    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, ).unwrap();
+    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, ).unwrap();
+    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, ).unwrap();
 
     let casting_binary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_ternary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_quaternary_multi_role_player = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
 
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object()).unwrap();
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object()).unwrap();
+    casting_binary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object(), ).unwrap();
+    casting_binary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), ).unwrap();
 
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object()).unwrap();
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object()).unwrap();
+    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object(), ).unwrap();
+    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), ).unwrap();
     casting_ternary
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_1.into_object())
+        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_1.into_object(), )
         .unwrap();
 
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object())
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object(), )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_actor_type, person_2.into_object())
+        .add_player(&mut snapshot, &thing_manager, casting_actor_type, person_2.into_object(), )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_2.into_object())
+        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_2.into_object(), )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_3.into_object())
+        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_3.into_object(), )
         .unwrap();
 
     let finalise_result = thing_manager.finalise(&mut snapshot);
@@ -1285,8 +1285,8 @@ fn intersections_seeks_with_extra_values() {
         &(Bound::Included(ObjectType::Entity(person_type)), Bound::Included(ObjectType::Entity(person_type))),
         StorageCounters::DISABLED,
     )).unwrap().unwrap().0.owner();
-    let age_12 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(12)).unwrap();
-    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_12).unwrap();
+    let age_12 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(12), ).unwrap();
+    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_12, ).unwrap();
     snapshot.commit().unwrap();
 
     // IR to compute type annotations

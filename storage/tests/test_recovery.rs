@@ -8,6 +8,7 @@ use std::fs;
 
 use durability::wal::WAL;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
+use resource::profile::StorageCounters;
 use storage::{
     durability_client::WALClient,
     key_value::{StorageKeyArray, StorageKeyReference},
@@ -43,7 +44,7 @@ fn wal_and_checkpoint_ok() {
                 .unwrap();
         assert_eq!(watermark, storage.snapshot_watermark());
         let snapshot = storage.open_snapshot_read();
-        assert!(snapshot.get_mapped(StorageKeyReference::from(&key_hello), |_| true).unwrap().is_some());
+        assert!(snapshot.get_mapped(StorageKeyReference::from(&key_hello), |_| true, StorageCounters::DISABLED).unwrap().is_some());
     };
 }
 
@@ -83,7 +84,7 @@ fn wal_and_no_checkpoint_ok() {
         let storage = load_storage::<TestKeyspaceSet>(&storage_path, WAL::load(&storage_path).unwrap(), None).unwrap();
         assert_eq!(watermark, storage.snapshot_watermark());
         let snapshot = storage.open_snapshot_read();
-        assert!(snapshot.get_mapped(StorageKeyReference::from(&key_hello), |_| true).unwrap().is_some());
+        assert!(snapshot.get_mapped(StorageKeyReference::from(&key_hello), |_| true, StorageCounters::DISABLED).unwrap().is_some());
     }
 }
 

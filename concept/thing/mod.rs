@@ -12,6 +12,7 @@ use encoding::{
     value::value_type::ValueTypeCategory,
 };
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
+use resource::profile::StorageCounters;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
@@ -47,15 +48,17 @@ pub trait ThingAPI: Sized + Clone {
         &self,
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptReadError>>;
 
     // TODO: implementers could cache the status in a OnceCell if we do many operations on the same Thing at once
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager) -> ConceptStatus;
+    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus;
 
     fn delete(
         self,
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>>;
 
     fn prefix_for_type(type_: Self::TypeAPI) -> Prefix;

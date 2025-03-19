@@ -22,6 +22,7 @@ use encoding::value::value::Value;
 use error::unimplemented_feature;
 use ir::pipeline::modifier::SortVariable;
 use lending_iterator::{LendingIterator, Peekable};
+use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -71,7 +72,7 @@ where
         let profile = context.profile.profile_stage(|| String::from("Sort"), executable.executable_id);
         let step_profile = profile.extend_or_get(0, || String::from("Sort execution"));
         let measurement = step_profile.start_measurement();
-        let sorted_iterator = SortStageIterator::from_unsorted(batch, &executable, &context);
+        let sorted_iterator = SortStageIterator::from_unsorted(batch, &executable, &context, step_profile.storage_counters());
         measurement.end(&step_profile, 1, batch_len as u64);
         Ok((sorted_iterator, context))
     }
@@ -88,6 +89,7 @@ impl SortStageIterator {
         unsorted: Batch,
         sort_executable: &SortExecutable,
         context: &ExecutionContext<impl ReadableSnapshot>,
+        storage_counters: StorageCounters,
     ) -> Self {
         let mut indices: Vec<usize> = (0..unsorted.len()).collect();
         let sort_by: Vec<(usize, bool)> = sort_executable
@@ -104,8 +106,8 @@ impl SortStageIterator {
             let x_row = x_row_as_row.row();
             let y_row = y_row_as_row.row();
             for &(idx, asc) in &sort_by {
-                let ord = Self::get_value(&x_row[idx], context)
-                    .partial_cmp(&Self::get_value(&y_row[idx], context))
+                let ord = Self::get_value(&x_row[idx], context, storage_counters.clone())
+                    .partial_cmp(&Self::get_value(&y_row[idx], context, storage_counters.clone()))
                     .expect("Sort on variable with uncomparable values should have been caught at query-compile time");
                 if ord != Ordering::Equal {
                     if asc {
@@ -123,12 +125,13 @@ impl SortStageIterator {
     fn get_value<'a, T: ReadableSnapshot>(
         entry: &'a VariableValue<'a>,
         context: &'a ExecutionContext<T>,
+        storage_counters: StorageCounters,
     ) -> Option<Cow<'a, Value<'a>>> {
         let snapshot: &T = &context.snapshot;
         match entry {
             VariableValue::Value(value) => Some(Cow::Borrowed(value)),
             VariableValue::Thing(Thing::Attribute(attribute)) => {
-                Some(Cow::Owned(attribute.get_value(snapshot, &context.thing_manager).unwrap()))
+                Some(Cow::Owned(attribute.get_value(snapshot, &context.thing_manager, storage_counters).unwrap()))
             }
             VariableValue::Empty => None,
             VariableValue::Type(_) | VariableValue::Thing(_) => {

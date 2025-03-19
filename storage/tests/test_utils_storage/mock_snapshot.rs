@@ -37,6 +37,7 @@ impl ReadableSnapshot for MockSnapshot {
     fn get<const INLINE_BYTES: usize>(
         &self,
         _: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         Err(SnapshotGetError::MockError {})
     }

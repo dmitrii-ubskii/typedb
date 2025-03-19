@@ -799,7 +799,7 @@ impl AssignExecutor {
                 .iter()
                 .map(|&pos| {
                     let value = input_row.get(pos).to_owned();
-                    let expression_value = ExpressionValue::try_from_value(value, context)
+                    let expression_value = ExpressionValue::try_from_value(value, context, self.profile.storage_counters())
                         .map_err(|typedb_source| ReadExecutionError::ExpressionEvaluate { typedb_source })?;
                     Ok((pos, expression_value))
                 })
@@ -882,7 +882,7 @@ impl CheckExecutor {
 
         while let Some(row) = input.next() {
             let input_row = row.map_err(|err| err.clone())?;
-            if (self.checker.filter_for_row(context, &input_row))(&Ok(()))
+            if self.checker.filter_for_row(context, &input_row, self.profile.storage_counters())(&Ok(()))
                 .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?
             {
                 output.append(|mut row| {

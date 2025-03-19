@@ -35,8 +35,9 @@ macro_rules! get_mapped_method {
             &self,
             key: StorageKeyReference<'_>,
             mut mapper: impl FnMut(&[u8]) -> T,
+            storage_counters: StorageCounters,
         ) -> Result<Option<T>, SnapshotGetError> {
-            let value = self.$get_func::<BUFFER_VALUE_INLINE>(key)?;
+            let value = self.$get_func::<BUFFER_VALUE_INLINE>(key, storage_counters)?;
             Ok(value.map(|bytes| mapper(bytes.as_ref())))
         }
     };
@@ -48,6 +49,7 @@ pub trait ReadableSnapshot {
     fn get<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError>;
 
     get_mapped_method!(get_mapped, get);
@@ -55,12 +57,13 @@ pub trait ReadableSnapshot {
     fn get_last_existing<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError>;
 
     get_mapped_method!(get_last_existing_mapped, get_last_existing);
 
-    fn contains(&self, key: StorageKeyReference<'_>) -> Result<bool, SnapshotGetError> {
-        Ok(self.get_mapped(key, |_| ())?.is_some())
+    fn contains(&self, key: StorageKeyReference<'_>, storage_counters: StorageCounters) -> Result<bool, SnapshotGetError> {
+        Ok(self.get_mapped(key, |_| (), storage_counters)?.is_some())
     }
 
     fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator;
@@ -139,6 +142,7 @@ pub trait WritableSnapshot: ReadableSnapshot {
     fn get_required(
         &mut self,
         key: StorageKey<'_, BUFFER_KEY_INLINE>,
+        storage_counters: StorageCounters,
     ) -> Result<ByteArray<BUFFER_VALUE_INLINE>, SnapshotGetError> {
         let keyspace_id = key.keyspace_id();
         let writes = self.operations().writes_in(keyspace_id);
@@ -148,7 +152,7 @@ pub trait WritableSnapshot: ReadableSnapshot {
                 Err(SnapshotGetError::ExpectedRequiredKeyToExist { key: StorageKey::Array(key.into_owned_array()) })
             }
             None => {
-                let storage_value = self.get_mapped(key.as_reference(), |reference| ByteArray::from(reference))?;
+                let storage_value = self.get_mapped(key.as_reference(), |reference| ByteArray::from(reference), storage_counters)?;
                 if let Some(value) = storage_value {
                     self.operations_mut().lock_add(ByteArray::copy(key.bytes()), LockType::Unmodifiable);
                     Ok(value)
@@ -183,7 +187,7 @@ pub trait CommittableSnapshot<D>: WritableSnapshot
 where
     D: DurabilityClient,
 {
-    fn commit(self) -> Result<Option<SequenceNumber>, SnapshotError>;
+    fn commit(self, storage_counters: StorageCounters) -> Result<Option<SequenceNumber>, SnapshotError>;
 
     fn into_commit_record(self) -> CommitRecord;
 }
@@ -217,17 +221,19 @@ impl<D> ReadableSnapshot for ReadSnapshot<D> {
     fn get<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         self.storage
-            .get(self.iterator_pool(), key, self.open_sequence_number)
+            .get(self.iterator_pool(), key, self.open_sequence_number, storage_counters)
             .map_err(|error| SnapshotGetError::MVCCRead { source: error })
     }
 
     fn get_last_existing<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
-        self.get(key)
+        self.get(key, storage_counters)
     }
 
     fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
@@ -308,6 +314,7 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
     fn get<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         let writes = self.operations().writes_in(key.keyspace_id());
         match writes.get(key.bytes()) {
@@ -315,7 +322,7 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
             Some(Write::Delete) => Ok(None),
             None => self
                 .storage
-                .get(self.iterator_pool(), key, self.open_sequence_number)
+                .get(self.iterator_pool(), key, self.open_sequence_number, storage_counters)
                 .map_err(|error| SnapshotGetError::MVCCRead { source: error }),
         }
     }
@@ -324,13 +331,14 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
     fn get_last_existing<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         let writes = self.operations().writes_in(key.keyspace_id());
         match writes.get(key.bytes()) {
             Some(Write::Insert { value, .. }) | Some(Write::Put { value, .. }) => Ok(Some(ByteArray::copy(value))),
             Some(Write::Delete) | None => self
                 .storage
-                .get(self.iterator_pool(), key, self.open_sequence_number)
+                .get(self.iterator_pool(), key, self.open_sequence_number, storage_counters)
                 .map_err(|error| SnapshotGetError::MVCCRead { source: error }),
         }
     }
@@ -396,11 +404,11 @@ impl<D> WritableSnapshot for WriteSnapshot<D> {
 }
 
 impl<D: DurabilityClient> CommittableSnapshot<D> for WriteSnapshot<D> {
-    fn commit(self) -> Result<Option<SequenceNumber>, SnapshotError> {
+    fn commit(self, storage_counters: StorageCounters) -> Result<Option<SequenceNumber>, SnapshotError> {
         if self.operations.is_writes_empty() && self.operations.locks_empty() {
             Ok(None)
         } else {
-            match self.storage.clone().snapshot_commit(self) {
+            match self.storage.clone().snapshot_commit(self, storage_counters) {
                 Ok(sequence_number) => Ok(Some(sequence_number)),
                 Err(error) => Err(SnapshotError::Commit { typedb_source: error }),
             }
@@ -454,6 +462,7 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
     fn get<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         let writes = self.operations().writes_in(key.keyspace_id());
         match writes.get(key.bytes()) {
@@ -461,7 +470,7 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
             Some(Write::Delete) => Ok(None),
             None => self
                 .storage
-                .get(self.iterator_pool(), key, self.open_sequence_number)
+                .get(self.iterator_pool(), key, self.open_sequence_number, storage_counters)
                 .map_err(|error| SnapshotGetError::MVCCRead { source: error }),
         }
     }
@@ -470,13 +479,14 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
     fn get_last_existing<const INLINE_BYTES: usize>(
         &self,
         key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<ByteArray<INLINE_BYTES>>, SnapshotGetError> {
         let writes = self.operations().writes_in(key.keyspace_id());
         match writes.get(key.bytes()) {
             Some(Write::Insert { value, .. }) | Some(Write::Put { value, .. }) => Ok(Some(ByteArray::copy(value))),
             Some(Write::Delete) | None => self
                 .storage
-                .get(self.iterator_pool(), key, self.open_sequence_number)
+                .get(self.iterator_pool(), key, self.open_sequence_number, storage_counters)
                 .map_err(|error| SnapshotGetError::MVCCRead { source: error }),
         }
     }
@@ -543,11 +553,11 @@ impl<D> WritableSnapshot for SchemaSnapshot<D> {
 
 impl<D: DurabilityClient> CommittableSnapshot<D> for SchemaSnapshot<D> {
     // TODO: extract these two methods into separate trait
-    fn commit(self) -> Result<Option<SequenceNumber>, SnapshotError> {
+    fn commit(self, storage_counters: StorageCounters) -> Result<Option<SequenceNumber>, SnapshotError> {
         if self.operations.is_writes_empty() && self.operations.locks_empty() {
             Ok(None)
         } else {
-            match self.storage.clone().snapshot_commit(self) {
+            match self.storage.clone().snapshot_commit(self, storage_counters) {
                 Ok(sequence_number) => Ok(Some(sequence_number)),
                 Err(error) => Err(SnapshotError::Commit { typedb_source: error }),
             }

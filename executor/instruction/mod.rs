@@ -173,17 +173,17 @@ impl InstructionExecutor {
         storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         match self {
-            Self::Is(executor) => executor.get_iterator(context, row),
-            Self::Iid(executor) => executor.get_iterator(context, row),
-            Self::TypeList(executor) => executor.get_iterator(context, row),
-            Self::Sub(executor) => executor.get_iterator(context, row),
-            Self::SubReverse(executor) => executor.get_iterator(context, row),
-            Self::Owns(executor) => executor.get_iterator(context, row),
-            Self::OwnsReverse(executor) => executor.get_iterator(context, row),
-            Self::Relates(executor) => executor.get_iterator(context, row),
-            Self::RelatesReverse(executor) => executor.get_iterator(context, row),
-            Self::Plays(executor) => executor.get_iterator(context, row),
-            Self::PlaysReverse(executor) => executor.get_iterator(context, row),
+            Self::Is(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Iid(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::TypeList(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Sub(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::SubReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Owns(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::OwnsReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Relates(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::RelatesReverse(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::Plays(executor) => executor.get_iterator(context, row, storage_counters),
+            Self::PlaysReverse(executor) => executor.get_iterator(context, row, storage_counters),
             Self::Isa(executor) => executor.get_iterator(context, row, storage_counters),
             Self::IsaReverse(executor) => executor.get_iterator(context, row, storage_counters),
             Self::Has(executor) => executor.get_iterator(context, row, storage_counters),
@@ -386,6 +386,7 @@ impl<T> Checker<T> {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: Option<MaybeOwnedRow<'_>>,
         target_variable: ExecutorVariable,
+        storage_counters: StorageCounters,
     ) -> Result<(Bound<Value<'_>>, Bound<Value<'_>>), Box<ConceptReadError>> {
         fn intersect<'a>(
             (a_min, a_max): (Bound<Value<'a>>, Bound<Value<'a>>),
@@ -418,7 +419,7 @@ impl<T> Checker<T> {
                     if lhs.as_variable() == Some(target_variable) {
                         let rhs_variable_value = get_vertex_value(rhs, row.as_ref(), &context.parameters);
                         let rhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value)?;
+                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value, storage_counters.clone())?;
                         if let Some(rhs_value) = rhs_value {
                             let comp_range = match comparator {
                                 Comparator::Equal => (Bound::Included(rhs_value.clone()), Bound::Included(rhs_value)),
@@ -438,7 +439,7 @@ impl<T> Checker<T> {
                         );
                         let lhs_variable_value = get_vertex_value(lhs, row.as_ref(), &context.parameters);
                         let lhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value)?;
+                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value, storage_counters.clone())?;
                         if let Some(lhs_value) = lhs_value {
                             let comp_range = match comparator {
                                 Comparator::Equal => (Bound::Included(lhs_value.clone()), Bound::Included(lhs_value)),
@@ -459,7 +460,7 @@ impl<T> Checker<T> {
                         let rhs_as_vertex = CheckVertex::Variable(*rhs);
                         let rhs_variable_value = get_vertex_value(&rhs_as_vertex, row.as_ref(), &context.parameters);
                         let rhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value)?;
+                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value, storage_counters.clone())?;
                         if let Some(rhs_value) = rhs_value {
                             let comp_range = (Bound::Included(rhs_value.clone()), Bound::Included(rhs_value));
                             range = intersect(range, comp_range);
@@ -468,7 +469,7 @@ impl<T> Checker<T> {
                         let lhs_as_vertex = CheckVertex::Variable(*lhs);
                         let lhs_variable_value = get_vertex_value(&lhs_as_vertex, row.as_ref(), &context.parameters);
                         let lhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value)?;
+                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value, storage_counters.clone())?;
                         if let Some(lhs_value) = lhs_value {
                             let comp_range = (Bound::Included(lhs_value.clone()), Bound::Included(lhs_value));
                             range = intersect(range, comp_range);
@@ -486,11 +487,12 @@ impl<T> Checker<T> {
         snapshot: &'a impl ReadableSnapshot,
         thing_manager: &'a ThingManager,
         variable_value: &'a VariableValue<'_>,
+        storage_counters: StorageCounters,
     ) -> Result<Option<Value<'static>>, Box<ConceptReadError>> {
         // TODO: is there a way to do this without cloning the value?
         match variable_value {
             VariableValue::Thing(Thing::Attribute(attribute)) => {
-                let value = attribute.get_value(snapshot, thing_manager)?;
+                let value = attribute.get_value(snapshot, thing_manager, storage_counters)?;
                 Ok(Some(value.into_owned()))
             }
             VariableValue::Value(value) => {
@@ -505,6 +507,7 @@ impl<T> Checker<T> {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: &MaybeOwnedRow<'_>,
+        storage_counters: StorageCounters,
     ) -> Box<FilterFn<T>> {
         type BoxExtractor<T> = Box<dyn for<'a> Fn(&'a T) -> VariableValue<'a>>;
         let mut filters: Vec<Box<dyn Fn(&T) -> Result<bool, Box<ConceptReadError>>>> =
@@ -699,12 +702,14 @@ impl<T> Checker<T> {
                         Some(&attribute) => Box::new(attribute),
                         None => make_const_extractor(attribute, row, context),
                     };
+                    let counters = storage_counters.clone();
                     filters.push(Box::new({
                         move |value| {
                             owner(value).as_thing().as_object().has_attribute(
                                 &*snapshot,
                                 &thing_manager,
                                 attribute(value).as_thing().as_attribute(),
+                                counters.clone(),
                             )
                         }
                     }));
@@ -728,6 +733,7 @@ impl<T> Checker<T> {
                         Some(&role) => Box::new(role),
                         None => make_const_extractor(role, row, context),
                     };
+                    let counters = storage_counters.clone();
                     filters.push(Box::new({
                         move |value| {
                             relation(value).as_thing().as_relation().has_role_player(
@@ -735,6 +741,7 @@ impl<T> Checker<T> {
                                 &thing_manager,
                                 player(value).as_thing().as_object(),
                                 role(value).as_type().as_role_type(),
+                                counters.clone(),
                             )
                         }
                     }));
@@ -769,6 +776,7 @@ impl<T> Checker<T> {
                         Some(&role) => Box::new(role),
                         None => make_const_extractor(end_role, row, context),
                     };
+                    let counters = storage_counters.clone();
                     filters.push(Box::new({
                         move |value| {
                             start_player_extractor(value).as_thing().as_object().has_indexed_relation_player(
@@ -778,6 +786,7 @@ impl<T> Checker<T> {
                                 relation_extractor(value).as_thing().as_relation(),
                                 start_role_extractor(value).as_type().as_role_type(),
                                 end_role_extractor(value).as_type().as_role_type(),
+                                counters.clone(),
                             )
                         }
                     }));
@@ -865,7 +874,7 @@ impl<T> Checker<T> {
                     let thing_manager = context.thing_manager.clone();
                     let rhs = match rhs {
                         VariableValue::Thing(Thing::Attribute(attr)) => {
-                            attr.get_value(&*snapshot, &thing_manager).map(Value::into_owned)
+                            attr.get_value(&*snapshot, &thing_manager, storage_counters.clone()).map(Value::into_owned)
                         }
                         VariableValue::Value(value) => Ok(value.into_owned()),
                         VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
@@ -881,11 +890,12 @@ impl<T> Checker<T> {
                         Comparator::Like => unimplemented_feature!(ComparatorLike),
                         Comparator::Contains => unimplemented_feature!(ComparatorContains), // |a,b| a.unwrap_string_ref().contains(b.unwrap_string_ref()),
                     };
+                    let counters = storage_counters.clone();
                     filters.push(Box::new(move |value| {
                         let lhs = lhs(value);
                         let lhs = match lhs {
                             VariableValue::Thing(Thing::Attribute(attr)) => {
-                                attr.get_value(&*snapshot, &thing_manager)?.into_owned()
+                                attr.get_value(&*snapshot, &thing_manager, counters.clone())?.into_owned()
                             }
                             VariableValue::Value(value) => value,
                             VariableValue::ThingList(_) | VariableValue::ValueList(_) => unimplemented_feature!(Lists),
