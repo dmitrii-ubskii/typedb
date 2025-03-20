@@ -17,15 +17,22 @@ use concept::{
     error::ConceptReadError,
     type_::{relation_type::RelationType, role_type::RoleType, type_manager::TypeManager},
 };
+use ir::pattern::Vertex;
 use itertools::Itertools;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         relates_reverse_executor::RelatesReverseExecutor,
         tuple::{relates_to_tuple_relation_role, relates_to_tuple_role_relation, RelatesToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryEdgeExecutor, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -50,18 +57,17 @@ impl fmt::Debug for RelatesExecutor {
 
 pub(super) type RelatesTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<RelatesFilterMapFn>>, RelatesToTupleFn>;
 
-pub(super) type RelatesUnboundedSortedRelation = RelatesTupleIterator<
-    iter::Map<
-        iter::Flatten<vec::IntoIter<BTreeSet<(RelationType, RoleType)>>>,
-        fn((RelationType, RoleType)) -> Result<(RelationType, RoleType), Box<ConceptReadError>>,
-    >,
+pub(super) type RelatesFlattenedVectorInner = iter::Map<
+    iter::Flatten<vec::IntoIter<BTreeSet<(RelationType, RoleType)>>>,
+    fn((RelationType, RoleType)) -> Result<(RelationType, RoleType), Box<ConceptReadError>>,
 >;
-pub(super) type RelatesBoundedSortedRole = RelatesTupleIterator<
-    iter::Map<
-        vec::IntoIter<(RelationType, RoleType)>,
-        fn((RelationType, RoleType)) -> Result<(RelationType, RoleType), Box<ConceptReadError>>,
-    >,
+pub(super) type RelatesVectorInner = iter::Map<
+    vec::IntoIter<(RelationType, RoleType)>,
+    fn((RelationType, RoleType)) -> Result<(RelationType, RoleType), Box<ConceptReadError>>,
 >;
+
+pub(super) type RelatesUnboundedSortedRelation = RelatesTupleIterator<RelatesFlattenedVectorInner>;
+pub(super) type RelatesBoundedSortedRole = RelatesTupleIterator<RelatesVectorInner>;
 
 pub(super) type RelatesFilterFn = FilterFn<(RelationType, RoleType)>;
 pub(super) type RelatesFilterMapFn = FilterMapUnchangedFn<(RelationType, RoleType)>;
@@ -84,6 +90,7 @@ impl RelatesExecutor {
         let RelatesInstruction { relates, checks, .. } = relates;
 
         let iterate_mode = BinaryIterateMode::new(relates.relation(), relates.role_type(), &variable_modes, sort_by);
+        let output_tuple_positions = iterate_mode.tuple_positions_for(relates.relation(), relates.role_type());
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_relates_filter_relation_role_type(relation_role_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -93,11 +100,6 @@ impl RelatesExecutor {
 
         let relation = relates.relation().as_variable();
         let role_type = relates.role_type().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([relation, role_type]),
-            _ => TuplePositions::Pair([role_type, relation]),
-        };
 
         let checker = Checker::<(RelationType, RoleType)>::new(
             checks,
@@ -124,61 +126,15 @@ impl RelatesExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<RelatesFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-
-        let snapshot = &**context.snapshot();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let type_manager = context.type_manager();
-                let relates: Vec<_> = self
-                    .relation_role_types
-                    .keys()
-                    .map(|relation| self.get_relates_for_relation(snapshot, type_manager, *relation))
-                    .try_collect()?;
-                let iterator = relates.into_iter().flatten().map(Ok as _);
-                let as_tuples: RelatesUnboundedSortedRelation =
-                    iterator.filter_map(filter_for_row).map(relates_to_tuple_relation_role as _);
-                Ok(TupleIterator::RelatesUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-
-            BinaryIterateMode::UnboundInverted => {
-                // is this ever relevant?
-                return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
-                    functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
-                }));
-            }
-
-            BinaryIterateMode::BoundFrom => {
-                let relation =
-                    type_from_row_or_annotations(self.relates.relation(), row, self.relation_role_types.keys());
-                let type_manager = context.type_manager();
-                let relates = self.get_relates_for_relation(snapshot, type_manager, relation)?;
-
-                let iterator =
-                    relates.iter().cloned().sorted_by_key(|(relation, role)| (*role, *relation)).map(Ok as _);
-                let as_tuples: RelatesBoundedSortedRole =
-                    iterator.filter_map(filter_for_row).map(relates_to_tuple_role_relation as _);
-                Ok(TupleIterator::RelatesBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for_row(
+            context,
+            &self.variable_modes,
+            self.tuple_positions.clone(),
+            self.iterate_mode,
+            row,
+            Some(self.filter_fn.clone()),
+            &self.checker,
+        )
     }
 
     fn get_relates_for_relation(
@@ -194,6 +150,53 @@ impl RelatesExecutor {
             .into_iter()
             .map(|role_type| (relation_type, role_type))
             .collect())
+    }
+}
+
+impl BinaryEdgeExecutor for RelatesExecutor {
+    type Element = (RelationType, RoleType);
+
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = relates_to_tuple_relation_role;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = relates_to_tuple_role_relation;
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+        let type_manager = context.type_manager();
+        let relates: Vec<_> = self
+            .relation_role_types
+            .keys()
+            .map(|relation| self.get_relates_for_relation(&*context.snapshot, type_manager, *relation))
+            .try_collect()?;
+        let iterator = relates.into_iter().flatten().map(Ok as _);
+        Ok(iterator)
+    }
+
+    fn get_iterator_unbound_inverted(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
+        // is this ever relevant?
+        return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
+            functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
+        }));
+    }
+
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+        let relation = type_from_row_or_annotations(self.relates.relation(), row, self.relation_role_types.keys());
+        let type_manager = context.type_manager();
+        let relates = self.get_relates_for_relation(&*context.snapshot, type_manager, relation)?;
+
+        let iterator = relates.iter().cloned().sorted_by_key(|(relation, role)| (*role, *relation)).map(Ok as _);
+        Ok(iterator)
     }
 }
 

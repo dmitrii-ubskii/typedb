@@ -14,14 +14,21 @@ use std::{
 use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::SubInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
+use ir::pattern::Vertex;
 use itertools::Itertools;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, SubToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryEdgeExecutor, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -44,10 +51,10 @@ impl fmt::Debug for SubExecutor {
     }
 }
 
+pub(super) type SubVectorInner = vec::IntoIter<Result<(Type, Type), Box<ConceptReadError>>>;
 pub(super) type SubTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<SubFilterMapFn>>, SubToTupleFn>;
-
-pub(super) type SubUnboundedSortedSub = SubTupleIterator<vec::IntoIter<Result<(Type, Type), Box<ConceptReadError>>>>;
-pub(super) type SubBoundedSortedSuper = SubTupleIterator<vec::IntoIter<Result<(Type, Type), Box<ConceptReadError>>>>;
+pub(super) type SubUnboundedSortedSub = SubTupleIterator<SubVectorInner>;
+pub(super) type SubBoundedSortedSuper = SubTupleIterator<SubVectorInner>;
 
 pub(super) type SubFilterFn = FilterFn<(Type, Type)>;
 pub(super) type SubFilterMapFn = FilterMapUnchangedFn<(Type, Type)>;
@@ -69,21 +76,15 @@ impl SubExecutor {
         let SubInstruction { sub, checks, .. } = sub;
 
         let iterate_mode = BinaryIterateMode::new(sub.subtype(), sub.supertype(), &variable_modes, sort_by);
+        let output_tuple_positions = iterate_mode.tuple_positions_for(sub.subtype(), sub.supertype());
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_sub_filter_sub_super(sub_to_supertypes.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
                 create_sub_filter_super(supertypes.clone())
             }
         };
-
         let subtype = sub.subtype().as_variable();
         let supertype = sub.supertype().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([subtype, supertype]),
-            _ => TuplePositions::Pair([supertype, subtype]),
-        };
-
         let checker = Checker::<(Type, Type)>::new(
             checks,
             [(subtype, EXTRACT_SUB), (supertype, EXTRACT_SUPER)]
@@ -109,54 +110,58 @@ impl SubExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<SubFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
+        self.get_iterator_for_row(
+            context,
+            &self.variable_modes,
+            self.tuple_positions.clone(),
+            self.iterate_mode,
+            row,
+            Some(self.filter_fn.clone()),
+            &self.checker,
+        )
+    }
+}
 
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let sub_with_super = self
-                    .sub_to_supertypes
-                    .iter()
-                    .flat_map(|(sub, supers)| supers.iter().map(|sup| Ok((*sub, *sup))))
-                    .collect_vec();
-                let as_tuples: SubUnboundedSortedSub =
-                    sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_sub_super);
-                Ok(TupleIterator::SubUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
+impl BinaryEdgeExecutor for SubExecutor {
+    type Element = (Type, Type);
 
-            BinaryIterateMode::UnboundInverted => {
-                // is this ever relevant?
-                return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
-                    functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
-                }));
-            }
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = sub_to_tuple_sub_super;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = sub_to_tuple_super_sub;
 
-            BinaryIterateMode::BoundFrom => {
-                let subtype = type_from_row_or_annotations(self.sub.subtype(), row, self.sub_to_supertypes.keys());
-                let supertypes = self.sub_to_supertypes.get(&subtype).unwrap_or(const { &Vec::new() });
-                let sub_with_super = supertypes.iter().map(|sup| Ok((subtype, *sup))).collect_vec(); // TODO cache this
+    fn get_iterator_unbound(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+        let sub_with_super = self
+            .sub_to_supertypes
+            .iter()
+            .flat_map(|(sub, supers)| supers.iter().map(|sup| Ok((*sub, *sup))))
+            .collect_vec();
+        Ok(sub_with_super.into_iter())
+    }
 
-                let as_tuples: SubBoundedSortedSuper =
-                    sub_with_super.into_iter().filter_map(filter_for_row).map(sub_to_tuple_super_sub);
-                Ok(TupleIterator::SubBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+    fn get_iterator_unbound_inverted(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
+        return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
+            functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
+        }));
+    }
+
+    fn get_iterator_bound_from(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+        let subtype = type_from_row_or_annotations(self.sub.subtype(), row, self.sub_to_supertypes.keys());
+        let supertypes = self.sub_to_supertypes.get(&subtype).unwrap_or(const { &Vec::new() });
+        let sub_with_super = supertypes.iter().map(|sup| Ok((subtype, *sup))).collect_vec(); // TODO cache this
+        Ok(sub_with_super.into_iter())
     }
 }
 

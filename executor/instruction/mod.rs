@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{collections::HashMap, fmt, marker::PhantomData, ops::Bound};
+use std::{collections::HashMap, fmt, marker::PhantomData, ops::Bound, sync::Arc};
 
 use ::iterator::minmax_or;
 use answer::{variable_value::VariableValue, Thing, Type};
@@ -32,19 +32,33 @@ use ir::{
     pipeline::ParameterRegistry,
 };
 use itertools::{Itertools, MinMaxResult};
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 use unicase::UniCase;
 
 use crate::{
     instruction::{
-        has_executor::HasExecutor, has_reverse_executor::HasReverseExecutor, iid_executor::IidExecutor,
-        indexed_relation_executor::IndexedRelationExecutor, is_executor::IsExecutor, isa_executor::IsaExecutor,
-        isa_reverse_executor::IsaReverseExecutor, iterator::TupleIterator, links_executor::LinksExecutor,
-        links_reverse_executor::LinksReverseExecutor, owns_executor::OwnsExecutor,
-        owns_reverse_executor::OwnsReverseExecutor, plays_executor::PlaysExecutor,
-        plays_reverse_executor::PlaysReverseExecutor, relates_executor::RelatesExecutor,
-        relates_reverse_executor::RelatesReverseExecutor, sub_executor::SubExecutor,
-        sub_reverse_executor::SubReverseExecutor, type_list_executor::TypeListExecutor,
+        has_executor::HasExecutor,
+        has_reverse_executor::HasReverseExecutor,
+        helpers::{ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted},
+        iid_executor::IidExecutor,
+        indexed_relation_executor::IndexedRelationExecutor,
+        is_executor::IsExecutor,
+        isa_executor::IsaExecutor,
+        isa_reverse_executor::IsaReverseExecutor,
+        iterator::TupleIterator,
+        links_executor::LinksExecutor,
+        links_reverse_executor::LinksReverseExecutor,
+        owns_executor::OwnsExecutor,
+        owns_reverse_executor::OwnsReverseExecutor,
+        plays_executor::PlaysExecutor,
+        plays_reverse_executor::PlaysReverseExecutor,
+        relates_executor::RelatesExecutor,
+        relates_reverse_executor::RelatesReverseExecutor,
+        sub_executor::SubExecutor,
+        sub_reverse_executor::SubReverseExecutor,
+        tuple::{TuplePositions, TupleResult},
+        type_list_executor::TypeListExecutor,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -52,6 +66,7 @@ use crate::{
 
 mod has_executor;
 mod has_reverse_executor;
+mod helpers;
 mod iid_executor;
 mod indexed_relation_executor;
 mod is_executor;
@@ -282,6 +297,19 @@ impl BinaryIterateMode {
     pub(crate) fn is_unbound_inverted(&self) -> bool {
         self == &Self::UnboundInverted
     }
+
+    pub(crate) fn tuple_positions_for(
+        &self,
+        from: &Vertex<ExecutorVariable>,
+        to: &Vertex<ExecutorVariable>,
+    ) -> TuplePositions {
+        match self {
+            BinaryIterateMode::Unbound => TuplePositions::Pair([from.as_variable(), to.as_variable()]),
+            BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
+                TuplePositions::Pair([to.as_variable(), from.as_variable()])
+            }
+        }
+    }
 }
 
 impl fmt::Display for BinaryIterateMode {
@@ -392,7 +420,7 @@ impl<T> Checker<T> {
 
     pub(crate) fn value_range_for(
         &self,
-        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        context: &ExecutionContext<impl ReadableSnapshot>,
         row: Option<MaybeOwnedRow<'_>>,
         target_variable: ExecutorVariable,
     ) -> Result<(Bound<Value<'_>>, Bound<Value<'_>>), Box<ConceptReadError>> {
@@ -1062,4 +1090,109 @@ fn get_vertex_value<'a>(
 
 fn min_max_types<'a>(types: impl IntoIterator<Item = &'a Type>) -> (&'a Type, &'a Type) {
     minmax_or!(types.into_iter(), unreachable!("Empty type iterator"))
+}
+
+fn may_get_from_row<'a>(
+    vertex: &Vertex<ExecutorVariable>,
+    row: &'a MaybeOwnedRow<'a>,
+) -> Option<&'a VariableValue<'a>> {
+    vertex
+        .as_variable()
+        .and_then(|var| var.as_position())
+        .and_then(|pos| (row.len() > pos.as_usize()).then(|| row.get(pos)))
+        .filter(|v| !v.is_empty())
+}
+
+pub(super) type MapToTupleFn<T> = fn(Result<T, Box<ConceptReadError>>) -> TupleResult<'static>;
+pub(super) trait BinaryEdgeExecutor: Sized {
+    type Element;
+
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element>;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element>;
+
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>>;
+
+    fn get_iterator_unbound_inverted(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<impl ExecutorIteratorUnboundInverted<Self>, impl ExecutorIteratorUnboundInverted<Self>>,
+        Box<ConceptReadError>,
+    >;
+
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>>;
+
+    fn create_filter_for_row(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        row: MaybeOwnedRow<'_>,
+        filter_fn_opt: Option<Arc<FilterFn<Self::Element>>>,
+        checker: &Checker<Self::Element>,
+    ) -> Box<FilterMapUnchangedFn<Self::Element>> {
+        let check = checker.filter_for_row(context, &row);
+        if let Some(filter_fn) = filter_fn_opt {
+            let filter = filter_fn.clone();
+            Box::new(move |item| match filter(&item) {
+                Ok(true) => match check(&item) {
+                    Ok(true) | Err(_) => Some(item),
+                    Ok(false) => None,
+                },
+                Ok(false) => None,
+                Err(_) => Some(item),
+            })
+        } else {
+            Box::new(move |item| match check(&item) {
+                Ok(true) | Err(_) => Some(item),
+                Ok(false) => None,
+            })
+        }
+    }
+
+    // Common method to handle the dynamic mode logic.
+    fn get_iterator_for_row(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + 'static>,
+        variable_modes: &VariableModes,
+        tuple_positions: TuplePositions,
+        iterate_mode: BinaryIterateMode,
+        row: MaybeOwnedRow<'_>,
+        filter_fn_opt: Option<Arc<FilterFn<Self::Element>>>,
+        checker: &Checker<Self::Element>,
+    ) -> Result<TupleIterator, Box<ConceptReadError>> {
+        let filter_for_row = self.create_filter_for_row(context, row.as_reference(), filter_fn_opt, checker);
+        let iterator = match iterate_mode {
+            BinaryIterateMode::Unbound => self.get_iterator_unbound(context, row)?.unbound_into_tuple_iterator(
+                filter_for_row,
+                Self::TUPLE_FROM_TO,
+                tuple_positions,
+                variable_modes,
+            ),
+            BinaryIterateMode::UnboundInverted => match self.get_iterator_unbound_inverted(context)? {
+                Either::First(single) => single.unbound_inverted_into_tuple_iterator(
+                    filter_for_row,
+                    Self::TUPLE_TO_FROM,
+                    tuple_positions,
+                    variable_modes,
+                ),
+                Either::Second(merged) => merged.unbound_inverted_into_tuple_iterator(
+                    filter_for_row,
+                    Self::TUPLE_TO_FROM,
+                    tuple_positions,
+                    variable_modes,
+                ),
+            },
+            BinaryIterateMode::BoundFrom => self
+                .get_iterator_bound_from(context, row.as_reference())?
+                .bound_from_into_tuple_iterator(filter_for_row, Self::TUPLE_TO_FROM, tuple_positions, variable_modes),
+        };
+        Ok(iterator)
+    }
 }

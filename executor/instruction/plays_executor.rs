@@ -17,15 +17,22 @@ use concept::{
     error::ConceptReadError,
     type_::{object_type::ObjectType, role_type::RoleType, type_manager::TypeManager, ObjectTypeAPI, PlayerAPI},
 };
+use ir::pattern::Vertex;
 use itertools::Itertools;
+use primitive::either::Either;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
+        helpers::{
+            ExecutorIteratorBoundFrom, ExecutorIteratorUnbound, ExecutorIteratorUnboundInverted,
+            UnreachableIteratorType,
+        },
         iterator::{SortedTupleIterator, TupleIterator},
         plays_reverse_executor::PlaysReverseExecutor,
         tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, PlaysToTupleFn, TuplePositions},
-        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
+        type_from_row_or_annotations, BinaryIterateMode, BinaryEdgeExecutor, Checker, FilterFn, FilterMapUnchangedFn,
+        MapToTupleFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -48,20 +55,19 @@ impl fmt::Debug for PlaysExecutor {
     }
 }
 
-pub(super) type PlaysTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<PlaysFilterMapFn>>, PlaysToTupleFn>;
+pub(super) type PlaysFlattenedVectorInner = iter::Map<
+    iter::Flatten<vec::IntoIter<BTreeSet<(ObjectType, RoleType)>>>,
+    fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
+>;
 
-pub(super) type PlaysUnboundedSortedPlayer = PlaysTupleIterator<
-    iter::Map<
-        iter::Flatten<vec::IntoIter<BTreeSet<(ObjectType, RoleType)>>>,
-        fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
-    >,
+pub(super) type PlaysVectorInner = iter::Map<
+    vec::IntoIter<(ObjectType, RoleType)>,
+    fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
 >;
-pub(super) type PlaysBoundedSortedRole = PlaysTupleIterator<
-    iter::Map<
-        vec::IntoIter<(ObjectType, RoleType)>,
-        fn((ObjectType, RoleType)) -> Result<(ObjectType, RoleType), Box<ConceptReadError>>,
-    >,
->;
+
+pub(super) type PlaysTupleIterator<I> = iter::Map<iter::FilterMap<I, Box<PlaysFilterMapFn>>, PlaysToTupleFn>;
+pub(super) type PlaysUnboundedSortedPlayer = PlaysTupleIterator<PlaysFlattenedVectorInner>;
+pub(super) type PlaysBoundedSortedRole = PlaysTupleIterator<PlaysVectorInner>;
 
 pub(super) type PlaysFilterFn = FilterFn<(ObjectType, RoleType)>;
 pub(super) type PlaysFilterMapFn = FilterMapUnchangedFn<(ObjectType, RoleType)>;
@@ -83,6 +89,7 @@ impl PlaysExecutor {
         let PlaysInstruction { plays, checks, .. } = plays;
 
         let iterate_mode = BinaryIterateMode::new(plays.player(), plays.role_type(), &variable_modes, sort_by);
+        let output_tuple_positions = iterate_mode.tuple_positions_for(plays.player(), plays.role_type());
         let filter_fn = match iterate_mode {
             BinaryIterateMode::Unbound => create_plays_filter_player_role_type(player_role_types.clone()),
             BinaryIterateMode::UnboundInverted | BinaryIterateMode::BoundFrom => {
@@ -92,12 +99,6 @@ impl PlaysExecutor {
 
         let player = plays.player().as_variable();
         let role_type = plays.role_type().as_variable();
-
-        let output_tuple_positions = match iterate_mode {
-            BinaryIterateMode::Unbound => TuplePositions::Pair([player, role_type]),
-            _ => TuplePositions::Pair([role_type, player]),
-        };
-
         let checker = Checker::<(ObjectType, RoleType)>::new(
             checks,
             [(player, EXTRACT_PLAYER), (role_type, EXTRACT_ROLE)]
@@ -123,59 +124,15 @@ impl PlaysExecutor {
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let filter = self.filter_fn.clone();
-        let check = self.checker.filter_for_row(context, &row);
-        let filter_for_row: Box<PlaysFilterMapFn> = Box::new(move |item| match filter(&item) {
-            Ok(true) => match check(&item) {
-                Ok(true) | Err(_) => Some(item),
-                Ok(false) => None,
-            },
-            Ok(false) => None,
-            Err(_) => Some(item),
-        });
-
-        let snapshot = &**context.snapshot();
-
-        match self.iterate_mode {
-            BinaryIterateMode::Unbound => {
-                let type_manager = context.type_manager();
-                let plays: Vec<_> = self
-                    .player_role_types
-                    .keys()
-                    .map(|player| self.get_plays_for_player(snapshot, type_manager, *player))
-                    .try_collect()?;
-                let iterator = plays.into_iter().flatten().map(Ok as _);
-                let as_tuples: PlaysUnboundedSortedPlayer =
-                    iterator.filter_map(filter_for_row).map(plays_to_tuple_player_role as _);
-                Ok(TupleIterator::PlaysUnbounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-
-            BinaryIterateMode::UnboundInverted => {
-                // is this ever relevant?
-                return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
-                    functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
-                }));
-            }
-
-            BinaryIterateMode::BoundFrom => {
-                let player = type_from_row_or_annotations(self.plays.player(), row, self.player_role_types.keys());
-                let type_manager = context.type_manager();
-                let plays = self.get_plays_for_player(snapshot, type_manager, player)?;
-
-                let iterator = plays.into_iter().sorted_by_key(|&(player, role)| (role, player)).map(Ok as _);
-                let as_tuples: PlaysBoundedSortedRole =
-                    iterator.filter_map(filter_for_row).map(plays_to_tuple_role_player as _);
-                Ok(TupleIterator::PlaysBounded(SortedTupleIterator::new(
-                    as_tuples,
-                    self.tuple_positions.clone(),
-                    &self.variable_modes,
-                )))
-            }
-        }
+        self.get_iterator_for_row(
+            context,
+            &self.variable_modes,
+            self.tuple_positions.clone(),
+            self.iterate_mode,
+            row,
+            Some(self.filter_fn.clone()),
+            &self.checker,
+        )
     }
 
     fn get_plays_for_player(
@@ -195,6 +152,52 @@ impl PlaysExecutor {
             .into_iter()
             .map(|role_type| (object_type, role_type))
             .collect())
+    }
+}
+
+impl BinaryEdgeExecutor for PlaysExecutor {
+    type Element = (ObjectType, RoleType);
+
+    const TUPLE_FROM_TO: MapToTupleFn<Self::Element> = plays_to_tuple_player_role;
+    const TUPLE_TO_FROM: MapToTupleFn<Self::Element> = plays_to_tuple_role_player;
+
+    fn get_iterator_unbound(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        _row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorUnbound<Self>, Box<ConceptReadError>> {
+        let type_manager = context.type_manager();
+        let plays: Vec<_> = self
+            .player_role_types
+            .keys()
+            .map(|player| self.get_plays_for_player(&*context.snapshot, type_manager, *player))
+            .try_collect()?;
+        let iterator = plays.into_iter().flatten().map(Ok as _);
+        Ok(iterator)
+    }
+
+    fn get_iterator_unbound_inverted(
+        &self,
+        _context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+    ) -> Result<
+        Either<UnreachableIteratorType<Self::Element>, UnreachableIteratorType<Self::Element>>,
+        Box<ConceptReadError>,
+    > {
+        return Err(Box::new(ConceptReadError::UnimplementedFunctionality {
+            functionality: error::UnimplementedFeature::IrrelevantUnboundInvertedMode(file!()),
+        }));
+    }
+
+    fn get_iterator_bound_from(
+        &self,
+        context: &ExecutionContext<impl ReadableSnapshot + Sized>,
+        row: MaybeOwnedRow<'_>,
+    ) -> Result<impl ExecutorIteratorBoundFrom<Self>, Box<ConceptReadError>> {
+        let player = type_from_row_or_annotations(self.plays.player(), row, self.player_role_types.keys());
+        let type_manager = context.type_manager();
+        let plays = self.get_plays_for_player(&*context.snapshot, type_manager, player)?;
+        let iterator = plays.into_iter().sorted_by_key(|&(player, role)| (role, player)).map(Ok as _);
+        Ok(iterator)
     }
 }
 
