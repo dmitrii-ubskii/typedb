@@ -30,13 +30,13 @@ use crate::{
     parameters::config::{Config, DiagnosticsConfig, EncryptionConfig},
     service::typedb_service::TypeDBService,
 };
-use resource::constants::server::ASCII_LOGO;
 use crate::error::ServerOpenError;
 
 #[derive(Debug)]
 pub struct Server {
     id: String,
     deployment_id: String,
+    logo: &'static str,
     distribution: &'static str,
     version: &'static str,
     config: Config,
@@ -53,6 +53,7 @@ pub struct Server {
 impl Server {
     pub async fn create(
         config: Config,
+        logo: &'static str,
         distribution: &'static str,
         version: &'static str,
         deployment_id: Option<String>,
@@ -104,6 +105,7 @@ impl Server {
         Ok(Self {
             id: server_id,
             deployment_id,
+            logo,
             distribution,
             version,
             address: server_address,
@@ -214,7 +216,7 @@ impl Server {
             self.diagnostics_manager.clone(),
         );
 
-        Self::print_hello(self.distribution, self.version, self.config.server.is_development_mode);
+        Self::print_hello(self.logo, self.distribution, self.version, self.config.server.is_development_mode);
 
         Self::create_tonic_server(&self.config.server.encryption)?
             .layer(&authenticator)
@@ -273,8 +275,8 @@ impl Server {
             .unwrap_or_else(|| panic!("Unable to map address '{}' to any IP addresses", address))
     }
 
-    fn print_hello(distribution: &'static str, version: &'static str, is_development_mode_enabled: bool) {
-        println!("{ASCII_LOGO}"); // very important
+    fn print_hello(logo: &str, distribution: &str, version: &str, is_development_mode_enabled: bool) {
+        println!("{logo}"); // very important
         if is_development_mode_enabled {
             println!("Running {distribution} {version} in development mode.");
         } else {

@@ -9,7 +9,7 @@
 
 use clap::Parser;
 use logger::initialise_logging_global;
-use resource::constants::server::{DISTRIBUTION, SENTRY_REPORTING_URI, VERSION};
+use resource::constants::server::{ASCII_LOGO, DISTRIBUTION, SENTRY_REPORTING_URI, VERSION};
 use server::parameters::config::Config;
 use server::parameters::cli::CLIArgs;
 use server::server::Server;
@@ -24,6 +24,7 @@ fn main() {
         async {
             let server = Server::create(
                 config,
+                ASCII_LOGO,
                 DISTRIBUTION,
                 VERSION,
                 None
