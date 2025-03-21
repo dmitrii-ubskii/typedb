@@ -172,7 +172,7 @@ impl Server {
     }
 
     fn create_tonic_server(encryption_config: &EncryptionConfig) -> Result<tonic::transport::Server, ServerOpenError> {
-        let mut tonic_server =
+        let tonic_server =
             Self::configure_server_encryption(tonic::transport::Server::builder(), encryption_config)?;
         Ok(tonic_server.http2_keepalive_interval(Some(GRPC_CONNECTION_KEEPALIVE)))
     }

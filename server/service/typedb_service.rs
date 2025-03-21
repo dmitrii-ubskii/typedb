@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{fmt::format, net::SocketAddr, pin::Pin, sync::Arc, time::Instant};
+use std::{net::SocketAddr, pin::Pin, sync::Arc, time::Instant};
 
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
@@ -19,15 +19,12 @@ use uuid::Uuid;
 
 use database::database_manager::DatabaseManager;
 use diagnostics::{
-    Diagnostics,
     diagnostics_manager::{DiagnosticsManager, run_with_diagnostics},
     metrics::ActionKind,
 };
 use error::typedb_error;
-use resource::constants::server::{AUTHENTICATOR_USERNAME_FIELD, DEFAULT_USER_NAME};
-use system::concepts::{Credential, PasswordHash, User};
+use resource::constants::server::{AUTHENTICATOR_USERNAME_FIELD};
 use user::{
-    errors::{UserCreateError, UserUpdateError},
     permission_manager::PermissionManager,
     user_manager::UserManager,
 };

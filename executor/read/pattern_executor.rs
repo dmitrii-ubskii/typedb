@@ -441,7 +441,7 @@ impl PatternExecutor {
                     parameters,
                 } = pattern_state_mutex_guard.deref_mut();
                 let context_with_function_parameters =
-                    ExecutionContext::new(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone());
+                    ExecutionContext::new_with_profile(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone(), context.profile.clone());
                 let _suspension_count_before = function_suspensions.record_nested_pattern_entry();
                 let batch_opt = pattern_executor.batch_continue(
                     &context_with_function_parameters,

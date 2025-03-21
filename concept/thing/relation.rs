@@ -25,7 +25,7 @@ use encoding::{
 };
 use encoding::graph::thing::vertex_object::ObjectID;
 use encoding::graph::type_::vertex::TypeID;
-use lending_iterator::{higher_order::Hkt, LendingIterator};
+use lending_iterator::{higher_order::Hkt};
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
 use resource::profile::StorageCounters;
 use storage::{

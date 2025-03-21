@@ -5,6 +5,7 @@
  */
 
 use std::sync::{mpsc::RecvTimeoutError, Arc};
+use tracing::log::trace;
 
 use concept::{
     error::ConceptWriteError,

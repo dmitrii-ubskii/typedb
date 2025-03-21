@@ -86,14 +86,14 @@ impl ThingVertexGenerator {
             .iterate_range(&KeyRange::new_within(
                 build_type_vertex_prefix_key(Prefix::VertexEntityType),
                 Prefix::VertexEntityType.fixed_width_keys(),
-            ), StorageCounters::DISABLED.clone())
+            ), StorageCounters::DISABLED)
             .collect_cloned_vec(|k, _v| TypeVertex::decode(Bytes::Reference(k.bytes())).type_id_().as_u16())
             .map_err(|err| EncodingError::ExistingTypesRead { source: err })?;
         let relation_types = read_snapshot
             .iterate_range(&KeyRange::new_within(
                 build_type_vertex_prefix_key(Prefix::VertexRelationType),
                 Prefix::VertexRelationType.fixed_width_keys(),
-            ), StorageCounters::DISABLED.clone())
+            ), StorageCounters::DISABLED)
             .collect_cloned_vec(|k, _v| TypeVertex::decode(Bytes::Reference(k.bytes())).type_id_().as_u16())
             .map_err(|err| EncodingError::ExistingTypesRead { source: err })?;
         read_snapshot.close_resources();
@@ -144,10 +144,6 @@ impl ThingVertexGenerator {
 
     pub fn hasher(&self) -> &impl Fn(&[u8]) -> u64 {
         &self.large_value_hasher
-    }
-
-    fn extract_object_id(k: &MVCCKey<'_>, _: &[u8]) -> ObjectVertex {
-        ObjectVertex::decode(k.key())
     }
 
     pub fn create_entity<Snapshot>(&self, type_id: TypeID, snapshot: &mut Snapshot) -> ObjectVertex

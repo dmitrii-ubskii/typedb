@@ -246,7 +246,7 @@ impl<D> ReadableSnapshot for ReadSnapshot<D> {
             self.iterator_pool(),
             range,
             self.open_sequence_number,
-            StorageCounters::DISABLED.clone()
+            StorageCounters::DISABLED
         ).next().is_some()
     }
 
@@ -357,7 +357,7 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
             .operations
             .writes_in(range.start().get_value().keyspace_id())
             .any_not_deleted_in_range(range.clone().map(|k| k.as_bytes(), |fixed| fixed));
-        buffered || (!buffered_only && self.iterate_range(range, StorageCounters::DISABLED.clone()).next().is_some())
+        buffered || (!buffered_only && self.iterate_range(range, StorageCounters::DISABLED).next().is_some())
     }
 
     fn get_write(&self, key: StorageKeyReference<'_>) -> Option<&Write> {
@@ -505,7 +505,7 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
             .operations
             .writes_in(range.start().get_value().keyspace_id())
             .any_not_deleted_in_range(range.clone().map(|k| k.as_bytes(), |fixed| fixed));
-        buffered || (!buffered_only && self.iterate_range(range, StorageCounters::DISABLED.clone()).next().is_some())
+        buffered || (!buffered_only && self.iterate_range(range, StorageCounters::DISABLED).next().is_some())
     }
 
     fn get_write(&self, key: StorageKeyReference<'_>) -> Option<&Write> {

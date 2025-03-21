@@ -17,7 +17,7 @@ use encoding::{graph::thing::{
     vertex_object::ObjectVertex,
 }, Keyable, layout::prefix::Prefix, Prefixed, value::{decode_value_u64, value::Value}};
 use encoding::value::value_type::ValueTypeCategory;
-use lending_iterator::{higher_order::Hkt, LendingIterator};
+use lending_iterator::{higher_order::Hkt};
 use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
 use resource::profile::StorageCounters;
 use storage::{

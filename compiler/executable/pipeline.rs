@@ -14,6 +14,7 @@ use answer::variable::Variable;
 use concept::thing::statistics::Statistics;
 use ir::pipeline::{reduce::AssignedReduction, VariableRegistry};
 use itertools::Itertools;
+use tracing::{event, Level};
 
 use crate::{
     annotation::{
@@ -126,6 +127,7 @@ pub fn compile_pipeline_and_functions(
         annotated_fetch,
         input_variables,
     )?;
+    event!(Level::TRACE, "Executable stags: {:?}", executable_stages);
     Ok(ExecutablePipeline { executable_functions: schema_and_preamble_functions, executable_stages, executable_fetch })
 }
 

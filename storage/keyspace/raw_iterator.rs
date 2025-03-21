@@ -7,7 +7,7 @@
 use std::{cmp::Ordering, mem, mem::transmute};
 
 use lending_iterator::{LendingIterator, Seekable};
-use rocksdb::{DBRawIterator, Error};
+use rocksdb::{DBRawIterator};
 use resource::profile::StorageCounters;
 
 use crate::snapshot::pool::PoolRecycleGuard;
@@ -44,14 +44,6 @@ impl IteratorItemState {
             IteratorItemState::Err(err) => {
                 Self::Err(err.clone())
             }
-        }
-    }
-
-    #[inline]
-    fn into_option(self) -> Option<KeyValue<'static>> {
-        match self {
-            IteratorItemState::Some(kv) => Option::Some(kv),
-            _ => None
         }
     }
 }

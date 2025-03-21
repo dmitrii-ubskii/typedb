@@ -81,7 +81,7 @@ typedb_error! {
 pub(crate) fn plan_conjunction<'a>(
     conjunction: &'a Conjunction,
     block_context: &BlockContext,
-    variable_positions: &HashMap<Variable, VariablePosition>,
+    input_variable_positions: &HashMap<Variable, VariablePosition>,
     type_annotations: &'a TypeAnnotations,
     variable_registry: &VariableRegistry,
     expressions: &'a HashMap<Variable, ExecutableExpression<Variable>>,
@@ -91,7 +91,7 @@ pub(crate) fn plan_conjunction<'a>(
     make_builder(
         conjunction,
         block_context,
-        variable_positions,
+        input_variable_positions,
         type_annotations,
         variable_registry,
         expressions,
@@ -104,7 +104,7 @@ pub(crate) fn plan_conjunction<'a>(
 fn make_builder<'a>(
     conjunction: &'a Conjunction,
     block_context: &BlockContext,
-    variable_positions: &HashMap<Variable, VariablePosition>,
+    input_variable_positions: &HashMap<Variable, VariablePosition>,
     type_annotations: &'a TypeAnnotations,
     variable_registry: &VariableRegistry,
     expressions: &'a HashMap<Variable, ExecutableExpression<Variable>>,
@@ -123,7 +123,7 @@ fn make_builder<'a>(
                         make_builder(
                             conj,
                             block_context,
-                            variable_positions,
+                            input_variable_positions,
                             type_annotations,
                             variable_registry,
                             expressions,
@@ -137,7 +137,7 @@ fn make_builder<'a>(
                 make_builder(
                     negation.conjunction(),
                     block_context,
-                    variable_positions,
+                    input_variable_positions,
                     type_annotations,
                     variable_registry,
                     expressions,
@@ -157,7 +157,7 @@ fn make_builder<'a>(
         statistics,
     );
     plan_builder.register_variables(
-        variable_positions.keys().copied(),
+        input_variable_positions.keys().copied(),
         conjunction.captured_variables(block_context),
         conjunction.local_variables(block_context),
         variable_registry,

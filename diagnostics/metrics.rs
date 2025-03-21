@@ -488,10 +488,10 @@ impl ActionMetrics {
             let current_value = self.get_action(&kind).clone();
             {
                 let current_snapshot = self.get_action_posthog_snapshot(&kind).clone();
-                let mut backup = self.get_action_posthog_snapshot_backup_mut(&kind);
+                let backup = self.get_action_posthog_snapshot_backup_mut(&kind);
                 *backup = current_snapshot;
             }
-            let mut snapshot = self.get_action_posthog_snapshot_mut(&kind);
+            let snapshot = self.get_action_posthog_snapshot_mut(&kind);
             *snapshot = current_value;
         }
     }
@@ -500,7 +500,7 @@ impl ActionMetrics {
         let all_kinds: HashSet<ActionKind> = self.actions.keys().cloned().collect();
         for kind in all_kinds {
             let backup = self.get_action_posthog_snapshot_backup(&kind).clone();
-            let mut snapshot = self.get_action_posthog_snapshot_mut(&kind);
+            let snapshot = self.get_action_posthog_snapshot_mut(&kind);
             *snapshot = backup;
         }
     }
@@ -561,7 +561,7 @@ impl ActionMetrics {
         }
     }
 
-    pub fn empty_posthog_reporting_json(mut properties: JSONMap<String, JSONValue>) -> JSONValue {
+    pub fn empty_posthog_reporting_json(properties: JSONMap<String, JSONValue>) -> JSONValue {
         json!({
             "event": json!("server_usage"),
             "properties": json!(properties)
@@ -670,10 +670,6 @@ pub(crate) struct ActionInfo {
 }
 
 impl ActionInfo {
-    pub const fn new() -> Self {
-        Self::default()
-    }
-
     pub const fn default() -> Self {
         Self { successful: AtomicU64::new(0), failed: AtomicU64::new(0) }
     }

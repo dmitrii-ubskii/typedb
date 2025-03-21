@@ -25,7 +25,6 @@ use std::{
 };
 
 use itertools::Itertools;
-use tracing::{event, trace};
 use logger::result::ResultExt;
 use resource::constants::storage::WAL_SYNC_INTERVAL_MICROSECONDS;
 

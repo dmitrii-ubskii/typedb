@@ -97,7 +97,7 @@ impl<I, F, K> Seekable<K> for KMergeBy<I, F>
                 it
             })
             .collect();
-        if let Some(mut next_iterator) = self.next_iterator.as_mut() {
+        if let Some(next_iterator) = self.next_iterator.as_mut() {
             next_iterator.iter.seek(key);
         }
         // force recomputation of heap element

@@ -69,7 +69,7 @@ use resource::constants::server::{DEFAULT_PREFETCH_SIZE, DEFAULT_TRANSACTION_TIM
 use resource::profile::StorageCounters;
 use storage::{
     durability_client::WALClient,
-    snapshot::{ReadableSnapshot, ReadSnapshot, WritableSnapshot},
+    snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 
 use crate::service::{
@@ -348,7 +348,7 @@ impl TransactionService {
             Some(Ok(message)) => {
                 for request in message.reqs {
                     let request_id = Uuid::from_slice(&request.req_id).unwrap();
-                    let metadata = request.metadata;
+                    let _metadata = request.metadata;
                     match request.req {
                         None => {
                             return Err(ProtocolError::MissingField {
@@ -1534,7 +1534,7 @@ impl QueryStreamTransmitter {
 
     async fn finish_current(self) {
         if let Some(task) = self.transmitter_task {
-            let result = task.await.unwrap();
+            let _result = task.await.unwrap();
             // let (control_flow, query_response_receiver) = task.await.unwrap();
         }
     }

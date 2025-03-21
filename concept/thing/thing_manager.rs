@@ -11,7 +11,6 @@ use std::{
     ops::RangeBounds,
     sync::Arc,
 };
-use std::any::Any;
 use std::iter::Map;
 
 use itertools::{Itertools, MinMaxResult};
@@ -55,7 +54,7 @@ use encoding::{
     },
 };
 use iterator::minmax_or;
-use lending_iterator::{LendingIterator, Peekable};
+use lending_iterator::{Peekable};
 use primitive::either::Either;
 use resource::constants::{
     encoding::StructFieldIDUInt,

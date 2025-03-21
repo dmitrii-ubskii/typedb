@@ -59,7 +59,7 @@ where
         let Self { executable, previous } = self;
         let (previous_iterator, mut context) = previous.into_iterator(interrupt.clone())?;
 
-        let profile = context.profile.profile_stage(|| String::from("Insert"), executable.executable_id);
+        let profile = context.profile.profile_stage(|| String::from("Insert"), executable.executable_id as i64);
 
         let mut batch = match prepare_output_rows(executable.output_width() as u32, previous_iterator) {
             Ok(output_rows) => output_rows,
