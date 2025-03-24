@@ -456,7 +456,6 @@ impl TypeDBService {
         let TransactionId(uuid) = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
-        println!("Close! Accessor: {accessor}, owner: {}", transaction.owner); // TODO: Remove after tests
         if accessor != transaction.owner {
             return Err(HTTPServiceError::operation_not_permitted());
         }
