@@ -567,28 +567,33 @@ impl TransactionService {
         self.finish_queued_write_queries(InterruptType::TransactionCommitted).await?;
 
         let diagnostics_manager = self.diagnostics_manager.clone();
-        let (result, profile) = match self.transaction.take().unwrap() {
+        let (profile, result) = match self.transaction.take().unwrap() {
             Transaction::Read(transaction) => {
                 let profile = transaction.profile;
-                (Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status()), profile)
+                (profile, Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status()))
             }
             Transaction::Write(transaction) => {
                 spawn_blocking(move || {
                     diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
-                    transaction.commit().map_err(|err| {
+                    let (profile, result) = transaction.commit();
+                    (profile, result.map_err(|err| {
                         TransactionServiceError::DataCommitFailed { typedb_source: err }.into_error_message().into_status()
-                    })
+                    }))
                 })
                     .await
                     .unwrap()
             },
             Transaction::Schema(transaction) => {
                 diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
-                transaction.commit().map_err(|typedb_source| {
+                let (profile, result) = transaction.commit();
+                (profile, result.map_err(|typedb_source| {
                     TransactionServiceError::SchemaCommitFailed { typedb_source }.into_error_message().into_status()
-                })
+                }))
             }
         };
+        if profile.is_enabled() {
+            event!(Level::TRACE, "{}", profile);
+        }
 
         result
     }

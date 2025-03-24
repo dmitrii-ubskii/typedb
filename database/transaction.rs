@@ -100,7 +100,7 @@ pub struct TransactionWrite<D> {
     pub query_manager: Arc<QueryManager>,
     pub database: Arc<Database<D>>,
     pub transaction_options: TransactionOptions,
-    profile: TransactionProfile,
+    pub profile: TransactionProfile,
 }
 
 impl<D: DurabilityClient> TransactionWrite<D> {
@@ -214,7 +214,7 @@ pub struct TransactionSchema<D> {
     pub query_manager: Arc<QueryManager>,
     pub database: Arc<Database<D>>,
     pub transaction_options: TransactionOptions,
-    profile: TransactionProfile,
+    pub profile: TransactionProfile,
 }
 
 impl<D: DurabilityClient> TransactionSchema<D> {
@@ -288,14 +288,14 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         let mut profile = self.profile;
         let commit_profile = profile.commit_profile();
         let mut snapshot = Arc::into_inner(self.snapshot).expect("Failed to unwrap Arc<Snapshot>");
-        if let Some(errs) = self.type_manager.validate(&snapshot) {
+        if let Err(errs) = self.type_manager.validate(&snapshot) {
             // TODO: send all the errors, not just the first,
             // when we can print the stacktraces of multiple errors, not just a single one
             return (profile, Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }));
         };
         commit_profile.types_validated();
 
-        if let Some(errs) = self.thing_manager.finalise(&mut snapshot, commit_profile.storage_counters()) {
+        if let Err(errs) = self.thing_manager.finalise(&mut snapshot, commit_profile.storage_counters()) {
             // TODO: send all the errors, not just the first,
             // when we can print the stacktraces of multiple errors, not just a single one
             return (profile, Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }));
@@ -304,7 +304,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         drop(self.thing_manager);
 
         let function_manager = Arc::into_inner(self.function_manager).expect("Failed to unwrap Arc<FunctionManager>");
-        if let Some(typedb_source) = function_manager.finalise(&snapshot, &self.type_manager) {
+        if let Err(typedb_source) = function_manager.finalise(&snapshot, &self.type_manager) {
             return (profile, Err(FunctionError { typedb_source }));
         }
         commit_profile.functions_finalised();
@@ -320,11 +320,11 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         let mut thing_statistics = (*schema.thing_statistics).clone();
 
         // 1. synchronise statistics
-        if let Some(typedb_source) = thing_statistics.may_synchronise(&self.database.storage) {
+        if let Err(typedb_source) = thing_statistics.may_synchronise(&self.database.storage) {
             return (profile, Err(StatisticsError { typedb_source }));
         }
         // 2. flush statistics to WAL, guaranteeing a version of statistics is in WAL before schema can change
-        if let Some(typedb_source) = thing_statistics.durably_write(self.database.storage.durability()) {
+        if let Err(typedb_source) = thing_statistics.durably_write(self.database.storage.durability()) {
             return (profile, Err(StatisticsError { typedb_source }));
         }
         commit_profile.schema_update_statistics_durably_written();
@@ -356,7 +356,7 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         }
 
         // replace statistics
-        if let Some(typedb_source) = thing_statistics.may_synchronise(&self.database.storage) {
+        if let Err(typedb_source) = thing_statistics.may_synchronise(&self.database.storage) {
             return (profile, Err(StatisticsError { typedb_source }));
         }
         commit_profile.schema_update_statistics_keys_updated();

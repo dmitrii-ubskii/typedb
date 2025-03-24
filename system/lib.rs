@@ -46,7 +46,7 @@ pub fn initialise_system_database(database_manager: &DatabaseManager) -> Arc<Dat
                         format!("Unexpected error occurred when defining the schema for the {} database.", SYSTEM_DB)
                             .as_str(),
                     );
-                })
+                }).1
                 .expect(
                     format!(
                         "Unexpected error occurred when committing the schema transaction for {} database.",

@@ -70,7 +70,7 @@ impl UserManager {
                     credential,
                 )
             },
-        );
+        ).1;
         match create_result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_query_error)) => Err(UserCreateError::IllegalUsername {}),
@@ -97,7 +97,7 @@ impl UserManager {
                     credential,
                 )
             },
-        );
+        ).1;
         match update_result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_query_error)) => Err(UserUpdateError::IllegalUsername {}),
@@ -133,7 +133,7 @@ impl UserManager {
                     username,
                 )
             },
-        );
+        ).1;
         match delete_result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_query_error)) => Err(UserDeleteError::IllegalUsername {}),
