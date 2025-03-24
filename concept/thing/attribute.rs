@@ -4,39 +4,46 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Ordering;
-use std::collections::HashSet;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::sync::{Arc, OnceLock};
-
-use itertools::Itertools;
+use std::{
+    cmp::Ordering,
+    collections::HashSet,
+    fmt,
+    hash::{Hash, Hasher},
+    sync::{Arc, OnceLock},
+};
 
 use bytes::Bytes;
-use encoding::{AsBytes, Keyable};
-use encoding::graph::thing::edge::ThingEdgeHasReverse;
-use encoding::graph::thing::vertex_attribute::{AttributeID, AttributeVertex};
-use encoding::graph::thing::vertex_object::ObjectVertex;
-use encoding::graph::type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertexEncoding};
-use encoding::graph::Typed;
-use encoding::layout::prefix::Prefix;
-use encoding::value::value::Value;
-use encoding::value::value_type::ValueType;
+use encoding::{
+    graph::{
+        thing::{
+            edge::ThingEdgeHasReverse,
+            vertex_attribute::{AttributeID, AttributeVertex},
+            vertex_object::ObjectVertex,
+        },
+        type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertexEncoding},
+        Typed,
+    },
+    layout::prefix::Prefix,
+    value::{value::Value, value_type::ValueType},
+    AsBytes, Keyable,
+};
 use iterator::State;
-use lending_iterator::{LendingIterator, Peekable, Seekable};
-use lending_iterator::higher_order::Hkt;
-use resource::constants::snapshot::BUFFER_KEY_INLINE;
-use resource::profile::StorageCounters;
+use itertools::Itertools;
+use lending_iterator::{higher_order::Hkt, LendingIterator, Peekable, Seekable};
+use resource::{constants::snapshot::BUFFER_KEY_INLINE, profile::StorageCounters};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
-use crate::{ConceptAPI, ConceptStatus};
-use crate::error::{ConceptReadError, ConceptWriteError};
-use crate::thing::{HKInstance, ThingAPI};
-use crate::thing::has::Has;
-use crate::thing::object::{HasReverseIterator, Object};
-use crate::thing::thing_manager::ThingManager;
-use crate::type_::attribute_type::AttributeType;
-use crate::type_::ObjectTypeAPI;
+use crate::{
+    error::{ConceptReadError, ConceptWriteError},
+    thing::{
+        has::Has,
+        object::{HasReverseIterator, Object},
+        thing_manager::ThingManager,
+        HKInstance, ThingAPI,
+    },
+    type_::{attribute_type::AttributeType, ObjectTypeAPI},
+    ConceptAPI, ConceptStatus,
+};
 
 #[derive(Debug, Clone)]
 pub struct Attribute {
@@ -71,7 +78,12 @@ impl Attribute {
         Ok(self.value.get().unwrap().as_reference())
     }
 
-    pub fn has_owners(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> bool {
+    pub fn has_owners(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> bool {
         match self.get_status(snapshot, thing_manager, storage_counters) {
             ConceptStatus::Put | ConceptStatus::Persisted => thing_manager.has_owners(snapshot, self, false),
             ConceptStatus::Inserted | ConceptStatus::Deleted => {
@@ -85,7 +97,7 @@ impl Attribute {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
-    ) -> impl Iterator<Item=Result<(Object, u64), Box<ConceptReadError>>> {
+    ) -> impl Iterator<Item = Result<(Object, u64), Box<ConceptReadError>>> {
         thing_manager.get_owners(snapshot, self, storage_counters)
     }
 
@@ -95,7 +107,7 @@ impl Attribute {
         thing_manager: &ThingManager,
         owner_type: impl ObjectTypeAPI,
         storage_counters: StorageCounters,
-    ) -> impl Iterator<Item=Result<(Object, u64), Box<ConceptReadError>>> {
+    ) -> impl Iterator<Item = Result<(Object, u64), Box<ConceptReadError>>> {
         thing_manager.get_owners_by_type(snapshot, self, owner_type, storage_counters)
     }
 
@@ -130,7 +142,7 @@ impl ThingAPI for Attribute {
         &self,
         snapshot: &mut impl WritableSnapshot,
         thing_manager: &ThingManager,
-        _storage_counters: StorageCounters
+        _storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptReadError>> {
         match self.type_().get_value_type_without_source(snapshot, thing_manager.type_manager())? {
             Some(value_type) => match value_type {
@@ -150,7 +162,12 @@ impl ThingAPI for Attribute {
         Ok(())
     }
 
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus {
+    fn get_status(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> ConceptStatus {
         thing_manager.get_status(snapshot, self.vertex().into_storage_key(), storage_counters)
     }
 
@@ -201,7 +218,8 @@ impl Ord for Attribute {
 
 pub struct AttributeIterator<AllAttributesIterator>
 where
-    AllAttributesIterator: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
+    AllAttributesIterator:
+        Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
 {
     independent_attribute_types: Arc<HashSet<AttributeType>>,
     attributes_iterator: Option<Peekable<AllAttributesIterator>>,
@@ -211,7 +229,8 @@ where
 
 impl<AllAttributesIterator> AttributeIterator<AllAttributesIterator>
 where
-    AllAttributesIterator: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
+    AllAttributesIterator:
+        Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
 {
     pub(crate) fn new(
         attributes_iterator: AllAttributesIterator,
@@ -245,9 +264,7 @@ where
                 self.find_next_state();
                 self.peek()
             }
-            State::ItemReady => {
-                self.attributes_iterator.as_mut().unwrap().peek().cloned()
-            }
+            State::ItemReady => self.attributes_iterator.as_mut().unwrap().peek().cloned(),
             State::Error(error) => Some(Err(error.clone())),
             State::Done => None,
         }
@@ -320,7 +337,6 @@ where
 impl<I> Iterator for AttributeIterator<I>
 where
     I: Seekable<Attribute> + for<'a> LendingIterator<Item<'a> = Result<Attribute, Box<ConceptReadError>>>,
-
 {
     type Item = Result<Attribute, Box<ConceptReadError>>;
 

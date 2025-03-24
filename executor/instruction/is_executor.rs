@@ -13,20 +13,19 @@ use compiler::{
 };
 use concept::error::ConceptReadError;
 use ir::pattern::constraint::Is;
-use lending_iterator::{AsLendingIterator, };
+use lending_iterator::AsLendingIterator;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker,
-        FilterFn,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, tuple::{Tuple, TuplePositions, TupleResult}, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        tuple::{Tuple, TuplePositions, TupleResult},
+        Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 #[derive(Debug)]
 pub(crate) struct IsExecutor {
@@ -39,7 +38,8 @@ pub(crate) struct IsExecutor {
 
 pub(crate) type IsToTupleFn = fn(Result<VariableValue<'static>, Box<ConceptReadError>>) -> TupleResult<'static>;
 
-pub(super) type IsTupleIterator<I> = NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<IsFilterMapFn>>, IsToTupleFn>>>;
+pub(super) type IsTupleIterator<I> =
+    NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<IsFilterMapFn>>, IsToTupleFn>>>;
 
 pub(super) type IsFilterFn = FilterFn<VariableValue<'static>>;
 pub(super) type IsFilterMapFn = FilterMapUnchangedFn<VariableValue<'static>>;
@@ -87,7 +87,7 @@ impl IsExecutor {
         row: MaybeOwnedRow<'_>,
         storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
-        let check = self.checker.filter_for_row(context, &row, storage_counters );
+        let check = self.checker.filter_for_row(context, &row, storage_counters);
         let filter_for_row: Box<IsFilterMapFn> = Box::new(move |item| match check(&item) {
             Ok(true) | Err(_) => Some(item),
             Ok(false) => None,
@@ -96,7 +96,11 @@ impl IsExecutor {
         let input: VariableValue<'static> = row.get(self.input).clone().into_owned();
         let as_tuples = iter::once(Ok(input)).filter_map(filter_for_row).map(is_to_tuple as _);
         let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
-        Ok(TupleIterator::Is(SortedTupleIterator::new(lending_tuples, self.tuple_positions.clone(), &self.variable_modes)))
+        Ok(TupleIterator::Is(SortedTupleIterator::new(
+            lending_tuples,
+            self.tuple_positions.clone(),
+            &self.variable_modes,
+        )))
     }
 }
 

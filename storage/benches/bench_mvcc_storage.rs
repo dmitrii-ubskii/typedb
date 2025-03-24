@@ -12,8 +12,10 @@ use bytes::byte_array::ByteArray;
 use criterion::{criterion_group, criterion_main, profiler::Profiler, Criterion};
 use durability::wal::WAL;
 use pprof::ProfilerGuard;
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::{CommitProfile, CompileProfile, StorageCounters};
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::{CommitProfile, CompileProfile, StorageCounters},
+};
 use storage::{
     durability_client::WALClient,
     key_range::KeyRange,
@@ -84,7 +86,8 @@ fn bench_snapshot_read_get(
     let snapshot = storage.open_snapshot_read();
     let mut last: Option<ByteArray<BUFFER_VALUE_INLINE>> = None;
     for _ in 0..1 {
-        last = snapshot.get(StorageKey::Array(random_key_24(keyspace)).as_reference(), StorageCounters::DISABLED).unwrap();
+        last =
+            snapshot.get(StorageKey::Array(random_key_24(keyspace)).as_reference(), StorageCounters::DISABLED).unwrap();
     }
     last
 }
@@ -96,7 +99,8 @@ fn bench_snapshot_read_iterate<const ITERATE_COUNT: usize>(
     let snapshot = storage.open_snapshot_read();
     let mut last: Option<ByteArray<BUFFER_VALUE_INLINE>> = None;
     for _ in 0..ITERATE_COUNT {
-        last = snapshot.get(StorageKey::Array(random_key_4(keyspace)).as_reference(), StorageCounters::DISABLED).unwrap();
+        last =
+            snapshot.get(StorageKey::Array(random_key_4(keyspace)).as_reference(), StorageCounters::DISABLED).unwrap();
     }
     last
 }

@@ -16,13 +16,15 @@ use encoding::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator, r#struct::StructDefinition,
         },
-        type_::{Kind, vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator},
+        type_::{vertex::TypeVertexEncoding, vertex_generator::TypeVertexGenerator, Kind},
     },
     value::{label::Label, value_type::ValueType},
 };
 use primitive::maybe_owns::MaybeOwns;
-use resource::constants::{concept::RELATION_INDEX_THRESHOLD, encoding::StructFieldIDUInt};
-use resource::profile::StorageCounters;
+use resource::{
+    constants::{concept::RELATION_INDEX_THRESHOLD, encoding::StructFieldIDUInt},
+    profile::StorageCounters,
+};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 use type_cache::TypeCache;
 use type_writer::TypeWriter;
@@ -38,21 +40,21 @@ use crate::{
             AnnotationUnique, AnnotationValues,
         },
         attribute_type::{AttributeType, AttributeTypeAnnotation},
-        Capability,
         constraint::{
-            CapabilityConstraint, Constraint, get_abstract_constraint, get_cardinality_constraint,
-            get_cardinality_constraints, get_distinct_constraints, get_independent_constraints,
-            get_owns_default_constraints, get_plays_default_constraints, get_range_constraints, get_regex_constraints,
-            get_relates_default_constraints, get_unique_constraint, get_values_constraints, TypeConstraint,
+            get_abstract_constraint, get_cardinality_constraint, get_cardinality_constraints, get_distinct_constraints,
+            get_independent_constraints, get_owns_default_constraints, get_plays_default_constraints,
+            get_range_constraints, get_regex_constraints, get_relates_default_constraints, get_unique_constraint,
+            get_values_constraints, CapabilityConstraint, Constraint, TypeConstraint,
         },
         entity_type::{EntityType, EntityTypeAnnotation},
-        KindAPI,
         object_type::ObjectType,
-        ObjectTypeAPI,
-        Ordering,
-        OwnerAPI,
         owns::{Owns, OwnsAnnotation},
-        PlayerAPI, plays::{Plays, PlaysAnnotation}, relates::{Relates, RelatesAnnotation}, relation_type::{RelationType, RelationTypeAnnotation}, role_type::{RoleType, RoleTypeAnnotation}, type_manager::type_reader::TypeReader, TypeAPI,
+        plays::{Plays, PlaysAnnotation},
+        relates::{Relates, RelatesAnnotation},
+        relation_type::{RelationType, RelationTypeAnnotation},
+        role_type::{RoleType, RoleTypeAnnotation},
+        type_manager::type_reader::TypeReader,
+        Capability, KindAPI, ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI,
     },
 };
 
@@ -1364,8 +1366,14 @@ impl TypeManager {
         OperationTimeValidation::validate_no_subtypes_for_type_deletion(snapshot, self, type_)
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
-        OperationTimeValidation::validate_no_instances_to_delete(snapshot, self, thing_manager, type_, StorageCounters::DISABLED)
-            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
+        OperationTimeValidation::validate_no_instances_to_delete(
+            snapshot,
+            self,
+            thing_manager,
+            type_,
+            StorageCounters::DISABLED,
+        )
+        .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
         Ok(())
     }
@@ -1657,8 +1665,14 @@ impl TypeManager {
         thing_manager: &ThingManager,
         attribute_type: AttributeType,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_value_type_can_be_unset(snapshot, self, thing_manager, attribute_type,            StorageCounters::DISABLED )
-            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
+        OperationTimeValidation::validate_value_type_can_be_unset(
+            snapshot,
+            self,
+            thing_manager,
+            attribute_type,
+            StorageCounters::DISABLED,
+        )
+        .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
         self.unset_value_type_unchecked(snapshot, attribute_type)
     }
@@ -2172,8 +2186,14 @@ impl TypeManager {
         OperationTimeValidation::validate_owns_distinct_constraint_ordering(snapshot, self, owns, Some(ordering), None)
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
-        OperationTimeValidation::validate_no_owns_instances_to_set_ordering(snapshot, self, thing_manager, owns, StorageCounters::DISABLED, )
-            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
+        OperationTimeValidation::validate_no_owns_instances_to_set_ordering(
+            snapshot,
+            self,
+            thing_manager,
+            owns,
+            StorageCounters::DISABLED,
+        )
+        .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
         TypeWriter::storage_set_owns_ordering(snapshot, owns, ordering);
         Ok(())
@@ -2221,9 +2241,14 @@ impl TypeManager {
             .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
         }
 
-        OperationTimeValidation::validate_no_role_instances_to_set_ordering(snapshot, self, thing_manager, role_type,             StorageCounters::DISABLED,
+        OperationTimeValidation::validate_no_role_instances_to_set_ordering(
+            snapshot,
+            self,
+            thing_manager,
+            role_type,
+            StorageCounters::DISABLED,
         )
-            .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
+        .map_err(|typedb_source| ConceptWriteError::SchemaValidation { typedb_source })?;
 
         TypeWriter::storage_put_type_vertex_property(snapshot, role_type, Some(ordering));
         Ok(())

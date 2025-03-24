@@ -11,33 +11,31 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
 use answer::Type;
 use compiler::{executable::match_::instructions::type_::PlaysReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{object_type::ObjectType, role_type::RoleType},
 };
+use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, Peekable};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        iterator::{SortedTupleIterator, TupleIterator},
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
         plays_executor::{
-            EXTRACT_PLAYER, EXTRACT_ROLE, PlaysFilterFn, PlaysFilterMapFn, PlaysTupleIterator,
-            PlaysVariableValueExtractor,
+            PlaysFilterFn, PlaysFilterMapFn, PlaysTupleIterator, PlaysVariableValueExtractor, EXTRACT_PLAYER,
+            EXTRACT_ROLE,
         },
-        relates_executor::RelatesExecutor, tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, TuplePositions}, type_from_row_or_annotations, VariableModes,
+        relates_executor::RelatesExecutor,
+        tuple::{plays_to_tuple_player_role, plays_to_tuple_role_player, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct PlaysReverseExecutor {
     plays: ir::pattern::constraint::Plays<ExecutorVariable>,
@@ -122,7 +120,7 @@ impl PlaysReverseExecutor {
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
-        storage_counters:StorageCounters,
+        storage_counters: StorageCounters,
     ) -> Result<TupleIterator, Box<ConceptReadError>> {
         let filter = self.filter_fn.clone();
         let check = self.checker.filter_for_row(context, &row, storage_counters);

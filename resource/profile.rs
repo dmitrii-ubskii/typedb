@@ -7,20 +7,20 @@
 use std::{
     collections::HashMap,
     fmt,
+    fmt::{Display, Formatter},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
 };
-use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 
 #[derive(Debug)]
 pub struct TransactionProfile {
     enabled: bool,
-    commit_profile: CommitProfile
+    commit_profile: CommitProfile,
 }
 
 impl TransactionProfile {
@@ -36,13 +36,9 @@ impl Display for TransactionProfile {
     }
 }
 
-
 impl TransactionProfile {
     pub fn new(enabled: bool) -> Self {
-        Self {
-            enabled,
-            commit_profile: CommitProfile::new(enabled),
-        }
+        Self { enabled, commit_profile: CommitProfile::new(enabled) }
     }
 
     pub fn commit_profile(&mut self) -> &mut CommitProfile {
@@ -61,33 +57,77 @@ impl Display for CommitProfile {
             None => writeln!(f, "  Commit[enabled=false]"),
             Some(data) => {
                 writeln!(f, "  Commit[enabled=true, total micros={}]", data.total_nanos as f64 / 1000.0)?;
+                writeln!(f, "    storage counters: {}", self.storage_counters())?;
                 writeln!(f, "    types validation micros: {}", data.types_validation_nanos as f64 / 1000.0)?;
                 writeln!(f, "    things finalise micros: {}", data.things_finalise_nanos as f64 / 1000.0)?;
                 writeln!(f, "    functions finalise micros: {}", data.functions_finalise_nanos as f64 / 1000.0)?;
-                writeln!(f, "    schema update statistics durable write micros: {}", data.schema_update_statistics_durable_write_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot put statuses check micros: {}", data.snapshot_put_statuses_check_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot commit record create micros: {}", data.snapshot_commit_record_create_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot durable write data submit micros: {}", data.snapshot_durable_write_data_submit_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot isolation validate micros: {}", data.snapshot_isolation_validate_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot durable write data confirm micros: {}", data.snapshot_durable_write_data_confirm_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot storage write micros: {}", data.snapshot_storage_write_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot isolation manager notify micros: {}", data.snapshot_isolation_manager_notify_nanos as f64 / 1000.0)?;
-                writeln!(f, "    snapshot durable write commit status submit micros: {}", data.snapshot_durable_write_commit_status_submit_nanos as f64 / 1000.0)?;
-                writeln!(f, "    schema update caches update micros: {}", data.schema_update_caches_update_nanos as f64 / 1000.0)?;
-                writeln!(f, "    schema update statistics update micros: {}", data.schema_update_statistics_update_nanos as f64 / 1000.0)
+                writeln!(
+                    f,
+                    "    schema update statistics durable write micros: {}",
+                    data.schema_update_statistics_durable_write_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot put statuses check micros: {}",
+                    data.snapshot_put_statuses_check_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot commit record create micros: {}",
+                    data.snapshot_commit_record_create_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot durable write data submit micros: {}",
+                    data.snapshot_durable_write_data_submit_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot isolation validate micros: {}",
+                    data.snapshot_isolation_validate_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot durable write data confirm micros: {}",
+                    data.snapshot_durable_write_data_confirm_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot storage write micros: {}",
+                    data.snapshot_storage_write_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot isolation manager notify micros: {}",
+                    data.snapshot_isolation_manager_notify_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    snapshot durable write commit status submit micros: {}",
+                    data.snapshot_durable_write_commit_status_submit_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    schema update caches update micros: {}",
+                    data.schema_update_caches_update_nanos as f64 / 1000.0
+                )?;
+                writeln!(
+                    f,
+                    "    schema update statistics update micros: {}",
+                    data.schema_update_statistics_update_nanos as f64 / 1000.0
+                )
             }
         }
     }
 }
 
 impl CommitProfile {
-
     pub const DISABLED: Self = Self { data: None };
 
     pub fn new(enabled: bool) -> Self {
         match enabled {
             true => Self { data: Some(Box::new(CommitProfileData::new())) },
-            false => Self { data: None }
+            false => Self { data: None },
         }
     }
 
@@ -99,9 +139,7 @@ impl CommitProfile {
     pub fn types_validated(&mut self) {
         match &mut self.data {
             None => {}
-            Some(data) => {
-                data.types_validation_nanos = Instant::now().duration_since(data.start).as_nanos()
-            },
+            Some(data) => data.types_validation_nanos = Instant::now().duration_since(data.start).as_nanos(),
         }
     }
 
@@ -109,9 +147,9 @@ impl CommitProfile {
         match &mut self.data {
             None => {}
             Some(data) => {
-                data.things_finalise_nanos = Instant::now().duration_since(data.start).as_nanos()
-                    - data.types_validation_nanos
-            },
+                data.things_finalise_nanos =
+                    Instant::now().duration_since(data.start).as_nanos() - data.types_validation_nanos
+            }
         }
     }
 
@@ -122,7 +160,7 @@ impl CommitProfile {
                 data.functions_finalise_nanos = Instant::now().duration_since(data.start).as_nanos()
                     - data.types_validation_nanos
                     - data.things_finalise_nanos
-            },
+            }
         }
     }
 
@@ -134,7 +172,7 @@ impl CommitProfile {
                     - data.types_validation_nanos
                     - data.things_finalise_nanos
                     - data.functions_finalise_nanos
-            },
+            }
         }
     }
 
@@ -147,7 +185,7 @@ impl CommitProfile {
                     - data.things_finalise_nanos
                     - data.functions_finalise_nanos
                     - data.schema_update_statistics_durable_write_nanos
-            },
+            }
         }
     }
 
@@ -161,7 +199,7 @@ impl CommitProfile {
                     - data.functions_finalise_nanos
                     - data.schema_update_statistics_durable_write_nanos
                     - data.snapshot_put_statuses_check_nanos
-            },
+            }
         }
     }
 
@@ -176,7 +214,7 @@ impl CommitProfile {
                     - data.schema_update_statistics_durable_write_nanos
                     - data.snapshot_put_statuses_check_nanos
                     - data.snapshot_commit_record_create_nanos
-            },
+            }
         }
     }
 
@@ -192,7 +230,7 @@ impl CommitProfile {
                     - data.snapshot_put_statuses_check_nanos
                     - data.snapshot_commit_record_create_nanos
                     - data.snapshot_durable_write_data_submit_nanos
-            },
+            }
         }
     }
 
@@ -209,7 +247,7 @@ impl CommitProfile {
                     - data.snapshot_commit_record_create_nanos
                     - data.snapshot_durable_write_data_submit_nanos
                     - data.snapshot_isolation_validate_nanos
-            },
+            }
         }
     }
 
@@ -227,7 +265,7 @@ impl CommitProfile {
                     - data.snapshot_durable_write_data_submit_nanos
                     - data.snapshot_isolation_validate_nanos
                     - data.snapshot_durable_write_data_confirm_nanos
-            },
+            }
         }
     }
 
@@ -246,7 +284,7 @@ impl CommitProfile {
                     - data.snapshot_isolation_validate_nanos
                     - data.snapshot_durable_write_data_confirm_nanos
                     - data.snapshot_storage_write_nanos
-            },
+            }
         }
     }
 
@@ -254,19 +292,20 @@ impl CommitProfile {
         match &mut self.data {
             None => {}
             Some(data) => {
-                data.snapshot_durable_write_commit_status_submit_nanos = Instant::now().duration_since(data.start).as_nanos()
-                    - data.types_validation_nanos
-                    - data.things_finalise_nanos
-                    - data.functions_finalise_nanos
-                    - data.schema_update_statistics_durable_write_nanos
-                    - data.snapshot_put_statuses_check_nanos
-                    - data.snapshot_commit_record_create_nanos
-                    - data.snapshot_durable_write_data_submit_nanos
-                    - data.snapshot_isolation_validate_nanos
-                    - data.snapshot_durable_write_data_confirm_nanos
-                    - data.snapshot_storage_write_nanos
-                    - data.snapshot_isolation_manager_notify_nanos
-            },
+                data.snapshot_durable_write_commit_status_submit_nanos =
+                    Instant::now().duration_since(data.start).as_nanos()
+                        - data.types_validation_nanos
+                        - data.things_finalise_nanos
+                        - data.functions_finalise_nanos
+                        - data.schema_update_statistics_durable_write_nanos
+                        - data.snapshot_put_statuses_check_nanos
+                        - data.snapshot_commit_record_create_nanos
+                        - data.snapshot_durable_write_data_submit_nanos
+                        - data.snapshot_isolation_validate_nanos
+                        - data.snapshot_durable_write_data_confirm_nanos
+                        - data.snapshot_storage_write_nanos
+                        - data.snapshot_isolation_manager_notify_nanos
+            }
         }
     }
 
@@ -287,7 +326,7 @@ impl CommitProfile {
                     - data.snapshot_storage_write_nanos
                     - data.snapshot_isolation_manager_notify_nanos
                     - data.snapshot_durable_write_commit_status_submit_nanos
-            },
+            }
         }
     }
 
@@ -309,15 +348,13 @@ impl CommitProfile {
                     - data.snapshot_isolation_manager_notify_nanos
                     - data.snapshot_durable_write_commit_status_submit_nanos
                     - data.schema_update_caches_update_nanos
-            },
+            }
         }
     }
     pub fn end(&mut self) {
         match &mut self.data {
             None => {}
-            Some(data) => {
-                data.total_nanos = Instant::now().duration_since(data.start).as_nanos()
-            },
+            Some(data) => data.total_nanos = Instant::now().duration_since(data.start).as_nanos(),
         }
     }
 
@@ -392,7 +429,7 @@ impl QueryProfile {
         self.enabled
     }
 
-    pub fn profile_compilation(&mut self) -> &mut CompileProfile {
+    pub fn compilation_profile(&mut self) -> &mut CompileProfile {
         &mut self.compile_profile
     }
 
@@ -421,12 +458,22 @@ impl fmt::Display for QueryProfile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let compile_micros = self.compile_profile.total_micros();
         let stage_profiles = self.stage_profiles.read().unwrap();
-        let total_micros = compile_micros + stage_profiles.iter().map(|(_, stage_profile)| {
-            stage_profile.step_profiles.read().unwrap().iter().map(|step_profile| {
-                step_profile.data.as_ref().map(|data| data.nanos.load(Ordering::SeqCst))
-                    .unwrap_or(0)
-            }).sum::<u64>()
-        }).sum::<u64>() as f64 / 1000.0;
+        let total_micros = compile_micros
+            + stage_profiles
+                .iter()
+                .map(|(_, stage_profile)| {
+                    stage_profile
+                        .step_profiles
+                        .read()
+                        .unwrap()
+                        .iter()
+                        .map(|step_profile| {
+                            step_profile.data.as_ref().map(|data| data.nanos.load(Ordering::SeqCst)).unwrap_or(0)
+                        })
+                        .sum::<u64>()
+                })
+                .sum::<u64>() as f64
+                / 1000.0;
         writeln!(f, "Query profile[measurements_enabled={}, total micros: {}]", self.enabled, total_micros)?;
         writeln!(f, "{}", self.compile_profile);
         for (id, pattern_profile) in stage_profiles.iter().sorted_by_key(|(id, _)| *id) {
@@ -446,13 +493,15 @@ pub struct CompileProfile {
 impl CompileProfile {
     fn new(enabled: bool) -> Self {
         if enabled {
-            Self { data: Some(CompileProfileData {
-                start: Instant::now(), // irrelevant
-                translation_nanos: 0,
-                validation_nanos: 0,
-                annotation_nanos: 0,
-                compilation_nanos: 0,
-            })}
+            Self {
+                data: Some(CompileProfileData {
+                    start: Instant::now(), // irrelevant
+                    translation_nanos: 0,
+                    validation_nanos: 0,
+                    annotation_nanos: 0,
+                    compilation_nanos: 0,
+                }),
+            }
         } else {
             Self { data: None }
         }
@@ -477,7 +526,7 @@ impl CompileProfile {
             None => {}
             Some(data) => {
                 data.validation_nanos = Instant::now().duration_since(data.start).as_nanos() - data.translation_nanos
-            },
+            }
         }
     }
 
@@ -485,10 +534,10 @@ impl CompileProfile {
         match &mut self.data {
             None => {}
             Some(data) => {
-                data.annotation_nanos = Instant::now()
-                    .duration_since(data.start)
-                    .as_nanos() - data.translation_nanos - data.translation_nanos
-            },
+                data.annotation_nanos = Instant::now().duration_since(data.start).as_nanos()
+                    - data.translation_nanos
+                    - data.translation_nanos
+            }
         }
     }
 
@@ -496,25 +545,29 @@ impl CompileProfile {
         match &mut self.data {
             None => {}
             Some(data) => {
-                data.compilation_nanos = Instant::now()
-                    .duration_since(data.start)
-                    .as_nanos() - data.translation_nanos - data.translation_nanos - data.annotation_nanos
-            },
+                data.compilation_nanos = Instant::now().duration_since(data.start).as_nanos()
+                    - data.translation_nanos
+                    - data.translation_nanos
+                    - data.annotation_nanos
+            }
         }
     }
 
     fn total_micros(&self) -> f64 {
         match &self.data {
             None => 0.0,
-            Some(data) => (data.translation_nanos + data.validation_nanos + data.annotation_nanos + data.compilation_nanos) as f64 / 1000.0,
+            Some(data) => {
+                (data.translation_nanos + data.validation_nanos + data.annotation_nanos + data.compilation_nanos) as f64
+                    / 1000.0
+            }
         }
     }
 }
 
-impl Display for CompileProfile{
+impl Display for CompileProfile {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.data {
-            None => writeln!(f,"  Compile[enabled=false]"),
+            None => writeln!(f, "  Compile[enabled=false]"),
             Some(data) => {
                 writeln!(f, "  Compile[enabled=true, total micros={}", self.total_micros())?;
                 writeln!(f, "    translation micros: {}", data.translation_nanos as f64 / 1000.0)?;
@@ -602,7 +655,7 @@ impl StepProfile {
                 batches: AtomicU64::new(0),
                 rows: AtomicU64::new(0),
                 nanos: AtomicU64::new(0),
-                storage: StorageCounters::new_enabled()
+                storage: StorageCounters::new_enabled(),
             }),
         }
     }
@@ -681,9 +734,7 @@ impl StorageCounters {
     pub const DISABLED: Self = Self { counters: None };
 
     fn new_enabled() -> Self {
-        Self {
-            counters: Some(Arc::new(StorageCountersData::new()))
-        }
+        Self { counters: Some(Arc::new(StorageCountersData::new())) }
     }
 
     pub fn increment_raw_advance(&self) {
@@ -705,7 +756,6 @@ impl StorageCounters {
     pub fn get_raw_seek(&self) -> Option<u64> {
         self.counters.as_ref().map(|counters| counters.raw_seek.load(Ordering::SeqCst))
     }
-
 
     pub fn increment_advance_mvcc_visible(&self) {
         if let Some(counters) = self.counters.as_ref() {

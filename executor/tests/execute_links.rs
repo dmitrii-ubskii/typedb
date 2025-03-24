@@ -17,8 +17,8 @@ use compiler::{
         function::ExecutableFunctionRegistry,
         match_::{
             instructions::{
-                ConstraintInstruction,
-                Inputs, thing::{IsaInstruction, LinksInstruction, LinksReverseInstruction},
+                thing::{IsaInstruction, LinksInstruction, LinksReverseInstruction},
+                ConstraintInstruction, Inputs,
             },
             planner::{
                 match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
@@ -32,14 +32,14 @@ use compiler::{
 use concept::{
     thing::object::ObjectAPI,
     type_::{
-        annotation::AnnotationCardinality, Ordering, OwnerAPI, owns::OwnsAnnotation, PlayerAPI,
-        relates::RelatesAnnotation,
+        annotation::AnnotationCardinality, owns::OwnsAnnotation, relates::RelatesAnnotation, Ordering, OwnerAPI,
+        PlayerAPI,
     },
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
-    error::ReadExecutionError, ExecutionInterrupt, match_executor::MatchExecutor,
-    pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 use ir::{
     pattern::constraint::IsaKind,
@@ -48,7 +48,7 @@ use ir::{
 };
 use lending_iterator::LendingIterator;
 use resource::profile::{CommitProfile, QueryProfile, StorageCounters};
-use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
+use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
 
@@ -138,28 +138,60 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
     let membership_1 = thing_manager.create_relation(&mut snapshot, membership_type).unwrap();
     let membership_2 = thing_manager.create_relation(&mut snapshot, membership_type).unwrap();
 
-    let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10), ).unwrap();
-    let age_2 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11), ).unwrap();
+    let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10)).unwrap();
+    let age_2 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11)).unwrap();
 
     let name_1 = thing_manager
-        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Abby".to_string())), )
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Abby".to_string())))
         .unwrap();
     let name_2 = thing_manager
-        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Bobby".to_string())), )
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned("Bobby".to_string())))
         .unwrap();
 
-    membership_1.add_player(&mut snapshot, &thing_manager, membership_member_type, person_1.into_object(), StorageCounters::DISABLED ).unwrap();
-    membership_1.add_player(&mut snapshot, &thing_manager, membership_group_type, group_1.into_object(),  StorageCounters::DISABLED).unwrap();
-    membership_2.add_player(&mut snapshot, &thing_manager, membership_member_type, person_3.into_object(), StorageCounters::DISABLED ).unwrap();
-    membership_2.add_player(&mut snapshot, &thing_manager, membership_group_type, group_2.into_object(),  StorageCounters::DISABLED).unwrap();
+    membership_1
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            membership_member_type,
+            person_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
+    membership_1
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            membership_group_type,
+            group_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
+    membership_2
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            membership_member_type,
+            person_3.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
+    membership_2
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            membership_group_type,
+            group_2.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
 
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1, StorageCounters::DISABLED ).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_2, StorageCounters::DISABLED ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1, StorageCounters::DISABLED).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_2, StorageCounters::DISABLED).unwrap();
 
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_1, StorageCounters::DISABLED ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_1, StorageCounters::DISABLED).unwrap();
 
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_1,  StorageCounters::DISABLED).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_2,  StorageCounters::DISABLED).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_1, StorageCounters::DISABLED).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &name_2, StorageCounters::DISABLED).unwrap();
 
     let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
     assert!(finalise_result.is_ok(), "{:?}", finalise_result.unwrap_err());

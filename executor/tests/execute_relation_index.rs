@@ -9,8 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use typeql::common::Span;
-
 use answer::variable::Variable;
 use compiler::{
     annotation::{function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types},
@@ -18,9 +16,9 @@ use compiler::{
         function::ExecutableFunctionRegistry,
         match_::{
             instructions::{
-                CheckInstruction,
-                CheckVertex,
-                ConstraintInstruction, Inputs, thing::{HasReverseInstruction, IndexedRelationInstruction}, type_::TypeListInstruction,
+                thing::{HasReverseInstruction, IndexedRelationInstruction},
+                type_::TypeListInstruction,
+                CheckInstruction, CheckVertex, ConstraintInstruction, Inputs,
             },
             planner::{
                 match_executable::{CheckStep, ExecutionStep, IntersectionStep, MatchExecutable},
@@ -33,12 +31,12 @@ use compiler::{
 };
 use concept::{
     thing::object::ObjectAPI,
-    type_::{annotation::AnnotationCardinality, Ordering, OwnerAPI, PlayerAPI, relates::RelatesAnnotation},
+    type_::{annotation::AnnotationCardinality, relates::RelatesAnnotation, Ordering, OwnerAPI, PlayerAPI},
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use executor::{
-    error::ReadExecutionError, ExecutionInterrupt, match_executor::MatchExecutor,
-    pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 use ir::{
     pattern::{
@@ -50,9 +48,10 @@ use ir::{
 };
 use lending_iterator::LendingIterator;
 use resource::profile::{CommitProfile, QueryProfile, StorageCounters};
-use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
+use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
+use typeql::common::Span;
 
 const PERSON_LABEL: Label = Label::new_static("person");
 const MOVIE_LABEL: Label = Label::new_static("group");
@@ -151,56 +150,100 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
          $casting_quaternary_multi_role_player isa casting,
             links (movie: $movie_3, actor: $person_2, character: $character_2, character: $character_3);
     */
-    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10), ).unwrap();
-    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11), ).unwrap();
+    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10)).unwrap();
+    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11)).unwrap();
 
-    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0), ).unwrap();
-    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1), ).unwrap();
-    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2), ).unwrap();
+    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0)).unwrap();
+    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1)).unwrap();
+    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2)).unwrap();
 
     let person_1 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
     let person_2 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10,  StorageCounters::DISABLED).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11, StorageCounters::DISABLED ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11, StorageCounters::DISABLED).unwrap();
 
     let movie_1 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_2 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_3 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
-    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0,  StorageCounters::DISABLED).unwrap();
-    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1,  StorageCounters::DISABLED).unwrap();
-    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2,  StorageCounters::DISABLED).unwrap();
+    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, StorageCounters::DISABLED).unwrap();
+    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, StorageCounters::DISABLED).unwrap();
+    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, StorageCounters::DISABLED).unwrap();
 
     let character_1 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_2 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_3 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
-    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0,  StorageCounters::DISABLED).unwrap();
-    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1,  StorageCounters::DISABLED).unwrap();
-    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2,  StorageCounters::DISABLED).unwrap();
+    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, StorageCounters::DISABLED).unwrap();
+    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, StorageCounters::DISABLED).unwrap();
+    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, StorageCounters::DISABLED).unwrap();
 
     let casting_binary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_ternary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_quaternary_multi_role_player = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
 
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object(),  StorageCounters::DISABLED).unwrap();
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), StorageCounters::DISABLED ).unwrap();
+    casting_binary
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object(), StorageCounters::DISABLED)
+        .unwrap();
+    casting_binary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
 
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object(),  StorageCounters::DISABLED).unwrap();
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), StorageCounters::DISABLED ).unwrap();
     casting_ternary
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_1.into_object(), StorageCounters::DISABLED )
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object(), StorageCounters::DISABLED)
+        .unwrap();
+    casting_ternary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
+    casting_ternary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_1.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
 
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object(),  StorageCounters::DISABLED)
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object(), StorageCounters::DISABLED)
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_actor_type, person_2.into_object(),  StorageCounters::DISABLED)
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_2.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_2.into_object(),  StorageCounters::DISABLED)
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_2.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_3.into_object(),  StorageCounters::DISABLED)
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_3.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
 
     let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);

@@ -11,32 +11,30 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
-use answer::{Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::OwnsInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{
-        attribute_type::AttributeType, object_type::ObjectType, ObjectTypeAPI, OwnerAPI, type_manager::TypeManager,
+        attribute_type::AttributeType, object_type::ObjectType, type_manager::TypeManager, ObjectTypeAPI, OwnerAPI,
     },
 };
 use error::UnimplementedFeature;
+use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, Peekable};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        FilterFn,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, owns_reverse_executor::OwnsReverseExecutor, tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions}, type_from_row_or_annotations, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        owns_reverse_executor::OwnsReverseExecutor,
+        tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, OwnsToTupleFn, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct OwnsExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,

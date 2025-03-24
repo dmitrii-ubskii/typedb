@@ -4,11 +4,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{cmp::Ordering, ops::Range};
-use std::fmt::{Display, Formatter};
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    ops::Range,
+};
 
-use bytes::{byte_array::ByteArray, Bytes};
-use bytes::util::HexBytesFormatter;
+use bytes::{byte_array::ByteArray, util::HexBytesFormatter, Bytes};
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
 use storage::{
     key_range::{KeyRange, RangeEnd, RangeStart},
@@ -51,7 +53,7 @@ impl ThingEdgeHas {
     pub const LENGTH_PREFIX_FROM_OBJECT: usize = PrefixID::LENGTH + ObjectVertex::LENGTH;
     pub const LENGTH_PREFIX_FROM_OBJECT_TO_TYPE: usize =
         PrefixID::LENGTH + ObjectVertex::LENGTH + THING_VERTEX_LENGTH_PREFIX_TYPE;
-    const LENGTH_BOUND: usize =  PrefixID::LENGTH + ObjectVertex::LENGTH + AttributeVertex::MAX_LENGTH;
+    const LENGTH_BOUND: usize = PrefixID::LENGTH + ObjectVertex::LENGTH + AttributeVertex::MAX_LENGTH;
 
     pub fn new(from: ObjectVertex, to: AttributeVertex) -> Self {
         Self { owner: from, attribute: to }
@@ -106,7 +108,7 @@ impl ThingEdgeHas {
 
     pub fn prefix_from_object_to_type_with_attribute_prefix(
         from: ObjectVertex,
-        attribute_vertex_prefix: &[u8]
+        attribute_vertex_prefix: &[u8],
     ) -> StorageKey<'static, { Self::LENGTH_BOUND }> {
         debug_assert!(
             attribute_vertex_prefix[AttributeVertex::INDEX_PREFIX] == AttributeVertex::PREFIX.prefix_id().byte
@@ -179,14 +181,18 @@ impl Keyable<BUFFER_KEY_INLINE> for ThingEdgeHas {
 
 impl Display for ThingEdgeHas {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let byte_layout = format!(r"(Reverse)
+        let byte_layout = format!(
+            r"(Reverse)
             Prefix:             [0..{}] = {}
             Owner:              [{:?}] = {}
             Attribute:          [{:?}] = {}
             ",
-            Self::INDEX_PREFIX, self.prefix().prefix_id().byte,
-            Self::range_from(), HexBytesFormatter::borrowed(&self.from().to_bytes()),
-            self.range_to(), HexBytesFormatter::borrowed(&self.to().to_bytes()),
+            Self::INDEX_PREFIX,
+            self.prefix().prefix_id().byte,
+            Self::range_from(),
+            HexBytesFormatter::borrowed(&self.from().to_bytes()),
+            self.range_to(),
+            HexBytesFormatter::borrowed(&self.to().to_bytes()),
         );
         write!(f, "Edge: {:?}, byte layout: {}", self, byte_layout)
     }
@@ -413,14 +419,18 @@ impl Keyable<BUFFER_KEY_INLINE> for ThingEdgeHasReverse {
 
 impl Display for ThingEdgeHasReverse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let byte_layout = format!(r"(Reverse)
+        let byte_layout = format!(
+            r"(Reverse)
             Prefix:             [0..{}] = {}
             Attribute:          [{:?}] = {}
             Owner:              [{:?}] = {}
             ",
-                Self::INDEX_PREFIX, self.prefix().prefix_id().byte,
-                self.range_from(), HexBytesFormatter::borrowed(&self.from().to_bytes()),
-                self.range_to(), HexBytesFormatter::borrowed(&self.to().to_bytes()),
+            Self::INDEX_PREFIX,
+            self.prefix().prefix_id().byte,
+            self.range_from(),
+            HexBytesFormatter::borrowed(&self.from().to_bytes()),
+            self.range_to(),
+            HexBytesFormatter::borrowed(&self.to().to_bytes()),
         );
         write!(f, "Edge: {:?}, byte layout: {}", self, byte_layout)
     }
@@ -694,28 +704,38 @@ impl Keyable<BUFFER_KEY_INLINE> for ThingEdgeLinks {
 impl Display for ThingEdgeLinks {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let byte_layout = if self.is_reverse {
-            format!(r"(Reverse)
+            format!(
+                r"(Reverse)
                 Prefix:             [0..{}] = {}
                 Player:             [{:?}] = {}
                 Relation:           [{:?}] = {}
                 RoleID:             [{:?}] = {}
                 ",
-                Self::INDEX_PREFIX, Self::PREFIX_REVERSE.prefix_id().byte,
-                Self::RANGE_FROM,  HexBytesFormatter::borrowed(&self.player.to_bytes()),
-                Self::RANGE_TO,  HexBytesFormatter::borrowed(&self.relation.to_bytes()),
-                Self::RANGE_ROLE_ID,  HexBytesFormatter::borrowed(&self.role_id.to_bytes()),
+                Self::INDEX_PREFIX,
+                Self::PREFIX_REVERSE.prefix_id().byte,
+                Self::RANGE_FROM,
+                HexBytesFormatter::borrowed(&self.player.to_bytes()),
+                Self::RANGE_TO,
+                HexBytesFormatter::borrowed(&self.relation.to_bytes()),
+                Self::RANGE_ROLE_ID,
+                HexBytesFormatter::borrowed(&self.role_id.to_bytes()),
             )
         } else {
-            format!(r"(Canonical)
+            format!(
+                r"(Canonical)
                 Prefix:             [0..{}] = {}
                 Relation:           [{:?}] = {}
                 Player:             [{:?}] = {}
                 RoleID:             [{:?}] = {}
                 ",
-                    Self::INDEX_PREFIX, Self::PREFIX_REVERSE.prefix_id().byte,
-                    Self::RANGE_FROM,  HexBytesFormatter::borrowed(&self.relation.to_bytes()),
-                    Self::RANGE_TO,  HexBytesFormatter::borrowed(&self.player.to_bytes()),
-                    Self::RANGE_ROLE_ID,  HexBytesFormatter::borrowed(&self.role_id.to_bytes()),
+                Self::INDEX_PREFIX,
+                Self::PREFIX_REVERSE.prefix_id().byte,
+                Self::RANGE_FROM,
+                HexBytesFormatter::borrowed(&self.relation.to_bytes()),
+                Self::RANGE_TO,
+                HexBytesFormatter::borrowed(&self.player.to_bytes()),
+                Self::RANGE_ROLE_ID,
+                HexBytesFormatter::borrowed(&self.role_id.to_bytes()),
             )
         };
         write!(f, "Edge: {:?}, byte layout: {}", self, byte_layout)
@@ -765,7 +785,12 @@ impl ThingEdgeIndexedRelation {
         role_id_to: TypeID,
     ) -> Self {
         Self::new_from_relation_parts(
-            player_from, player_to, relation.type_id_(), relation.object_id(), role_id_from, role_id_to
+            player_from,
+            player_to,
+            relation.type_id_(),
+            relation.object_id(),
+            role_id_from,
+            role_id_to,
         )
     }
 
@@ -777,14 +802,7 @@ impl ThingEdgeIndexedRelation {
         role_id_from: TypeID,
         role_id_to: TypeID,
     ) -> Self {
-        Self {
-            player_from,
-            player_to,
-            relation_type_id,
-            relation_id,
-            role_id_from,
-            role_id_to
-        }
+        Self { player_from, player_to, relation_type_id, relation_id, role_id_from, role_id_to }
     }
 
     /// Byte layout: [rp_index][rel type][from_object][to_object][relation id][from_role_id][to_role_id]
@@ -890,11 +908,11 @@ impl ThingEdgeIndexedRelation {
     pub fn to(self) -> ObjectVertex {
         self.player_to
     }
-    
+
     pub fn relation_type_id(&self) -> TypeID {
         self.relation_type_id
     }
-    
+
     pub fn relation_id(&self) -> ObjectID {
         self.relation_id
     }
@@ -936,7 +954,8 @@ impl Keyable<BUFFER_KEY_INLINE> for ThingEdgeIndexedRelation {
 
 impl Display for ThingEdgeIndexedRelation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let byte_layout: String = format!(r"
+        let byte_layout: String = format!(
+            r"
         Prefix:             [0..{}] = {}
         RelationType ID:    [{:?}] = {}
         From Player:        [{:?}] = {}
@@ -945,13 +964,20 @@ impl Display for ThingEdgeIndexedRelation {
         FromRoleID          [{:?}] = {}
         ToRoleID            [{:?}] = {}
         ",
-            Self::INDEX_PREFIX, Self::PREFIX.prefix_id().byte,
-            Self::RANGE_RELATION_TYPE_ID,  HexBytesFormatter::borrowed(&self.relation_type_id.to_bytes()),
-            Self::RANGE_START,  HexBytesFormatter::borrowed(&self.player_from.to_bytes()),
-            Self::RANGE_END,  HexBytesFormatter::borrowed(&self.player_to.to_bytes()),
-            Self::RANGE_RELATION_ID,  HexBytesFormatter::borrowed(&self.relation_id.to_bytes()),
-            Self::RANGE_START_ROLE_TYPE_ID,  HexBytesFormatter::borrowed(&self.role_id_from.to_bytes()),
-            Self::RANGE_END_ROLE_TYPE_ID ,HexBytesFormatter::borrowed(&self.role_id_to.to_bytes()),
+            Self::INDEX_PREFIX,
+            Self::PREFIX.prefix_id().byte,
+            Self::RANGE_RELATION_TYPE_ID,
+            HexBytesFormatter::borrowed(&self.relation_type_id.to_bytes()),
+            Self::RANGE_START,
+            HexBytesFormatter::borrowed(&self.player_from.to_bytes()),
+            Self::RANGE_END,
+            HexBytesFormatter::borrowed(&self.player_to.to_bytes()),
+            Self::RANGE_RELATION_ID,
+            HexBytesFormatter::borrowed(&self.relation_id.to_bytes()),
+            Self::RANGE_START_ROLE_TYPE_ID,
+            HexBytesFormatter::borrowed(&self.role_id_from.to_bytes()),
+            Self::RANGE_END_ROLE_TYPE_ID,
+            HexBytesFormatter::borrowed(&self.role_id_to.to_bytes()),
         );
         write!(f, "Edge: {:?}, byte layout: {}", self, byte_layout)
     }

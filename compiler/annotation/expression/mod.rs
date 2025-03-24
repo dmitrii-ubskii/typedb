@@ -4,7 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 use encoding::value::value_type::ValueTypeCategory;
 use error::typedb_error;
 use ir::{

@@ -4,22 +4,21 @@
 * file, You can obtain one at https://mozilla.org/MPL/2.0/.
 */
 
+use answer::variable::Variable;
 use typeql::{
     common::Spanned,
-    Expression,
     query::stage::delete::DeletableKind,
-    Statement, statement::thing::{Constraint, HasValue, Head, RolePlayer},
+    statement::thing::{Constraint, HasValue, Head, RolePlayer},
+    Expression, Statement,
 };
-
-use answer::variable::Variable;
 
 use crate::{
     pipeline::{block::Block, function_signature::HashMapFunctionSignatureIndex, ParameterRegistry},
-    RepresentationError,
     translation::{
         constraints::{add_statement, add_typeql_relation, register_typeql_var},
         TranslationContext,
     },
+    RepresentationError,
 };
 
 macro_rules! verify_variable_available {

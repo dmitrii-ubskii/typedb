@@ -6,24 +6,30 @@
 
 use std::cmp::Ordering;
 
-use encoding::graph::thing::vertex_generator::ThingVertexGenerator;
-use encoding::graph::type_::vertex::TypeVertexEncoding;
-use encoding::layout::prefix::Prefix;
-use encoding::value::value::Value;
-use encoding::value::value_struct::{StructIndexEntry, StructIndexEntryKey};
+use encoding::{
+    graph::{thing::vertex_generator::ThingVertexGenerator, type_::vertex::TypeVertexEncoding},
+    layout::prefix::Prefix,
+    value::{
+        value::Value,
+        value_struct::{StructIndexEntry, StructIndexEntryKey},
+    },
+};
 use lending_iterator::{LendingIterator, Peekable, Seekable};
-use resource::constants::encoding::StructFieldIDUInt;
-use resource::constants::snapshot::BUFFER_KEY_INLINE;
-use resource::profile::StorageCounters;
-use storage::key_range::KeyRange;
-use storage::key_value::StorageKey;
-use storage::snapshot::iterator::SnapshotRangeIterator;
-use storage::snapshot::ReadableSnapshot;
+use resource::{
+    constants::{encoding::StructFieldIDUInt, snapshot::BUFFER_KEY_INLINE},
+    profile::StorageCounters,
+};
+use storage::{
+    key_range::KeyRange,
+    key_value::StorageKey,
+    snapshot::{iterator::SnapshotRangeIterator, ReadableSnapshot},
+};
 
-use crate::error::ConceptReadError;
-use crate::thing::attribute::Attribute;
-use crate::thing::ThingAPI;
-use crate::type_::attribute_type::AttributeType;
+use crate::{
+    error::ConceptReadError,
+    thing::{attribute::Attribute, ThingAPI},
+    type_::attribute_type::AttributeType,
+};
 
 pub struct StructIndexForAttributeTypeIterator {
     prefix: StorageKey<'static, { BUFFER_KEY_INLINE }>,
@@ -31,41 +37,42 @@ pub struct StructIndexForAttributeTypeIterator {
 }
 
 impl StructIndexForAttributeTypeIterator {
-   pub(crate) fn new(
-       snapshot: &impl ReadableSnapshot,
-       vertex_generator: &ThingVertexGenerator,
-       attribute_type: AttributeType,
-       path_to_field: &[StructFieldIDUInt],
-       value: Value<'_>,
-   ) -> Result<Self, Box<ConceptReadError>> {
-       let prefix = StructIndexEntry::build_prefix_typeid_path_value(
-           snapshot,
-           vertex_generator,
-           path_to_field,
-           &value,
-           &attribute_type.vertex(),
-       )
-           .map_err(|source| Box::new(ConceptReadError::SnapshotIterate { source }))?;
-       let iterator = snapshot
-           .iterate_range(&KeyRange::new_within(prefix.clone(), Prefix::IndexValueToStruct.fixed_width_keys()), StorageCounters::DISABLED);
-       Ok(Self { prefix, iterator } )
-   }
+    pub(crate) fn new(
+        snapshot: &impl ReadableSnapshot,
+        vertex_generator: &ThingVertexGenerator,
+        attribute_type: AttributeType,
+        path_to_field: &[StructFieldIDUInt],
+        value: Value<'_>,
+    ) -> Result<Self, Box<ConceptReadError>> {
+        let prefix = StructIndexEntry::build_prefix_typeid_path_value(
+            snapshot,
+            vertex_generator,
+            path_to_field,
+            &value,
+            &attribute_type.vertex(),
+        )
+        .map_err(|source| Box::new(ConceptReadError::SnapshotIterate { source }))?;
+        let iterator = snapshot.iterate_range(
+            &KeyRange::new_within(prefix.clone(), Prefix::IndexValueToStruct.fixed_width_keys()),
+            StorageCounters::DISABLED,
+        );
+        Ok(Self { prefix, iterator })
+    }
 }
 
 impl LendingIterator for StructIndexForAttributeTypeIterator {
     type Item<'a> = Result<Attribute, Box<ConceptReadError>>;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
-        self.iterator
-            .next()
-            .map(|result| {
-                result.map(|(key, _)| {
+        self.iterator.next().map(|result| {
+            result
+                .map(|(key, _)| {
                     Attribute::new(
                         StructIndexEntry::new(StructIndexEntryKey::new(key.into_bytes()), None).attribute_vertex(),
                     )
                 })
-                    .map_err(|err| Box::new(ConceptReadError::SnapshotIterate { source: err }))
-            })
+                .map_err(|err| Box::new(ConceptReadError::SnapshotIterate { source: err }))
+        })
     }
 }
 
@@ -75,7 +82,7 @@ impl Seekable<Attribute> for Peekable<StructIndexForAttributeTypeIterator> {
         // use simple looping seek for now...
         while let Some(Ok(attribute)) = self.peek() {
             if attribute.cmp(target) == Ordering::Less {
-                continue
+                continue;
             } else {
                 break;
             }

@@ -6,9 +6,6 @@
 
 use std::sync::Arc;
 
-use itertools::Itertools;
-use macro_rules_attribute::apply;
-
 use concept::{
     error::ConceptWriteError,
     thing::{
@@ -17,13 +14,15 @@ use concept::{
     },
     type_::{attribute_type::AttributeType, OwnerAPI},
 };
+use itertools::Itertools;
+use macro_rules_attribute::apply;
 use resource::profile::StorageCounters;
 
 use crate::{
-    Context, generic_step,
-    params,
+    generic_step, params,
     params::check_boolean,
     transaction_context::{with_read_tx, with_write_tx},
+    Context,
 };
 
 pub(super) fn object_set_has_impl(
@@ -78,7 +77,12 @@ fn object_unset_has_ordered_impl(
             .get_attribute_type(tx.snapshot.as_ref(), &attribute_type_label.into_typedb())
             .unwrap()
             .unwrap();
-        object.unset_has_ordered(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, attribute_type, StorageCounters::DISABLED)
+        object.unset_has_ordered(
+            Arc::get_mut(&mut tx.snapshot).unwrap(),
+            &tx.thing_manager,
+            attribute_type,
+            StorageCounters::DISABLED,
+        )
     })
 }
 
@@ -289,7 +293,13 @@ async fn object_get_has_type(
             .unwrap()
             .unwrap();
         object
-            .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, &.., StorageCounters::DISABLED)
+            .get_has_type_unordered(
+                tx.snapshot.as_ref(),
+                &tx.thing_manager,
+                attribute_type,
+                &..,
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .map(|res| {
                 let (attribute, _count) = res.unwrap();
@@ -325,7 +335,13 @@ async fn object_get_has_with_annotations(
             .into_iter()
             .flat_map(|attribute_type| {
                 object
-                    .get_has_type_unordered(tx.snapshot.as_ref(), &tx.thing_manager, attribute_type, &..,StorageCounters::DISABLED)
+                    .get_has_type_unordered(
+                        tx.snapshot.as_ref(),
+                        &tx.thing_manager,
+                        attribute_type,
+                        &..,
+                        StorageCounters::DISABLED,
+                    )
                     .unwrap()
                     .map(|res| {
                         let (attribute, _count) = res.unwrap();

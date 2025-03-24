@@ -9,8 +9,10 @@ use std::{path::Path, sync::Arc};
 use bytes::byte_array::ByteArray;
 use durability::wal::WAL;
 use lending_iterator::LendingIterator;
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::{CommitProfile, StorageCounters};
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::{CommitProfile, StorageCounters},
+};
 use storage::{
     durability_client::{DurabilityClient, WALClient},
     isolation_manager::IsolationConflict,
@@ -64,7 +66,8 @@ fn commits_isolated() {
     snapshot_1.put_val(key_3.clone(), value_3.clone());
     snapshot_1.commit(&mut CommitProfile::DISABLED).unwrap();
 
-    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_2.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
+    let get: Option<ByteArray<BUFFER_KEY_INLINE>> =
+        snapshot_2.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
     assert!(get.is_none());
     let prefix: StorageKey<'_, BUFFER_KEY_INLINE> =
         StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::copy(&[0x0_u8])));
@@ -73,7 +76,8 @@ fn commits_isolated() {
     assert_eq!(retrieved_count, 2);
 
     let snapshot_3 = storage.open_snapshot_read();
-    let get: Option<ByteArray<BUFFER_KEY_INLINE>> = snapshot_3.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
+    let get: Option<ByteArray<BUFFER_KEY_INLINE>> =
+        snapshot_3.get(StorageKeyReference::from(&key_3), StorageCounters::DISABLED).unwrap();
     assert!(matches!(get, Some(_value_3)));
     let retrieved_count = snapshot_3.iterate_range(&range, StorageCounters::DISABLED).count();
     assert_eq!(retrieved_count, 3);
@@ -139,8 +143,20 @@ fn g0_dirty_writes() {
     match result_2 {
         Ok(_) => {
             let reader_after_2 = storage.clone().open_snapshot_read();
-            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap(), *value_12);
-            assert_eq!(*reader_after_2.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap(), *value_22);
+            assert_eq!(
+                *reader_after_2
+                    .get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED)
+                    .unwrap()
+                    .unwrap(),
+                *value_12
+            );
+            assert_eq!(
+                *reader_after_2
+                    .get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED)
+                    .unwrap()
+                    .unwrap(),
+                *value_22
+            );
             reader_after_2.close_resources();
         }
         Err(_) => panic!(),
@@ -152,8 +168,14 @@ fn g0_dirty_writes() {
 
     if result_1.is_ok() {
         let reader_after_1 = storage.clone().open_snapshot_read();
-        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap(), *value_11);
-        assert_eq!(*reader_after_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap(), *value_21);
+        assert_eq!(
+            *reader_after_1.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap(),
+            *value_11
+        );
+        assert_eq!(
+            *reader_after_1.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap(),
+            *value_21
+        );
         // reader_after_1.close();
     }
 }
@@ -270,7 +292,8 @@ fn p4_g_cursor_lost_update() {
 
     if result_1.is_ok() && result_2.is_ok() {
         let snapshot_verify = storage.open_snapshot_read();
-        let read_verify = snapshot_verify.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap();
+        let read_verify =
+            snapshot_verify.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap();
         fails_without_serializability!(2 == read_verify[0]); // This does fail
     }
 }
@@ -348,7 +371,8 @@ fn g2_item_write_skew_disjoint_read() {
 
     assert!(result_1.is_ok() && result_2.is_ok());
     let reader_after = storage.open_snapshot_read();
-    let sum = reader_after.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap()[0]
+    let sum = reader_after.get::<128>(StorageKeyReference::from(&key_1), StorageCounters::DISABLED).unwrap().unwrap()
+        [0]
         + reader_after.get::<128>(StorageKeyReference::from(&key_2), StorageCounters::DISABLED).unwrap().unwrap()[0];
     fails_without_serializability!(sum <= 1);
 }

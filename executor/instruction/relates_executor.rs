@@ -11,29 +11,27 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
-use answer::{Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::RelatesInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{relation_type::RelationType, role_type::RoleType, type_manager::TypeManager},
 };
+use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, Peekable};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        FilterFn,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, relates_reverse_executor::RelatesReverseExecutor, tuple::{relates_to_tuple_relation_role, relates_to_tuple_role_relation, RelatesToTupleFn, TuplePositions}, type_from_row_or_annotations, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        relates_reverse_executor::RelatesReverseExecutor,
+        tuple::{relates_to_tuple_relation_role, relates_to_tuple_role_relation, RelatesToTupleFn, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct RelatesExecutor {
     relates: ir::pattern::constraint::Relates<ExecutorVariable>,
@@ -53,7 +51,7 @@ impl fmt::Debug for RelatesExecutor {
 }
 
 pub(super) type RelatesTupleIterator<I> =
-NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<RelatesFilterMapFn>>, RelatesToTupleFn>>>;
+    NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<RelatesFilterMapFn>>, RelatesToTupleFn>>>;
 
 pub(super) type RelatesUnboundedSortedRelation = RelatesTupleIterator<
     iter::Map<
@@ -152,8 +150,7 @@ impl RelatesExecutor {
                     .map(|relation| self.get_relates_for_relation(snapshot, type_manager, *relation))
                     .try_collect()?;
                 let iterator = relates.into_iter().flatten().map(Ok as _);
-                let as_tuples =
-                    iterator.filter_map(filter_for_row).map(relates_to_tuple_relation_role as _);
+                let as_tuples = iterator.filter_map(filter_for_row).map(relates_to_tuple_relation_role as _);
                 let as_tuples: RelatesUnboundedSortedRelation = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::RelatesUnbounded(SortedTupleIterator::new(
                     as_tuples,

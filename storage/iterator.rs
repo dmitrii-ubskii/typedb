@@ -73,7 +73,7 @@ impl MVCCRangeIterator {
                 match mvcc_key.operation() {
                     StorageOperation::Insert => {
                         return true;
-                    },
+                    }
                     StorageOperation::Delete => {
                         self.storage_counters.increment_advance_mvcc_deleted();
                         self.iterator.next();
@@ -100,7 +100,7 @@ impl LendingIterator for MVCCRangeIterator {
                     Ok(kv) => {
                         self.storage_counters.increment_advance_mvcc_visible();
                         kv
-                    },
+                    }
                     Err(error) => {
                         return Some(Err(MVCCReadError::Keyspace {
                             storage_name: self.storage_name.clone(),
@@ -109,11 +109,14 @@ impl LendingIterator for MVCCRangeIterator {
                     }
                 };
                 Some(Ok((
-                    StorageKeyReference::new_raw(self.keyspace_id, MVCCKey::wrap_slice(key).into_key().unwrap_reference()),
+                    StorageKeyReference::new_raw(
+                        self.keyspace_id,
+                        MVCCKey::wrap_slice(key).into_key().unwrap_reference(),
+                    ),
                     value,
                 )))
             } else {
-                return None
+                return None;
             }
         }
     }

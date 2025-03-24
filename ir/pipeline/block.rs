@@ -6,18 +6,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use itertools::Itertools;
-use typeql::common::Span;
-
 use answer::variable::Variable;
+use itertools::Itertools;
 use structural_equality::StructuralEquality;
+use typeql::common::Span;
 
 use crate::{
     pattern::{
         conjunction::{Conjunction, ConjunctionBuilder},
         constraint::Constraint,
-        Scope,
-        ScopeId, variable_category::VariableCategory,
+        variable_category::VariableCategory,
+        Scope, ScopeId,
     },
     pipeline::{ParameterRegistry, VariableCategorySource, VariableRegistry},
     RepresentationError,

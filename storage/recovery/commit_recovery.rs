@@ -74,7 +74,7 @@ pub fn load_commit_data_from(
             }
         }
         if recovered_commits.len() > limit {
-            return Ok(recovered_commits)
+            return Ok(recovered_commits);
         }
     }
     Ok(recovered_commits)

@@ -12,23 +12,23 @@ use std::{collections::BTreeSet, fmt};
 use bytes::{byte_array::ByteArray, Bytes};
 use concept::{
     error::ConceptReadError,
-    thing::{attribute::Attribute, entity::Entity, object::Object, relation::Relation},
+    thing::{attribute::Attribute, entity::Entity, object::Object, relation::Relation, ThingAPI},
     type_::{
-        attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType, ObjectTypeAPI,
-        relation_type::RelationType, role_type::RoleType, type_manager::TypeManager, TypeAPI,
+        attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType, relation_type::RelationType,
+        role_type::RoleType, type_manager::TypeManager, ObjectTypeAPI, TypeAPI,
     },
 };
-use concept::thing::ThingAPI;
 use encoding::{
-    AsBytes,
-    graph::type_::{
-        Kind,
-        vertex::{TypeVertex, TypeVertexEncoding},
+    graph::{
+        thing::vertex_object::{ObjectID, ObjectVertex},
+        type_::{
+            vertex::{TypeID, TypeVertex, TypeVertexEncoding},
+            Kind,
+        },
     },
     value::{label::Label, value::Value},
+    AsBytes,
 };
-use encoding::graph::thing::vertex_object::{ObjectID, ObjectVertex};
-use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use storage::snapshot::ReadableSnapshot;
@@ -66,7 +66,7 @@ pub static MIN_TYPE_STATIC: Type = Type::Entity(EntityType::MIN);
 
 impl Type {
     const MIN: Self = Self::Entity(EntityType::MIN);
-    
+
     pub fn kind(&self) -> Kind {
         match self {
             Type::Entity(_) => Kind::Entity,
@@ -306,7 +306,7 @@ pub static MIN_THING_STATIC: Thing = Thing::Entity(Entity::MIN);
 
 impl Thing {
     const MIN: Self = Self::Entity(Entity::MIN);
-    
+
     pub fn type_(&self) -> Type {
         match self {
             Thing::Entity(entity) => Type::Entity(entity.type_()),
@@ -318,12 +318,12 @@ impl Thing {
     pub fn as_object(&self) -> Object {
         self.get_object().unwrap()
     }
-    
+
     pub fn get_object(&self) -> Option<Object> {
         match *self {
             Thing::Entity(entity) => Some(Object::Entity(entity)),
             Thing::Relation(relation) => Some(Object::Relation(relation)),
-            _ => None
+            _ => None,
         }
     }
 
@@ -337,11 +337,11 @@ impl Thing {
     pub fn as_attribute(&self) -> &Attribute {
         self.get_attribute().unwrap()
     }
-    
+
     pub fn get_attribute(&self) -> Option<&Attribute> {
         match self {
             Thing::Attribute(attribute) => Some(attribute),
-            _ => None
+            _ => None,
         }
     }
 
@@ -352,7 +352,7 @@ impl Thing {
             Thing::Attribute(attribute) => Thing::Attribute(attribute.next_possible()),
         }
     }
-    
+
     pub fn minimum_thing() -> Thing {
         Thing::Entity(Entity::new(ObjectVertex::build_entity(TypeID::MIN, ObjectID::MIN)))
     }

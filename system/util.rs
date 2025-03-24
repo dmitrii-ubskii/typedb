@@ -9,8 +9,8 @@ pub mod transaction_util {
 
     use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
     use database::{
-        Database,
         transaction::{DataCommitError, SchemaCommitError, TransactionRead, TransactionSchema, TransactionWrite},
+        Database,
     };
     use function::function_manager::FunctionManager;
     use options::TransactionOptions;
@@ -117,21 +117,20 @@ pub mod transaction_util {
 pub mod query_util {
     use std::{collections::HashMap, sync::Arc};
 
-    use typeql::query::Pipeline;
-
     use answer::variable_value::VariableValue;
     use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
     use database::transaction::TransactionRead;
     use executor::{
-        ExecutionInterrupt,
         pipeline::{
-            PipelineExecutionError,
             stage::{ExecutionContext, StageIterator},
+            PipelineExecutionError,
         },
+        ExecutionInterrupt,
     };
     use function::function_manager::FunctionManager;
     use query::query_manager::QueryManager;
     use storage::{durability_client::WALClient, snapshot::WriteSnapshot};
+    use typeql::query::Pipeline;
 
     use crate::util::answer_util::collect_answer;
 
@@ -232,7 +231,11 @@ pub mod answer_util {
         let var_ = row.get(var).unwrap();
         let attr = var_.as_thing().as_attribute();
         let attr_ref = attr;
-        let val = attr_ref.get_value(&*tx.snapshot, &tx.thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string().to_string();
+        let val = attr_ref
+            .get_value(&*tx.snapshot, &tx.thing_manager, StorageCounters::DISABLED)
+            .unwrap()
+            .unwrap_string()
+            .to_string();
         val
     }
 }

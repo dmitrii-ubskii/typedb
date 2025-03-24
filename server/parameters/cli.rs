@@ -4,7 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 use clap::{ArgAction, Parser};
-
 use resource::constants::server::{MONITORING_DEFAULT_PORT, VERSION};
 
 /// TypeDB CE usage

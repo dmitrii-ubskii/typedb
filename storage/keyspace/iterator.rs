@@ -48,7 +48,11 @@ impl KeyspaceRangeIterator {
             }
         };
 
-        let mut iterator = raw_iterator::DBIterator::new_from(iterpool.get_iterator(keyspace), start_prefix.as_ref(), storage_counters);
+        let mut iterator = raw_iterator::DBIterator::new_from(
+            iterpool.get_iterator(keyspace),
+            start_prefix.as_ref(),
+            storage_counters,
+        );
         if matches!(range.start(), RangeStart::ExcludeFirstWithPrefix(_)) {
             Self::may_skip_start(&mut iterator, range.start().get_value());
         }

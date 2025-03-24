@@ -10,16 +10,15 @@ use encoding::{
     error::{EncodingError, EncodingError::UnexpectedPrefix},
     graph::{
         type_::{
+            vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertex, TypeVertexEncoding},
             Kind,
-            vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
         Typed,
     },
     layout::prefix::{Prefix, Prefix::VertexRelationType},
-    Prefixed,
     value::label::Label,
+    Prefixed,
 };
-use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
@@ -30,7 +29,6 @@ use storage::{
 
 use crate::{
     concept_iterator,
-    ConceptAPI,
     error::{ConceptReadError, ConceptWriteError},
     thing::{relation::Relation, thing_manager::ThingManager},
     type_::{
@@ -38,15 +36,16 @@ use crate::{
             Annotation, AnnotationAbstract, AnnotationCascade, AnnotationCategory, AnnotationError, DefaultFrom,
         },
         attribute_type::AttributeType,
-        Capability,
         constraint::{CapabilityConstraint, Constraint, TypeConstraint},
-        KindAPI,
         object_type::ObjectType,
-        ObjectTypeAPI,
-        Ordering,
-        OwnerAPI,
-        owns::Owns, PlayerAPI, plays::Plays, relates::Relates, role_type::RoleType, ThingTypeAPI, type_manager::TypeManager, TypeAPI,
+        owns::Owns,
+        plays::Plays,
+        relates::Relates,
+        role_type::RoleType,
+        type_manager::TypeManager,
+        Capability, KindAPI, ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI, ThingTypeAPI, TypeAPI,
     },
+    ConceptAPI,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]

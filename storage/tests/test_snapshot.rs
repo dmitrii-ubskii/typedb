@@ -9,8 +9,10 @@
 use bytes::byte_array::ByteArray;
 use lending_iterator::LendingIterator;
 use logger::result::ResultExt;
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::{CommitProfile, StorageCounters};
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::{CommitProfile, StorageCounters},
+};
 use storage::{
     key_range::KeyRange,
     key_value::{StorageKey, StorageKeyArray},
@@ -42,8 +44,14 @@ fn snapshot_buffered_put_get() {
     snapshot.put(key_3);
     snapshot.put(key_4);
 
-    assert_eq!(snapshot.get(StorageKey::Array(key_1).as_reference(), StorageCounters::DISABLED).unwrap(), Some(value_1));
-    assert_eq!(snapshot.get::<48>(StorageKey::Array(key_2).as_reference(), StorageCounters::DISABLED).unwrap(), Some(ByteArray::empty()));
+    assert_eq!(
+        snapshot.get(StorageKey::Array(key_1).as_reference(), StorageCounters::DISABLED).unwrap(),
+        Some(value_1)
+    );
+    assert_eq!(
+        snapshot.get::<48>(StorageKey::Array(key_2).as_reference(), StorageCounters::DISABLED).unwrap(),
+        Some(ByteArray::empty())
+    );
 
     let key_5 = StorageKeyArray::<BUFFER_KEY_INLINE>::from((Keyspace, [0xff, 0xff, 0xff]));
     assert_eq!(snapshot.get::<48>(StorageKey::Array(key_5).as_reference(), StorageCounters::DISABLED).unwrap(), None);
@@ -170,26 +178,41 @@ fn snapshot_read_buffered_delete_of_persisted_key() {
 
     {
         let mut snapshot = storage.clone().open_snapshot_write();
-        assert!(snapshot.get::<48>(StorageKey::Array(key_1.clone()).as_reference(), StorageCounters::DISABLED).unwrap().is_some());
-        assert!(snapshot.get::<48>(StorageKey::Array(key_2.clone()).as_reference(), StorageCounters::DISABLED).unwrap().is_some());
+        assert!(snapshot
+            .get::<48>(StorageKey::Array(key_1.clone()).as_reference(), StorageCounters::DISABLED)
+            .unwrap()
+            .is_some());
+        assert!(snapshot
+            .get::<48>(StorageKey::Array(key_2.clone()).as_reference(), StorageCounters::DISABLED)
+            .unwrap()
+            .is_some());
         assert_eq!(
             2,
             snapshot
-                .iterate_range(&KeyRange::new_within(
-                    StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::inline([0x0], 1))),
-                    false
-                ), StorageCounters::DISABLED)
+                .iterate_range(
+                    &KeyRange::new_within(
+                        StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::inline([0x0], 1))),
+                        false
+                    ),
+                    StorageCounters::DISABLED
+                )
                 .count()
         );
         snapshot.delete(key_2.clone());
-        assert!(snapshot.get::<48>(StorageKey::Array(key_2.clone()).as_reference(), StorageCounters::DISABLED).unwrap().is_none());
+        assert!(snapshot
+            .get::<48>(StorageKey::Array(key_2.clone()).as_reference(), StorageCounters::DISABLED)
+            .unwrap()
+            .is_none());
         assert_eq!(
             1,
             snapshot
-                .iterate_range(&KeyRange::new_within(
-                    StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::inline([0x0], 1))),
-                    false
-                ), StorageCounters::DISABLED)
+                .iterate_range(
+                    &KeyRange::new_within(
+                        StorageKey::Array(StorageKeyArray::new(Keyspace, ByteArray::inline([0x0], 1))),
+                        false
+                    ),
+                    StorageCounters::DISABLED
+                )
                 .count()
         );
         snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
@@ -216,6 +239,11 @@ fn snapshot_delete_reinserted() {
     snapshot_1.commit(&mut CommitProfile::DISABLED).unwrap();
 
     let snapshot_2 = storage.open_snapshot_read();
-    assert_eq!(snapshot_2.get::<BUFFER_KEY_INLINE>(StorageKey::Array(key_1).as_reference(), StorageCounters::DISABLED).unwrap(), None);
+    assert_eq!(
+        snapshot_2
+            .get::<BUFFER_KEY_INLINE>(StorageKey::Array(key_1).as_reference(), StorageCounters::DISABLED)
+            .unwrap(),
+        None
+    );
     snapshot_2.close_resources();
 }

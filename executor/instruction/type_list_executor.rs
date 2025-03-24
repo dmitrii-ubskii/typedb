@@ -6,25 +6,23 @@
 
 use std::{collections::HashMap, fmt, iter, vec};
 
-use itertools::Itertools;
-
-use answer::{Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::TypeListInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
-use lending_iterator::{AsLendingIterator, };
+use itertools::Itertools;
+use lending_iterator::AsLendingIterator;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker,
-        FilterFn,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, tuple::{TuplePositions, type_to_tuple, TypeToTupleFn}, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        tuple::{type_to_tuple, TuplePositions, TypeToTupleFn},
+        Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 #[derive(Debug)]
 pub(crate) struct TypeListExecutor {
@@ -80,7 +78,11 @@ impl TypeListExecutor {
         let iterator = self.types.clone().into_iter().map(Ok as _);
         let as_tuples = iterator.filter_map(filter_for_row).map(type_to_tuple as _);
         let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
-        Ok(TupleIterator::Type(SortedTupleIterator::new(lending_tuples, self.tuple_positions.clone(), &self.variable_modes)))
+        Ok(TupleIterator::Type(SortedTupleIterator::new(
+            lending_tuples,
+            self.tuple_positions.clone(),
+            &self.variable_modes,
+        )))
     }
 }
 

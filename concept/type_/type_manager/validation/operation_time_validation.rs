@@ -6,8 +6,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use itertools::Itertools;
-
 use encoding::{
     graph::{
         definition::definition_key::DefinitionKey,
@@ -15,6 +13,7 @@ use encoding::{
     },
     value::{label::Label, value_type::ValueType},
 };
+use itertools::Itertools;
 use primitive::maybe_owns::MaybeOwns;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
@@ -24,8 +23,8 @@ use crate::{
     thing::{
         object::ObjectAPI,
         thing_manager::{
+            validation::{validation::DataValidation, DataValidationError},
             ThingManager,
-            validation::{DataValidationError, validation::DataValidation},
         },
     },
     type_::{
@@ -34,33 +33,33 @@ use crate::{
             AnnotationRegex, AnnotationUnique, AnnotationValues,
         },
         attribute_type::{AttributeType, AttributeTypeAnnotation},
-        Capability,
         constraint::{
-            CapabilityConstraint, Constraint, ConstraintDescription,
-            ConstraintScope, filter_by_constraint_category, filter_by_scope,
-            filter_out_operation_time_unchecked_constraints, get_abstract_constraints, get_distinct_constraints, get_operation_time_checked_constraints,
-            get_range_constraints, get_regex_constraints, get_values_constraints, type_get_constraints_closest_source, TypeConstraint,
+            filter_by_constraint_category, filter_by_scope, filter_out_operation_time_unchecked_constraints,
+            get_abstract_constraints, get_distinct_constraints, get_operation_time_checked_constraints,
+            get_range_constraints, get_regex_constraints, get_values_constraints, type_get_constraints_closest_source,
+            CapabilityConstraint, Constraint, ConstraintDescription, ConstraintScope, TypeConstraint,
         },
         entity_type::EntityType,
-        KindAPI,
         object_type::ObjectType,
-        Ordering,
-        OwnerAPI,
         owns::{Owns, OwnsAnnotation},
-        PlayerAPI,
-        plays::Plays, relates::{Relates, RelatesAnnotation}, relation_type::RelationType, role_type::RoleType, type_manager::{
+        plays::Plays,
+        relates::{Relates, RelatesAnnotation},
+        relation_type::RelationType,
+        role_type::RoleType,
+        type_manager::{
             type_reader::TypeReader,
-            TypeManager,
             validation::{
-                SchemaValidationError,
                 validation::{
                     get_label_or_schema_err, get_opt_label_or_schema_err, validate_role_name_uniqueness_non_transitive,
                     validate_role_type_supertype_ordering_match, validate_sibling_owns_ordering_match_for_type,
                     validate_type_declared_constraints_narrowing_of_supertype_constraints,
                     validate_type_supertype_abstractness,
                 },
+                SchemaValidationError,
             },
-        }, TypeAPI,
+            TypeManager,
+        },
+        Capability, KindAPI, Ordering, OwnerAPI, PlayerAPI, TypeAPI,
     },
 };
 
@@ -188,7 +187,7 @@ macro_rules! cannot_change_supertype_as_capability_with_existing_instances_is_lo
             thing_manager: &ThingManager,
             subtype: $object_type,
             supertype: Option<$object_type>,
-            storage_counters: StorageCounters
+            storage_counters: StorageCounters,
         ) -> Result<(), Box<SchemaValidationError>> {
             let lost_capabilities = $get_lost_capabilities_func(snapshot, subtype.clone(), supertype.clone())?;
 
@@ -621,13 +620,12 @@ macro_rules! new_annotation_constraints_compatible_with_type_and_sub_instances_v
             )
             .collect();
 
-            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters).map_err(
-                |typedb_source| {
+            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters)
+                .map_err(|typedb_source| {
                     Box::new(SchemaValidationError::CannotSetAnnotationAsExistingInstancesViolateItsConstraint {
                         typedb_source,
                     })
-                },
-            )
+                })
         }
     };
 }
@@ -671,15 +669,14 @@ macro_rules! updated_constraints_compatible_with_type_and_sub_instances_on_super
             )
             .collect();
 
-            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters).map_err(
-                |typedb_source| {
+            $validation_func(snapshot, type_manager, thing_manager, &affected_types, &constraints, storage_counters)
+                .map_err(|typedb_source| {
                     Box::new(
                         SchemaValidationError::CannotChangeSupertypeAsUpdatedConstraintIsViolatedByExistingInstances {
                             typedb_source,
                         },
                     )
-                },
-            )
+                })
         }
     };
 }
@@ -938,7 +935,7 @@ impl OperationTimeValidation {
                 thing_manager,
                 subtype,
                 subtype_transitive_value_type,
-                storage_counters.clone()
+                storage_counters.clone(),
             ),
             (Some(_), None, None) => Ok(()),
             (Some(_), Some(_), None) => Ok(()),
@@ -996,7 +993,7 @@ impl OperationTimeValidation {
                                 thing_manager,
                                 attribute_type,
                                 Some(value_type),
-                                storage_counters.clone()
+                                storage_counters.clone(),
                             ),
                         }
                     }
@@ -2171,7 +2168,7 @@ impl OperationTimeValidation {
                         thing_manager,
                         type_,
                         value_type.clone(),
-                        storage_counters.clone()
+                        storage_counters.clone(),
                     )?;
                 }
             }
@@ -2209,7 +2206,13 @@ impl OperationTimeValidation {
                     attribute_type,
                     None,
                 )?;
-                Self::validate_no_instances_to_lose_value_type(snapshot, type_manager, thing_manager, attribute_type, storage_counters)
+                Self::validate_no_instances_to_lose_value_type(
+                    snapshot,
+                    type_manager,
+                    thing_manager,
+                    attribute_type,
+                    storage_counters,
+                )
             }
             None => Ok(()),
         }
@@ -2334,11 +2337,16 @@ impl OperationTimeValidation {
                                 }
                                 Some(sub_subtype_constraint_source) => {
                                     if lost_source == sub_subtype_constraint_source {
-                                        let type_has_instances =
-                                            Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
-                                                .map_err(|source| {
-                                                Box::new(SchemaValidationError::ConceptRead { typedb_source: source })
-                                            })?;
+                                        let type_has_instances = Self::has_instances_of_type(
+                                            snapshot,
+                                            type_manager,
+                                            thing_manager,
+                                            type_,
+                                            storage_counters.clone(),
+                                        )
+                                        .map_err(|source| {
+                                            Box::new(SchemaValidationError::ConceptRead { typedb_source: source })
+                                        })?;
                                         if type_has_instances {
                                             return Err(Box::new(SchemaValidationError::ChangingAttributeSupertypeLeadsToImplicitIndependentAnnotationLossAndUnexpectedDataLoss{
                                                 attribute: get_label_or_schema_err(snapshot, type_manager, attribute_type)?,
@@ -2682,8 +2690,9 @@ impl OperationTimeValidation {
         storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         for_type_and_subtypes_transitive!(snapshot, type_manager, attribute_type, |type_: AttributeType| {
-            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
-                .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
+            let has_instances =
+                Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
+                    .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
             if has_instances {
                 Err(Box::new(SchemaValidationError::CannotChangeValueTypeWithExistingInstances {
@@ -2704,8 +2713,9 @@ impl OperationTimeValidation {
         storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
         for_type_and_subtypes_transitive!(snapshot, type_manager, attribute_type, |type_: AttributeType| {
-            let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
-                .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
+            let has_instances =
+                Self::has_instances_of_type(snapshot, type_manager, thing_manager, type_, storage_counters.clone())
+                    .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
             if has_instances {
                 Err(Box::new(SchemaValidationError::CannotUnsetValueTypeWithExistingInstances {
@@ -2725,8 +2735,9 @@ impl OperationTimeValidation {
         role_type: RoleType,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
-        let has_instances = Self::has_instances_of_type(snapshot, type_manager, thing_manager, role_type, storage_counters)
-            .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
+        let has_instances =
+            Self::has_instances_of_type(snapshot, type_manager, thing_manager, role_type, storage_counters)
+                .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
         if has_instances {
             Err(Box::new(SchemaValidationError::CannotSetRoleOrderingWithExistingInstances {
@@ -2744,8 +2755,9 @@ impl OperationTimeValidation {
         owns: Owns,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<SchemaValidationError>> {
-        let has_instances = Self::has_instances_of_owns(snapshot, thing_manager, owns.owner(), owns.attribute(), storage_counters)
-            .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
+        let has_instances =
+            Self::has_instances_of_owns(snapshot, thing_manager, owns.owner(), owns.attribute(), storage_counters)
+                .map_err(|source| Box::new(SchemaValidationError::ConceptRead { typedb_source: source }))?;
 
         if has_instances {
             Err(Box::new(SchemaValidationError::CannotSetOwnsOrderingWithExistingInstances {
@@ -2808,7 +2820,13 @@ impl OperationTimeValidation {
 
         let mut owner_iterator = thing_manager.get_objects_in(snapshot, owner_type, storage_counters.clone());
         while let Some(instance) = owner_iterator.next().transpose()? {
-            let mut iterator = instance.get_has_type_unordered(snapshot, thing_manager, attribute_type, &.., storage_counters.clone())?;
+            let mut iterator = instance.get_has_type_unordered(
+                snapshot,
+                thing_manager,
+                attribute_type,
+                &..,
+                storage_counters.clone(),
+            )?;
 
             if iterator.next().is_some() {
                 has_instances = true;
@@ -2830,7 +2848,8 @@ impl OperationTimeValidation {
 
         let mut player_iterator = thing_manager.get_objects_in(snapshot, player_type, storage_counters.clone());
         while let Some(instance) = player_iterator.next().transpose()? {
-            let mut iterator = instance.get_relations_by_role(snapshot, thing_manager, role_type, storage_counters.clone());
+            let mut iterator =
+                instance.get_relations_by_role(snapshot, thing_manager, role_type, storage_counters.clone());
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2852,7 +2871,8 @@ impl OperationTimeValidation {
 
         let mut relation_iterator = thing_manager.get_relations_in(snapshot, relation_type, storage_counters.clone());
         while let Some(instance) = relation_iterator.next().transpose()? {
-            let mut iterator = instance.get_players_role_type(snapshot, thing_manager, role_type, storage_counters.clone());
+            let mut iterator =
+                instance.get_players_role_type(snapshot, thing_manager, role_type, storage_counters.clone());
 
             if iterator.next().transpose()?.is_some() {
                 has_instances = true;
@@ -2929,7 +2949,8 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
+            let mut relation_iterator =
+                thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
             if let Some(res) = relation_iterator.next() {
                 if let Err(source) = res {
                     return Err(Box::new(DataValidationError::ConceptRead { typedb_source: source }));
@@ -3192,7 +3213,8 @@ impl OperationTimeValidation {
 
                 // We assume that it's cheaper to open an iterator once and skip all the
                 // non-interesting interfaces rather creating multiple iterators
-                let has_attribute_iterator = object.get_has_unordered(snapshot, thing_manager, storage_counters.clone())
+                let has_attribute_iterator = object
+                    .get_has_unordered(snapshot, thing_manager, storage_counters.clone())
                     .map_err(|err| DataValidationError::ConceptRead { typedb_source: err })?;
                 for has_count in has_attribute_iterator {
                     let (has, count) = has_count
@@ -3418,7 +3440,7 @@ impl OperationTimeValidation {
         role_types: &HashSet<RoleType>,
         new_role_supertypes: &HashMap<RoleType, Option<RoleType>>,
         constraints: &HashSet<CapabilityConstraint<Plays>>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<DataValidationError>> {
         if constraints.is_empty() {
             return Ok(());
@@ -3546,7 +3568,8 @@ impl OperationTimeValidation {
         );
 
         for relation_type in relation_types {
-            let mut relation_iterator = thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
+            let mut relation_iterator =
+                thing_manager.get_relations_in(snapshot, *relation_type, storage_counters.clone());
             while let Some(relation) = relation_iterator
                 .next()
                 .transpose()

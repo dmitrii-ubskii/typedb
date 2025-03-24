@@ -11,25 +11,23 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
-use answer::{Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Type};
 use compiler::{executable::match_::instructions::type_::SubInstruction, ExecutorVariable};
 use concept::error::ConceptReadError;
-use lending_iterator::{AsLendingIterator, };
+use itertools::Itertools;
+use lending_iterator::AsLendingIterator;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        FilterFn, FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, SubToTupleFn, TuplePositions}, type_from_row_or_annotations, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        tuple::{sub_to_tuple_sub_super, sub_to_tuple_super_sub, SubToTupleFn, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct SubExecutor {
     sub: ir::pattern::constraint::Sub<ExecutorVariable>,
@@ -48,7 +46,8 @@ impl fmt::Debug for SubExecutor {
     }
 }
 
-pub(super) type SubTupleIterator<I> = NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<SubFilterMapFn>>, SubToTupleFn>>>;
+pub(super) type SubTupleIterator<I> =
+    NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<SubFilterMapFn>>, SubToTupleFn>>>;
 
 pub(super) type SubUnboundedSortedSub = SubTupleIterator<vec::IntoIter<Result<(Type, Type), Box<ConceptReadError>>>>;
 pub(super) type SubBoundedSortedSuper = SubTupleIterator<vec::IntoIter<Result<(Type, Type), Box<ConceptReadError>>>>;

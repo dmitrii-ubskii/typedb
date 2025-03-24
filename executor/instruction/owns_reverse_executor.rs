@@ -11,33 +11,31 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
 use answer::Type;
 use compiler::{executable::match_::instructions::type_::OwnsReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{attribute_type::AttributeType, object_type::ObjectType},
 };
+use itertools::Itertools;
 use lending_iterator::{AsLendingIterator, Peekable};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        iterator::{SortedTupleIterator, TupleIterator},
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
         owns_executor::{
-            EXTRACT_ATTRIBUTE, EXTRACT_OWNER, OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator,
-            OwnsVariableValueExtractor,
+            OwnsFilterFn, OwnsFilterMapFn, OwnsTupleIterator, OwnsVariableValueExtractor, EXTRACT_ATTRIBUTE,
+            EXTRACT_OWNER,
         },
-        plays_executor::PlaysExecutor, tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions}, type_from_row_or_annotations, VariableModes,
+        plays_executor::PlaysExecutor,
+        tuple::{owns_to_tuple_attribute_owner, owns_to_tuple_owner_attribute, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct OwnsReverseExecutor {
     owns: ir::pattern::constraint::Owns<ExecutorVariable>,
@@ -178,7 +176,7 @@ impl OwnsReverseExecutor {
                     .map(|object_type| (object_type, attribute_type));
 
                 let iterator = owns.sorted_by_key(|(owner, _)| *owner).map(Ok as _);
-                let as_tuples  = iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
+                let as_tuples = iterator.filter_map(filter_for_row).map(owns_to_tuple_owner_attribute as _);
                 let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
                 Ok(TupleIterator::OwnsReverseBounded(SortedTupleIterator::new(
                     lending_tuples,

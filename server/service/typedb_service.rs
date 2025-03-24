@@ -6,6 +6,13 @@
 
 use std::{net::SocketAddr, pin::Pin, sync::Arc, time::Instant};
 
+use database::database_manager::DatabaseManager;
+use diagnostics::{
+    diagnostics_manager::{run_with_diagnostics, DiagnosticsManager},
+    metrics::ActionKind,
+};
+use error::typedb_error;
+use resource::constants::server::AUTHENTICATOR_USERNAME_FIELD;
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{metadata::MetadataMap, Request, Response, Status, Streaming};
@@ -15,24 +22,12 @@ use typedb_protocol::{
     server_manager::all::{Req, Res},
     transaction::{Client, Server},
 };
+use user::{permission_manager::PermissionManager, user_manager::UserManager};
 use uuid::Uuid;
-
-use database::database_manager::DatabaseManager;
-use diagnostics::{
-    diagnostics_manager::{DiagnosticsManager, run_with_diagnostics},
-    metrics::ActionKind,
-};
-use error::typedb_error;
-use resource::constants::server::{AUTHENTICATOR_USERNAME_FIELD};
-use user::{
-    permission_manager::PermissionManager,
-    user_manager::UserManager,
-};
 
 use crate::{
     authenticator_cache::AuthenticatorCache,
     service::{
-        ConnectionID,
         error::{IntoGRPCStatus, IntoProtocolErrorMessage, ProtocolError},
         request_parser::{users_create_req, users_update_req},
         response_builders::{
@@ -45,6 +40,7 @@ use crate::{
             },
         },
         transaction_service::TransactionService,
+        ConnectionID,
     },
 };
 

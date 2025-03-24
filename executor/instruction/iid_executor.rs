@@ -20,14 +20,13 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker,
-        FilterFn,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator}, tuple::{Tuple, TuplePositions, TupleResult}, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
+        tuple::{Tuple, TuplePositions, TupleResult},
+        Checker, FilterFn, FilterMapUnchangedFn, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct IidExecutor {
     iid: Iid<ExecutorVariable>,
@@ -45,7 +44,8 @@ impl fmt::Debug for IidExecutor {
 
 pub(crate) type IidToTupleFn = fn(Result<VariableValue<'static>, Box<ConceptReadError>>) -> TupleResult<'static>;
 
-pub(super) type IidTupleIterator<I> = NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<IidFilterMapFn>>, IidToTupleFn>>>;
+pub(super) type IidTupleIterator<I> =
+    NaiiveSeekable<AsLendingIterator<iter::Map<iter::FilterMap<I, Box<IidFilterMapFn>>, IidToTupleFn>>>;
 
 pub(super) type IidFilterFn = FilterFn<VariableValue<'static>>;
 pub(super) type IidFilterMapFn = FilterMapUnchangedFn<VariableValue<'static>>;
@@ -124,7 +124,11 @@ impl IidExecutor {
         let iterator = instance.transpose();
         let as_tuples = iterator.into_iter().filter_map(filter_for_row).map(iid_to_tuple as _);
         let lending_tuples = NaiiveSeekable::new(AsLendingIterator::new(as_tuples));
-        Ok(TupleIterator::Iid(SortedTupleIterator::new(lending_tuples, self.tuple_positions.clone(), &self.variable_modes)))
+        Ok(TupleIterator::Iid(SortedTupleIterator::new(
+            lending_tuples,
+            self.tuple_positions.clone(),
+            &self.variable_modes,
+        )))
     }
 }
 

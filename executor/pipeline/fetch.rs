@@ -4,12 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{collections::HashMap, marker::PhantomData, ops::Bound, sync::Arc};
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    ops::Bound,
+    sync::Arc,
+};
 
-use itertools::{Itertools, MinMaxResult};
-
-use answer::{Concept, Thing, variable::Variable, variable_value::VariableValue};
+use answer::{variable::Variable, variable_value::VariableValue, Concept, Thing};
 use compiler::{
     executable::{
         fetch::executable::{
@@ -23,16 +25,17 @@ use compiler::{
 use concept::{
     error::ConceptReadError,
     thing::{
+        has::Has,
         object::{HasIterator, ObjectAPI},
         thing_manager::ThingManager,
     },
     type_::{attribute_type::AttributeType, OwnerAPI, TypeAPI},
 };
-use concept::thing::has::Has;
 use encoding::value::label::Label;
 use error::{typedb_error, unimplemented_feature};
 use ir::{pattern::ParameterID, pipeline::ParameterRegistry};
 use iterator::minmax_or;
+use itertools::{Itertools, MinMaxResult};
 use lending_iterator::LendingIterator;
 use resource::profile::{QueryProfile, StageProfile, StorageCounters};
 use storage::snapshot::ReadableSnapshot;
@@ -41,17 +44,17 @@ use crate::{
     batch::FixedBatch,
     document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode},
     error::ReadExecutionError,
-    ExecutionInterrupt,
     pipeline::{
         pipeline::{Pipeline, PipelineError},
-        PipelineExecutionError,
         stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError,
     },
     read::{
-        pattern_executor::PatternExecutor, QueryPatternSuspensions,
-        step_executor::create_executors_for_function, tabled_functions::TabledFunctions,
+        pattern_executor::PatternExecutor, step_executor::create_executors_for_function,
+        tabled_functions::TabledFunctions, QueryPatternSuspensions,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 
 macro_rules! exactly_one_or_return_err {
@@ -454,7 +457,8 @@ fn execute_attributes_all(
     snapshot: Arc<impl ReadableSnapshot>,
     thing_manager: Arc<ThingManager>,
 ) -> Result<DocumentNode, FetchExecutionError> {
-    let iter = object.get_has_unordered(snapshot.as_ref(), &thing_manager, StorageCounters::DISABLED)
+    let iter = object
+        .get_has_unordered(snapshot.as_ref(), &thing_manager, StorageCounters::DISABLED)
         .map_err(|err| FetchExecutionError::ConceptRead { typedb_source: err })?;
     let mut map: HashMap<Arc<Label>, DocumentNode> = HashMap::new();
     for result in iter {
@@ -537,16 +541,20 @@ fn prepare_attribute_type_has_iterator<'a>(
     attribute_type: AttributeType,
     snapshot: &'a Arc<impl ReadableSnapshot>,
     thing_manager: &'a Arc<ThingManager>,
-) -> Result<impl Iterator<Item=Result<(Has, u64), Box<ConceptReadError>>> + 'a, FetchExecutionError> {
+) -> Result<impl Iterator<Item = Result<(Has, u64), Box<ConceptReadError>>> + 'a, FetchExecutionError> {
     let subtypes = attribute_type
         .get_subtypes_transitive(snapshot.as_ref(), thing_manager.type_manager())
         .map_err(|source| FetchExecutionError::ConceptRead { typedb_source: source })?;
     let iter = Iterator::filter(
-        object.get_has_types_range_unordered(snapshot.as_ref(), thing_manager.as_ref(), StorageCounters::DISABLED)
+        object
+            .get_has_types_range_unordered(snapshot.as_ref(), thing_manager.as_ref(), StorageCounters::DISABLED)
             .map_err(|err| FetchExecutionError::ConceptRead { typedb_source: err })?,
         move |result| {
-            result.as_ref().is_ok_and(|(has, _count)| has.attribute().type_() == attribute_type || subtypes.contains(&has.attribute().type_()))
-        });
+            result.as_ref().is_ok_and(|(has, _count)| {
+                has.attribute().type_() == attribute_type || subtypes.contains(&has.attribute().type_())
+            })
+        },
+    );
     Ok(iter)
 }
 

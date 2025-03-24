@@ -13,7 +13,6 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
-    ExecutionInterrupt,
     pipeline::stage::ExecutionContext,
     read::{
         control_instruction::{
@@ -22,16 +21,17 @@ use crate::{
             RestoreSuspension, StreamCollected, TabledCall, Yield,
         },
         nested_pattern_executor::{Disjunction, InlinedFunction, Negation, NestedPatternExecutor},
-        NestedPatternSuspension,
-        PatternSuspension,
-        QueryPatternSuspensions,
         step_executor::StepExecutors,
         stream_modifier::{
             DistinctMapper, LastMapper, LimitMapper, OffsetMapper, SelectMapper, StreamModifierExecutor,
             StreamModifierResultMapper,
-        }, tabled_call_executor::TabledCallResult, tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions}, TabledCallSuspension,
+        },
+        tabled_call_executor::TabledCallResult,
+        tabled_functions::{TabledFunctionPatternExecutorState, TabledFunctions},
+        NestedPatternSuspension, PatternSuspension, QueryPatternSuspensions, TabledCallSuspension,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -440,8 +440,12 @@ impl PatternExecutor {
                     suspensions: function_suspensions,
                     parameters,
                 } = pattern_state_mutex_guard.deref_mut();
-                let context_with_function_parameters =
-                    ExecutionContext::new_with_profile(context.snapshot.clone(), context.thing_manager.clone(), parameters.clone(), context.profile.clone());
+                let context_with_function_parameters = ExecutionContext::new_with_profile(
+                    context.snapshot.clone(),
+                    context.thing_manager.clone(),
+                    parameters.clone(),
+                    context.profile.clone(),
+                );
                 let _suspension_count_before = function_suspensions.record_nested_pattern_entry();
                 let batch_opt = pattern_executor.batch_continue(
                     &context_with_function_parameters,

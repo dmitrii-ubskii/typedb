@@ -5,14 +5,12 @@
  */
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     ops::Bound,
     sync::Arc,
 };
-use std::cmp::Ordering;
-
-use itertools::Itertools;
 
 use answer::Type;
 use compiler::{executable::match_::instructions::thing::LinksReverseInstruction, ExecutorVariable};
@@ -20,38 +18,36 @@ use concept::{
     error::ConceptReadError,
     thing::{
         object::Object,
-        relation::LinksReverseIterator,
+        relation::{Links, LinksReverseIterator},
         thing_manager::ThingManager,
     },
     type_::{object_type::ObjectType, relation_type::RelationType},
 };
-use concept::thing::relation::Links;
+use itertools::Itertools;
 use lending_iterator::kmerge::KMergeBy;
 use primitive::Bounds;
-use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
-use resource::profile::StorageCounters;
+use resource::{constants::traversal::CONSTANT_CONCEPT_LIMIT, profile::StorageCounters};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker,
         iterator::{SortedTupleIterator, TupleIterator},
         links_executor::{
-            EXTRACT_PLAYER, EXTRACT_RELATION, EXTRACT_ROLE, LinksFilterFn, LinksFilterMapFn
-            , LinksOrderingFn, may_get_role, verify_role,
-        }
-        ,
-        LinksIterateMode,
-        min_max_types, tuple::{
+            may_get_role, verify_role, FixedLinksBounds, LinksFilterFn, LinksFilterMapFn, LinksOrderingFn,
+            LinksTupleIterator, EXTRACT_PLAYER, EXTRACT_RELATION, EXTRACT_ROLE,
+        },
+        min_max_types,
+        tuple::{
             links_to_tuple_player_relation_role, links_to_tuple_relation_player_role,
-            links_to_tuple_role_relation_player, TuplePositions,
-        }, VariableModes,
+            links_to_tuple_role_relation_player, tuple_player_relation_role_to_links_reverse,
+            tuple_relation_player_role_to_links_reverse, tuple_role_relation_player_to_links_reverse,
+            unsafe_compare_result_tuple, TupleOrderingFn, TuplePositions,
+        },
+        Checker, LinksIterateMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::links_executor::{FixedLinksBounds, LinksTupleIterator};
-use crate::instruction::tuple::{tuple_player_relation_role_to_links_reverse, tuple_relation_player_role_to_links_reverse, tuple_role_relation_player_to_links_reverse, TupleOrderingFn, unsafe_compare_result_tuple};
 
 pub(crate) struct LinksReverseExecutor {
     links: ir::pattern::constraint::Links<ExecutorVariable>,
@@ -131,8 +127,11 @@ impl LinksReverseExecutor {
         let player_cache = if iterate_mode == LinksIterateMode::UnboundInverted {
             let mut cache = Vec::new();
             for type_ in player_relation_types.keys() {
-                let instances: Vec<Object> =
-                    Itertools::try_collect(thing_manager.get_objects_in(snapshot, type_.as_object_type(), StorageCounters::DISABLED))?;
+                let instances: Vec<Object> = Itertools::try_collect(thing_manager.get_objects_in(
+                    snapshot,
+                    type_.as_object_type(),
+                    StorageCounters::DISABLED,
+                ))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -187,7 +186,11 @@ impl LinksReverseExecutor {
         match self.iterate_mode {
             LinksIterateMode::Unbound => {
                 // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-                let iterator = thing_manager.get_links_reverse_by_player_type_range(snapshot, &self.player_type_range, storage_counters);
+                let iterator = thing_manager.get_links_reverse_by_player_type_range(
+                    snapshot,
+                    &self.player_type_range,
+                    storage_counters,
+                );
                 let as_tuples = LinksTupleIterator::new(
                     iterator,
                     filter_for_row,
@@ -287,7 +290,8 @@ impl LinksReverseExecutor {
                 debug_assert!(row.len() > relation.as_usize());
                 let relation = row.get(relation).as_thing().as_relation();
                 let player = row.get(player).as_thing().as_object();
-                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
+                let iterator =
+                    thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
                 let as_tuples = LinksTupleIterator::new(
                     iterator,
                     filter_for_row,

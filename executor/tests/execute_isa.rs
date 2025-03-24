@@ -17,8 +17,8 @@ use compiler::{
         function::ExecutableFunctionRegistry,
         match_::{
             instructions::{
-                ConstraintInstruction,
-                Inputs, thing::{IsaInstruction, IsaReverseInstruction},
+                thing::{IsaInstruction, IsaReverseInstruction},
+                ConstraintInstruction, Inputs,
             },
             planner::{
                 match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
@@ -31,8 +31,8 @@ use compiler::{
 };
 use encoding::value::label::Label;
 use executor::{
-    error::ReadExecutionError, ExecutionInterrupt, match_executor::MatchExecutor,
-    pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 use ir::{
     pattern::{constraint::IsaKind, Vertex},
@@ -41,7 +41,7 @@ use ir::{
 };
 use lending_iterator::LendingIterator;
 use resource::profile::{CommitProfile, QueryProfile, StorageCounters};
-use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
+use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
 

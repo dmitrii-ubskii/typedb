@@ -19,7 +19,6 @@ use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
     document::ConceptDocument,
-    ExecutionInterrupt,
     pipeline::{
         delete::DeleteStageExecutor,
         fetch::FetchStageExecutor,
@@ -30,13 +29,14 @@ use crate::{
             DistinctStageExecutor, LimitStageExecutor, OffsetStageExecutor, RequireStageExecutor, SelectStageExecutor,
             SortStageExecutor,
         },
-        PipelineExecutionError,
         reduce::ReduceStageExecutor,
         stage::{ExecutionContext, ReadPipelineStage, StageAPI, WritePipelineStage},
+        update::UpdateStageExecutor,
+        PipelineExecutionError,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
-use crate::pipeline::update::UpdateStageExecutor;
 
 pub enum Pipeline<Snapshot: ReadableSnapshot, Nonterminals: StageAPI<Snapshot>> {
     Unfetched(Nonterminals, HashMap<String, VariablePosition>),

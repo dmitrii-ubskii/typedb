@@ -11,19 +11,18 @@ use std::{
     sync::Arc,
 };
 
-use rand::seq::SliceRandom;
-use tokio::net::lookup_host;
-use tonic::transport::{Certificate, Identity, ServerTlsConfig};
-
 use concurrency::IntervalRunner;
 use database::{database_manager::DatabaseManager, DatabaseOpenError};
-use diagnostics::{Diagnostics, diagnostics_manager::DiagnosticsManager};
+use diagnostics::{diagnostics_manager::DiagnosticsManager, Diagnostics};
 use error::typedb_error;
+use rand::seq::SliceRandom;
 use resource::constants::server::{
     DATABASE_METRICS_UPDATE_INTERVAL, GRPC_CONNECTION_KEEPALIVE, SERVER_ID_ALPHABET, SERVER_ID_FILE_NAME,
     SERVER_ID_LENGTH,
 };
 use system::initialise_system_database;
+use tokio::net::lookup_host;
+use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 use user::{initialise_default_user, user_manager::UserManager};
 
 use crate::{
@@ -172,8 +171,7 @@ impl Server {
     }
 
     fn create_tonic_server(encryption_config: &EncryptionConfig) -> Result<tonic::transport::Server, ServerOpenError> {
-        let tonic_server =
-            Self::configure_server_encryption(tonic::transport::Server::builder(), encryption_config)?;
+        let tonic_server = Self::configure_server_encryption(tonic::transport::Server::builder(), encryption_config)?;
         Ok(tonic_server.http2_keepalive_interval(Some(GRPC_CONNECTION_KEEPALIVE)))
     }
 

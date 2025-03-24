@@ -13,10 +13,9 @@ use std::{
 
 use bytes::{util::MB, Bytes};
 use itertools::Itertools;
-use resource::constants::storage::ROCKSDB_CACHE_SIZE_MB;
+use resource::{constants::storage::ROCKSDB_CACHE_SIZE_MB, profile::StorageCounters};
 use rocksdb::{checkpoint::Checkpoint, IteratorMode, Options, ReadOptions, WriteBatch, WriteOptions, DB};
 use serde::{Deserialize, Serialize};
-use resource::profile::StorageCounters;
 
 use super::{constants, iterator, IteratorPool};
 use crate::{key_range::KeyRange, write_batches::WriteBatches};

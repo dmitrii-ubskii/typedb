@@ -6,32 +6,30 @@
 
 use std::fmt;
 
-use itertools::Itertools;
-
 use bytes::Bytes;
 use encoding::{
-    AsBytes,
     graph::{
-        thing::{ThingVertex, vertex_object::ObjectVertex},
+        thing::{vertex_object::ObjectVertex, ThingVertex},
         type_::vertex::{PrefixedTypeVertexEncoding, TypeVertexEncoding},
         Typed,
     },
-    Keyable, layout::prefix::Prefix, Prefixed,
+    layout::prefix::Prefix,
+    AsBytes, Keyable, Prefixed,
 };
+use itertools::Itertools;
 use lending_iterator::higher_order::Hkt;
-use resource::constants::snapshot::BUFFER_KEY_INLINE;
-use resource::profile::StorageCounters;
+use resource::{constants::snapshot::BUFFER_KEY_INLINE, profile::StorageCounters};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
-    ConceptAPI,
-    ConceptStatus,
     error::{ConceptReadError, ConceptWriteError},
     thing::{
-        HKInstance,
         object::{Object, ObjectAPI},
-        thing_manager::ThingManager, ThingAPI,
-    }, type_::{entity_type::EntityType, ObjectTypeAPI, Ordering, OwnerAPI},
+        thing_manager::ThingManager,
+        HKInstance, ThingAPI,
+    },
+    type_::{entity_type::EntityType, ObjectTypeAPI, Ordering, OwnerAPI},
+    ConceptAPI, ConceptStatus,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -44,7 +42,7 @@ impl Entity {
         // note: unchecked!
         Self { vertex }
     }
-    
+
     pub fn type_(&self) -> EntityType {
         EntityType::build_from_type_id(self.vertex.type_id_())
     }
@@ -89,7 +87,12 @@ impl ThingAPI for Entity {
         Ok(())
     }
 
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus {
+    fn get_status(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> ConceptStatus {
         thing_manager.get_status(snapshot, self.vertex().into_storage_key(), storage_counters)
     }
 
@@ -99,7 +102,10 @@ impl ThingAPI for Entity {
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        for attr in self.get_has_unordered(snapshot, thing_manager, storage_counters.clone())?.map_ok(|(has, _count)| has.attribute()) {
+        for attr in self
+            .get_has_unordered(snapshot, thing_manager, storage_counters.clone())?
+            .map_ok(|(has, _count)| has.attribute())
+        {
             thing_manager.unset_has(snapshot, self, &attr?, storage_counters.clone())?;
         }
 

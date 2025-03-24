@@ -10,9 +10,8 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
 use answer::variable_value::VariableValue;
+use itertools::Itertools;
 use lending_iterator::LendingIterator;
 
 use crate::{

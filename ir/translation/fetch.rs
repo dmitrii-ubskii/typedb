@@ -6,10 +6,14 @@
 
 use std::collections::{HashMap, HashSet};
 
+use answer::variable::Variable;
+use encoding::value::label::Label;
+use error::typedb_error;
+use primitive::maybe_owns::MaybeOwns;
+use storage::snapshot::ReadableSnapshot;
 use typeql::{
     common::{Span, Spanned},
     expression::{FunctionCall, FunctionName},
-    Expression,
     query::stage::{
         fetch::{
             FetchAttribute, FetchList as TypeQLFetchList, FetchObject as TypeQLFetchObject,
@@ -19,14 +23,9 @@ use typeql::{
         Fetch as TypeQLFetch,
     },
     schema::definable::function::{FunctionBlock, SingleSelector},
-    TypeRef, TypeRefAny, value::StringLiteral, Variable as TypeQLVariable,
+    value::StringLiteral,
+    Expression, TypeRef, TypeRefAny, Variable as TypeQLVariable,
 };
-
-use answer::variable::Variable;
-use encoding::value::label::Label;
-use error::typedb_error;
-use primitive::maybe_owns::MaybeOwns;
-use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     pattern::ParameterID,
@@ -40,7 +39,6 @@ use crate::{
         function_signature::{FunctionSignature, FunctionSignatureIndex},
         FunctionReadError, ParameterRegistry,
     },
-    RepresentationError,
     translation::{
         expression::{add_user_defined_function_call, build_expression},
         fetch::FetchRepresentationError::{
@@ -53,6 +51,7 @@ use crate::{
         tokens::checked_identifier,
         TranslationContext,
     },
+    RepresentationError,
 };
 
 pub(super) fn translate_fetch(

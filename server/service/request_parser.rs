@@ -4,9 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use tonic::Request;
-
 use system::concepts::{Credential, User};
+use tonic::Request;
 use user::errors::{UserCreateError, UserUpdateError};
 
 pub fn users_create_req(

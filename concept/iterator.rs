@@ -203,7 +203,7 @@ macro_rules! edge_iterator {
             fn compare_key(
                 &self,
                 item: &Self::Item<'_>,
-                other_item: &Result<$mapped_type, Box<$crate::error::ConceptReadError>>
+                other_item: &Result<$mapped_type, Box<$crate::error::ConceptReadError>>,
             ) -> std::cmp::Ordering {
                 if let Ok(item) = item {
                     if let Ok(other_item) = other_item {

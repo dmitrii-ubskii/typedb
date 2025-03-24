@@ -6,9 +6,6 @@
 
 use std::sync::Arc;
 
-use itertools::Itertools;
-use typeql::schema::definable::function::SingleSelector;
-
 use compiler::{
     executable::{
         function::{ExecutableFunction, ExecutableFunctionRegistry, ExecutableReturn, FunctionTablingType},
@@ -20,8 +17,10 @@ use compiler::{
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use error::{unimplemented_feature, UnimplementedFeature};
+use itertools::Itertools;
 use resource::profile::QueryProfile;
 use storage::snapshot::ReadableSnapshot;
+use typeql::schema::definable::function::SingleSelector;
 
 use crate::read::{
     collecting_stage_executor::CollectingStageExecutor, immediate_executor::ImmediateExecutor,

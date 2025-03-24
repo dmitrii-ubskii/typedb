@@ -9,9 +9,8 @@
 
 use std::{fmt, slice};
 
-use tokio::sync::broadcast::error::TryRecvError;
-
 use compiler::VariablePosition;
+use tokio::sync::broadcast::error::TryRecvError;
 
 pub mod batch;
 pub mod document;

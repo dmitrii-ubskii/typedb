@@ -8,12 +8,12 @@ use lending_iterator::LendingIterator;
 
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
-    ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI}, StageIterator,
+        stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError, StageIterator,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 
 pub struct InitialStage<Snapshot> {

@@ -15,18 +15,18 @@ use crate::{
         object::{Object, ObjectAPI},
         relation::Relation,
         thing_manager::{
+            validation::{validation::DataValidation, DataValidationError},
             ThingManager,
-            validation::{DataValidationError, validation::DataValidation},
         },
     },
     type_::{
         attribute_type::AttributeType,
-        Capability,
         constraint::{CapabilityConstraint, Constraint},
-        OwnerAPI,
         owns::Owns,
-        PlayerAPI,
-        plays::Plays, relates::Relates, role_type::RoleType, TypeAPI,
+        plays::Plays,
+        relates::Relates,
+        role_type::RoleType,
+        Capability, OwnerAPI, PlayerAPI, TypeAPI,
     },
 };
 
@@ -127,8 +127,13 @@ impl CommitTimeValidation {
         out_errors: &mut Vec<DataValidationError>,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptReadError>> {
-        let cardinality_check =
-            Self::validate_plays_cardinality_constraint(snapshot, thing_manager, object, modified_role_types, storage_counters);
+        let cardinality_check = Self::validate_plays_cardinality_constraint(
+            snapshot,
+            thing_manager,
+            object,
+            modified_role_types,
+            storage_counters,
+        );
         collect_errors!(out_errors, cardinality_check, |e: Box<_>| *e);
         Ok(())
     }
@@ -141,8 +146,13 @@ impl CommitTimeValidation {
         out_errors: &mut Vec<DataValidationError>,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptReadError>> {
-        let cardinality_check =
-            Self::validate_relates_cardinality_constraint(snapshot, thing_manager, relation, modified_role_types, storage_counters);
+        let cardinality_check = Self::validate_relates_cardinality_constraint(
+            snapshot,
+            thing_manager,
+            relation,
+            modified_role_types,
+            storage_counters,
+        );
         collect_errors!(out_errors, cardinality_check, |e: Box<_>| *e);
         Ok(())
     }

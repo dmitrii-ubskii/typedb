@@ -6,19 +6,18 @@
 
 use std::{fmt, mem, ops::Range};
 
+use bytes::{byte_array::ByteArray, Bytes};
+use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
-
-use bytes::{byte_array::ByteArray, Bytes};
-use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use structural_equality::StructuralEquality;
 
 use crate::{
-    AsBytes,
     graph::{definition::definition_key::DefinitionKey, type_::property::TypeVertexPropertyEncoding},
     layout::infix::Infix,
+    AsBytes,
 };
 
 // We can support Prefix::ATTRIBUTE_MAX - Prefix::ATTRIBUTE_MIN different built-in value types

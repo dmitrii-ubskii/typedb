@@ -6,12 +6,11 @@
 
 #![allow(unexpected_cfgs)]
 
-use std::fs::File;
-use std::io::stdout;
+use std::{fs::File, io::stdout};
 
-use tracing::{self, dispatcher::DefaultGuard, Level, metadata::LevelFilter};
+use tracing::{self, dispatcher::DefaultGuard, metadata::LevelFilter, Level};
 pub use tracing::{debug, error, info, trace};
-use tracing_subscriber::{EnvFilter, fmt::SubscriberBuilder};
+use tracing_subscriber::{fmt::SubscriberBuilder, EnvFilter};
 
 pub mod result;
 
@@ -32,8 +31,7 @@ pub fn initialise_logging_global() {
 
     // TODO: remove
     // Create a file appender
-    let file_appender = File::create("output.log")
-        .expect("Failed to create log file");
+    let file_appender = File::create("output.log").expect("Failed to create log file");
 
     let subscriber = SubscriberBuilder::default()
         .with_max_level(Level::TRACE)

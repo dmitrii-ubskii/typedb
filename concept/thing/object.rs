@@ -7,40 +7,46 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
+    iter::Map,
     ops::RangeBounds,
 };
-use std::iter::Map;
 
 use bytes::Bytes;
-use encoding::{graph::thing::{
-    edge::{ThingEdgeHas, ThingEdgeHasReverse},
-    vertex_object::ObjectVertex,
-}, Keyable, layout::prefix::Prefix, Prefixed, value::{decode_value_u64, value::Value}};
-use encoding::value::value_type::ValueTypeCategory;
-use lending_iterator::{higher_order::Hkt};
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::StorageCounters;
+use encoding::{
+    graph::thing::{
+        edge::{ThingEdgeHas, ThingEdgeHasReverse},
+        vertex_object::ObjectVertex,
+    },
+    layout::prefix::Prefix,
+    value::{decode_value_u64, value::Value, value_type::ValueTypeCategory},
+    Keyable, Prefixed,
+};
+use lending_iterator::higher_order::Hkt;
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::StorageCounters,
+};
 use storage::{
     key_value::StorageKey,
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 
 use crate::{
-    ConceptStatus,
     edge_iterator,
     error::{ConceptReadError, ConceptWriteError},
     thing::{
         attribute::Attribute,
         entity::Entity,
         has::Has,
-        HKInstance,
         relation::{IndexedRelationsIterator, Relation},
-        thing_manager::{ThingManager, validation::operation_time_validation::OperationTimeValidation}, ThingAPI,
+        thing_manager::{validation::operation_time_validation::OperationTimeValidation, ThingManager},
+        HKInstance, ThingAPI,
     },
     type_::{
-        attribute_type::AttributeType, object_type::ObjectType, ObjectTypeAPI, Ordering,
-        OwnerAPI, relation_type::RelationType, role_type::RoleType,
+        attribute_type::AttributeType, object_type::ObjectType, relation_type::RelationType, role_type::RoleType,
+        ObjectTypeAPI, Ordering, OwnerAPI,
     },
+    ConceptStatus,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -50,7 +56,6 @@ pub enum Object {
 }
 
 impl Object {
-    
     pub fn unwrap_entity(self) -> Entity {
         match self {
             Self::Entity(entity) => entity,
@@ -113,7 +118,12 @@ impl ThingAPI for Object {
         }
     }
 
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus {
+    fn get_status(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> ConceptStatus {
         match self {
             Object::Entity(entity) => entity.get_status(snapshot, thing_manager, storage_counters),
             Object::Relation(relation) => relation.get_status(snapshot, thing_manager, storage_counters),
@@ -172,7 +182,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         thing_manager: &'m ThingManager,
         storage_counters: StorageCounters,
     ) -> Result<HasIterator, Box<ConceptReadError>> {
-        self.get_has_types_range_unordered(snapshot, thing_manager, storage_counters )
+        self.get_has_types_range_unordered(snapshot, thing_manager, storage_counters)
     }
 
     fn get_has_type_unordered<'a>(
@@ -182,8 +192,20 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         attribute_type: AttributeType,
         value_range: &'a impl RangeBounds<Value<'a>>,
         storage_counters: StorageCounters,
-    ) -> Result<Map<HasIterator, fn(Result<(Has, u64), Box<ConceptReadError>>) -> Result<(Attribute, u64), Box<ConceptReadError>>>, Box<ConceptReadError>> {
-        thing_manager.get_has_from_thing_to_type_unordered(snapshot, self, attribute_type, value_range, storage_counters)
+    ) -> Result<
+        Map<
+            HasIterator,
+            fn(Result<(Has, u64), Box<ConceptReadError>>) -> Result<(Attribute, u64), Box<ConceptReadError>>,
+        >,
+        Box<ConceptReadError>,
+    > {
+        thing_manager.get_has_from_thing_to_type_unordered(
+            snapshot,
+            self,
+            attribute_type,
+            value_range,
+            storage_counters,
+        )
     }
 
     fn get_has_type_ordered<'m>(
@@ -220,7 +242,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
             attribute_type_range,
             ordered_value_categories,
             value_range,
-            storage_counters
+            storage_counters,
         )
     }
 
@@ -231,11 +253,22 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         attribute: &Attribute,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_owner_exists_to_set_has(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+        OperationTimeValidation::validate_owner_exists_to_set_has(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
-        OperationTimeValidation::validate_attribute_exists_to_set_has(snapshot, thing_manager, self, attribute, storage_counters.clone())
-            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+        OperationTimeValidation::validate_attribute_exists_to_set_has(
+            snapshot,
+            thing_manager,
+            self,
+            attribute,
+            storage_counters.clone(),
+        )
+        .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
         OperationTimeValidation::validate_object_type_owns_attribute_type(
             snapshot,
@@ -264,8 +297,13 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         attribute: &Attribute,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_owner_exists_to_unset_has(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+        OperationTimeValidation::validate_owner_exists_to_unset_has(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
         OperationTimeValidation::validate_object_type_owns_attribute_type(
             snapshot,
@@ -293,8 +331,13 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         new_attributes: Vec<Attribute>,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_owner_exists_to_set_has(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+        OperationTimeValidation::validate_owner_exists_to_set_has(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
         OperationTimeValidation::validate_object_type_owns_attribute_type(
             snapshot,
@@ -315,8 +358,14 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
 
         let mut new_counts = BTreeMap::<_, u64>::new();
         for attribute in &new_attributes {
-            OperationTimeValidation::validate_attribute_exists_to_set_has(snapshot, thing_manager, self, attribute, storage_counters.clone())
-                .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+            OperationTimeValidation::validate_attribute_exists_to_set_has(
+                snapshot,
+                thing_manager,
+                self,
+                attribute,
+                storage_counters.clone(),
+            )
+            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
             *new_counts.entry(attribute).or_default() += 1;
         }
@@ -331,7 +380,12 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
         // 1. get owned list
-        let old_attributes = thing_manager.get_has_from_thing_to_type_ordered(snapshot, self, attribute_type, storage_counters.clone())?;
+        let old_attributes = thing_manager.get_has_from_thing_to_type_ordered(
+            snapshot,
+            self,
+            attribute_type,
+            storage_counters.clone(),
+        )?;
 
         let mut old_counts = BTreeMap::<_, u64>::new();
         for attribute in &old_attributes {
@@ -360,8 +414,13 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         attribute_type: AttributeType,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_owner_exists_to_unset_has(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
+        OperationTimeValidation::validate_owner_exists_to_unset_has(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|typedb_source| ConceptWriteError::DataValidation { typedb_source })?;
 
         OperationTimeValidation::validate_object_type_owns_attribute_type(
             snapshot,
@@ -376,7 +435,9 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         match ordering {
             Ordering::Unordered => Err(Box::new(ConceptWriteError::UnsetHasOrderedOwnsUnordered {})),
             Ordering::Ordered => {
-                for attribute in self.get_has_type_ordered(snapshot, thing_manager, attribute_type, storage_counters.clone())? {
+                for attribute in
+                    self.get_has_type_ordered(snapshot, thing_manager, attribute_type, storage_counters.clone())?
+                {
                     thing_manager.unset_has(snapshot, self, &attribute, storage_counters.clone())?;
                 }
                 thing_manager.unset_has_ordered(snapshot, self, attribute_type, storage_counters);
@@ -409,7 +470,7 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         snapshot: &impl ReadableSnapshot,
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
-    )-> impl Iterator<Item=Result<(Relation, RoleType, u64), Box<ConceptReadError>>> + 'static {
+    ) -> impl Iterator<Item = Result<(Relation, RoleType, u64), Box<ConceptReadError>>> + 'static {
         thing_manager.get_player_relations_roles(snapshot, self, storage_counters)
     }
 
@@ -453,7 +514,15 @@ pub trait ObjectAPI: ThingAPI<Vertex = ObjectVertex> + Copy + fmt::Debug {
         end_role: RoleType,
         storage_counters: StorageCounters,
     ) -> Result<bool, Box<ConceptReadError>> {
-        thing_manager.has_indexed_relation_player(snapshot, self, end_player, relation, start_role, end_role, storage_counters)
+        thing_manager.has_indexed_relation_player(
+            snapshot,
+            self,
+            end_player,
+            relation,
+            start_role,
+            end_role,
+            storage_counters,
+        )
     }
 
     fn get_indexed_relations(

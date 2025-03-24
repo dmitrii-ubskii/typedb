@@ -8,18 +8,20 @@
 
 use bytes::{byte_array::ByteArray, Bytes};
 use encoding::{
-    AsBytes,
     graph::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator,
-            DefinitionValueEncoding, r#struct::StructDefinition,
+            r#struct::StructDefinition, DefinitionValueEncoding,
         },
         type_::index::NameToStructDefinitionIndex,
     },
-    Keyable, value::value_type::ValueType,
+    value::value_type::ValueType,
+    AsBytes, Keyable,
 };
-use resource::constants::snapshot::BUFFER_VALUE_INLINE;
-use resource::profile::{CommitProfile, StorageCounters};
+use resource::{
+    constants::snapshot::BUFFER_VALUE_INLINE,
+    profile::{CommitProfile, StorageCounters},
+};
 use storage::snapshot::{CommittableSnapshot, ReadableSnapshot, WritableSnapshot};
 use test_utils_encoding::create_core_storage;
 
@@ -47,7 +49,9 @@ fn get_struct_key(snapshot: &impl ReadableSnapshot, name: String) -> Option<Defi
 }
 
 fn get_struct_definition(snapshot: &impl ReadableSnapshot, definition_key: &DefinitionKey) -> StructDefinition {
-    let bytes = snapshot.get::<BUFFER_VALUE_INLINE>(definition_key.clone().into_storage_key().as_reference(), StorageCounters::DISABLED).unwrap();
+    let bytes = snapshot
+        .get::<BUFFER_VALUE_INLINE>(definition_key.clone().into_storage_key().as_reference(), StorageCounters::DISABLED)
+        .unwrap();
     StructDefinition::from_bytes(&bytes.unwrap())
 }
 

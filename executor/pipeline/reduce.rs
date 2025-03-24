@@ -11,12 +11,12 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::Batch,
-    ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI, StageIterator}, WrittenRowsIterator,
+        stage::{ExecutionContext, StageAPI, StageIterator},
+        PipelineExecutionError, WrittenRowsIterator,
     },
     reduce_executor::GroupedReducer,
+    ExecutionInterrupt,
 };
 
 pub struct ReduceStageExecutor<PreviousStage> {
@@ -47,7 +47,8 @@ where
         let Self { previous, executable, .. } = self;
         let (previous_iterator, context) = previous.into_iterator(interrupt)?;
 
-        let profile = context.profile.profile_stage(|| String::from("Reduce (not timed)"), executable.executable_id as i64);
+        let profile =
+            context.profile.profile_stage(|| String::from("Reduce (not timed)"), executable.executable_id as i64);
         let step_profile = profile.extend_or_get(0, || String::from("Reduction (not timed)"));
         let rows = match reduce_iterator(&context, executable, previous_iterator) {
             Ok(rows) => rows,

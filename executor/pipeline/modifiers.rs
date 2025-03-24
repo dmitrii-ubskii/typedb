@@ -3,15 +3,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-use std::{
-    borrow::Cow,
-    cmp::Ordering,
-    collections::HashSet,
-    hash::Hash,
-    sync::Arc,
-};
+use std::{borrow::Cow, cmp::Ordering, collections::HashSet, hash::Hash, sync::Arc};
 
-use answer::{Thing, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing};
 use compiler::{
     executable::modifiers::{
         DistinctExecutable, LimitExecutable, OffsetExecutable, RequireExecutable, SelectExecutable, SortExecutable,
@@ -27,12 +21,12 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     batch::Batch,
-    ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI}, StageIterator,
+        stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError, StageIterator,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 
 // Sort
@@ -72,7 +66,8 @@ where
         let profile = context.profile.profile_stage(|| String::from("Sort"), executable.executable_id as i64);
         let step_profile = profile.extend_or_get(0, || String::from("Sort execution"));
         let measurement = step_profile.start_measurement();
-        let sorted_iterator = SortStageIterator::from_unsorted(batch, &executable, &context, step_profile.storage_counters());
+        let sorted_iterator =
+            SortStageIterator::from_unsorted(batch, &executable, &context, step_profile.storage_counters());
         measurement.end(&step_profile, 1, batch_len as u64);
         Ok((sorted_iterator, context))
     }

@@ -16,9 +16,9 @@ use crate::{
     batch::FixedBatch,
     read::{
         pattern_executor::ExecutorIndex,
-        PatternSuspension,
         tabled_call_executor::TabledCallResult::Suspend,
-        tabled_functions::{CallKey, TabledFunctionPatternExecutorState, TabledFunctionState, TableIndex}, TabledCallSuspension,
+        tabled_functions::{CallKey, TableIndex, TabledFunctionPatternExecutorState, TabledFunctionState},
+        PatternSuspension, TabledCallSuspension,
     },
     row::MaybeOwnedRow,
 };

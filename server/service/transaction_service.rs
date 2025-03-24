@@ -14,29 +14,6 @@ use std::{
     time::Instant,
 };
 
-use itertools::{Either, Itertools};
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{channel, Receiver, Sender},
-        watch,
-    },
-    task::{JoinHandle, spawn_blocking},
-};
-use tokio_stream::StreamExt;
-use tonic::{Status, Streaming};
-use tracing::{event, Level};
-use typedb_protocol::{
-    query::Type::{Read, Write},
-    transaction::{Server as ProtocolServer, stream_signal::Req},
-};
-use typeql::{
-    parse_query,
-    query::{SchemaQuery, stage::Stage},
-    Query,
-};
-use uuid::Uuid;
-
 use compiler::VariablePosition;
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use database::{
@@ -46,31 +23,55 @@ use database::{
     },
 };
 use diagnostics::{
-    diagnostics_manager::{DiagnosticsManager, run_with_diagnostics_async},
+    diagnostics_manager::{run_with_diagnostics_async, DiagnosticsManager},
     metrics::{ActionKind, LoadKind},
 };
 use error::typedb_error;
 use executor::{
     batch::Batch,
     document::ConceptDocument,
-    ExecutionInterrupt,
-    InterruptType, pipeline::{
+    pipeline::{
         pipeline::Pipeline,
-        PipelineExecutionError,
         stage::{ExecutionContext, ReadPipelineStage, StageIterator},
+        PipelineExecutionError,
     },
+    ExecutionInterrupt, InterruptType,
 };
 use function::function_manager::FunctionManager;
 use ir::pipeline::ParameterRegistry;
+use itertools::{Either, Itertools};
 use lending_iterator::LendingIterator;
 use options::TransactionOptions;
 use query::{error::QueryError, query_manager::QueryManager};
-use resource::constants::server::{DEFAULT_PREFETCH_SIZE, DEFAULT_TRANSACTION_TIMEOUT_MILLIS};
-use resource::profile::StorageCounters;
+use resource::{
+    constants::server::{DEFAULT_PREFETCH_SIZE, DEFAULT_TRANSACTION_TIMEOUT_MILLIS},
+    profile::StorageCounters,
+};
 use storage::{
     durability_client::WALClient,
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{channel, Receiver, Sender},
+        watch,
+    },
+    task::{spawn_blocking, JoinHandle},
+};
+use tokio_stream::StreamExt;
+use tonic::{Status, Streaming};
+use tracing::{event, Level};
+use typedb_protocol::{
+    query::Type::{Read, Write},
+    transaction::{stream_signal::Req, Server as ProtocolServer},
+};
+use typeql::{
+    parse_query,
+    query::{stage::Stage, SchemaQuery},
+    Query,
+};
+use uuid::Uuid;
 
 use crate::service::{
     document::encode_document,
@@ -570,25 +571,34 @@ impl TransactionService {
         let (profile, result) = match self.transaction.take().unwrap() {
             Transaction::Read(transaction) => {
                 let profile = transaction.profile;
-                (profile, Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status()))
+                (
+                    profile,
+                    Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status()),
+                )
             }
-            Transaction::Write(transaction) => {
-                spawn_blocking(move || {
-                    diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
-                    let (profile, result) = transaction.commit();
-                    (profile, result.map_err(|err| {
-                        TransactionServiceError::DataCommitFailed { typedb_source: err }.into_error_message().into_status()
-                    }))
-                })
-                    .await
-                    .unwrap()
-            },
+            Transaction::Write(transaction) => spawn_blocking(move || {
+                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                let (profile, result) = transaction.commit();
+                (
+                    profile,
+                    result.map_err(|err| {
+                        TransactionServiceError::DataCommitFailed { typedb_source: err }
+                            .into_error_message()
+                            .into_status()
+                    }),
+                )
+            })
+            .await
+            .unwrap(),
             Transaction::Schema(transaction) => {
                 diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
                 let (profile, result) = transaction.commit();
-                (profile, result.map_err(|typedb_source| {
-                    TransactionServiceError::SchemaCommitFailed { typedb_source }.into_error_message().into_status()
-                }))
+                (
+                    profile,
+                    result.map_err(|typedb_source| {
+                        TransactionServiceError::SchemaCommitFailed { typedb_source }.into_error_message().into_status()
+                    }),
+                )
             }
         };
         if profile.is_enabled() {
@@ -1103,7 +1113,12 @@ impl TransactionService {
             }
             if query_profile.is_enabled() {
                 let micros = Instant::now().duration_since(start_time).as_micros();
-                event!(Level::INFO, "Write query done (excluding network request time) in {} micros.\n{}", micros, query_profile);
+                event!(
+                    Level::INFO,
+                    "Write query done (excluding network request time) in {} micros.\n{}",
+                    micros,
+                    query_profile
+                );
             }
             (Arc::into_inner(snapshot).unwrap(), Ok(Either::Right((parameters, documents))))
         } else {
@@ -1135,7 +1150,12 @@ impl TransactionService {
             };
             if query_profile.is_enabled() {
                 let micros = Instant::now().duration_since(start_time).as_micros();
-                event!(Level::INFO, "Write query done (excluding network request time) in {} micros.\n{}", micros, query_profile);
+                event!(
+                    Level::INFO,
+                    "Write query done (excluding network request time) in {} micros.\n{}",
+                    micros,
+                    query_profile
+                );
             }
             result
         }
@@ -1205,7 +1225,14 @@ impl TransactionService {
                 return;
             }
 
-            let encoded_row = encode_row(row, &output_descriptor, snapshot.as_ref(), &type_manager, &thing_manager, StorageCounters::DISABLED); // TODO
+            let encoded_row = encode_row(
+                row,
+                &output_descriptor,
+                snapshot.as_ref(),
+                &type_manager,
+                &thing_manager,
+                StorageCounters::DISABLED,
+            ); // TODO
             match encoded_row {
                 Ok(encoded_row) => {
                     Self::submit_response_async(&sender, StreamQueryResponse::next_row(encoded_row)).await;
@@ -1244,8 +1271,14 @@ impl TransactionService {
                 return;
             }
 
-            let encoded_document =
-                encode_document(document, snapshot.as_ref(), &type_manager, &thing_manager, &parameters, StorageCounters::DISABLED); // TODO
+            let encoded_document = encode_document(
+                document,
+                snapshot.as_ref(),
+                &type_manager,
+                &thing_manager,
+                &parameters,
+                StorageCounters::DISABLED,
+            ); // TODO
             match encoded_document {
                 Ok(encoded_document) => {
                     Self::submit_response_async(&sender, StreamQueryResponse::next_document(encoded_document)).await;
@@ -1346,8 +1379,14 @@ impl TransactionService {
                     Self::submit_response_sync(sender, StreamQueryResponse::done_err(err));
                 });
 
-                let encoded_document =
-                    encode_document(document, snapshot.as_ref(), type_manager, &thing_manager, &parameters, StorageCounters::DISABLED); // TODO
+                let encoded_document = encode_document(
+                    document,
+                    snapshot.as_ref(),
+                    type_manager,
+                    &thing_manager,
+                    &parameters,
+                    StorageCounters::DISABLED,
+                ); // TODO
                 match encoded_document {
                     Ok(encoded_document) => {
                         Self::submit_response_sync(sender, StreamQueryResponse::next_document(encoded_document))
@@ -1392,7 +1431,14 @@ impl TransactionService {
                     Self::submit_response_sync(sender, StreamQueryResponse::done_err(err));
                 });
 
-                let encoded_row = encode_row(row, &descriptor, snapshot.as_ref(), type_manager, &thing_manager, StorageCounters::DISABLED); // TODO
+                let encoded_row = encode_row(
+                    row,
+                    &descriptor,
+                    snapshot.as_ref(),
+                    type_manager,
+                    &thing_manager,
+                    StorageCounters::DISABLED,
+                ); // TODO
                 match encoded_row {
                     Ok(encoded_row) => Self::submit_response_sync(sender, StreamQueryResponse::next_row(encoded_row)),
                     Err(err) => {
@@ -1408,7 +1454,12 @@ impl TransactionService {
         };
         if query_profile.is_enabled() {
             let micros = Instant::now().duration_since(start_time).as_micros();
-            event!(Level::INFO, "Read query done (including network request time) in {} micros.\n{}", micros, query_profile);
+            event!(
+                Level::INFO,
+                "Read query done (including network request time) in {} micros.\n{}",
+                micros,
+                query_profile
+            );
         }
         Self::submit_response_sync(sender, StreamQueryResponse::done_ok())
     }

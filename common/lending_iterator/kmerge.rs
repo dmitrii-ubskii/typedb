@@ -85,9 +85,9 @@ where
 }
 
 impl<I, F, K> Seekable<K> for KMergeBy<I, F>
-    where
-        I: LendingIterator + Seekable<K>,
-        F: for<'a, 'b> FnHktHelper<(&'a I::Item<'a>, &'b I::Item<'b>), Ordering> + Copy + 'static,
+where
+    I: LendingIterator + Seekable<K>,
+    F: for<'a, 'b> FnHktHelper<(&'a I::Item<'a>, &'b I::Item<'b>), Ordering> + Copy + 'static,
 {
     fn seek(&mut self, key: &K) {
         self.iterators = mem::take(&mut self.iterators)

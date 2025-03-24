@@ -6,10 +6,9 @@
 
 use std::{collections::HashSet, mem};
 
-use typeql::common::Span;
-
 use answer::variable::Variable;
 use structural_equality::StructuralEquality;
+use typeql::common::Span;
 
 #[derive(Debug, Clone)]
 pub enum Operator {

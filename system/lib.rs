@@ -6,11 +6,10 @@
 
 use std::sync::Arc;
 
-use typeql;
-
-use database::{Database, database_manager::DatabaseManager};
+use database::{database_manager::DatabaseManager, Database};
 use resource::internal_database_prefix;
 use storage::durability_client::WALClient;
+use typeql;
 
 use crate::{repositories::SCHEMA, util::transaction_util::TransactionUtil};
 
@@ -46,7 +45,8 @@ pub fn initialise_system_database(database_manager: &DatabaseManager) -> Arc<Dat
                         format!("Unexpected error occurred when defining the schema for the {} database.", SYSTEM_DB)
                             .as_str(),
                     );
-                }).1
+                })
+                .1
                 .expect(
                     format!(
                         "Unexpected error occurred when committing the schema transaction for {} database.",

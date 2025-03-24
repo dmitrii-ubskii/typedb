@@ -6,22 +6,21 @@
 
 use std::{slice, sync::Arc};
 
-use cucumber::gherkin::Step;
-use itertools::Itertools;
-use macro_rules_attribute::apply;
-
 use concept::{
     thing::object::{Object, ObjectAPI},
     type_::TypeAPI,
 };
+use cucumber::gherkin::Step;
+use itertools::Itertools;
+use macro_rules_attribute::apply;
 use resource::profile::StorageCounters;
 
 use crate::{
     concept::type_::BehaviourConceptTestExecutionError,
-    Context,
     generic_step,
     params::{self, check_boolean},
     transaction_context::{with_read_tx, with_write_tx},
+    Context,
 };
 
 #[apply(generic_step)]
@@ -42,8 +41,13 @@ async fn relation_add_player_for_role(
             .unwrap()
         {
             let role_type = relates.role();
-            let res =
-                relation.add_player(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, role_type, player, StorageCounters::DISABLED);
+            let res = relation.add_player(
+                Arc::get_mut(&mut tx.snapshot).unwrap(),
+                &tx.thing_manager,
+                role_type,
+                player,
+                StorageCounters::DISABLED,
+            );
             may_error.check_concept_write_without_read_errors(&res);
             return;
         }
@@ -70,7 +74,13 @@ async fn relation_set_players_for_role(
             .unwrap()
             .unwrap()
             .role();
-        relation.set_players_ordered(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, role_type, players, StorageCounters::DISABLED)
+        relation.set_players_ordered(
+            Arc::get_mut(&mut tx.snapshot).unwrap(),
+            &tx.thing_manager,
+            role_type,
+            players,
+            StorageCounters::DISABLED,
+        )
     });
     may_error.check_concept_write_without_read_errors(&res);
 }
@@ -99,7 +109,7 @@ async fn relation_remove_player_for_role(
             &tx.thing_manager,
             role_type,
             player,
-            StorageCounters::DISABLED
+            StorageCounters::DISABLED,
         );
         may_error.check_concept_write_without_read_errors(&res);
     });
@@ -124,7 +134,14 @@ async fn relation_remove_count_players_for_role(
             .unwrap()
             .role();
         relation
-            .remove_player_many(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, role_type, player, count, StorageCounters::DISABLED)
+            .remove_player_many(
+                Arc::get_mut(&mut tx.snapshot).unwrap(),
+                &tx.thing_manager,
+                role_type,
+                player,
+                count,
+                StorageCounters::DISABLED,
+            )
             .unwrap();
     });
 }
@@ -145,7 +162,9 @@ async fn relation_get_players_ordered(
             role_label.into_typedb().name().as_str(),
         );
         let role_type = relates.unwrap().unwrap().role();
-        let players = relation.get_players_ordered(tx.snapshot.as_ref(), &tx.thing_manager, role_type, StorageCounters::DISABLED).unwrap();
+        let players = relation
+            .get_players_ordered(tx.snapshot.as_ref(), &tx.thing_manager, role_type, StorageCounters::DISABLED)
+            .unwrap();
         players.into_iter().collect()
     });
     context.object_lists.insert(players_var.name, players);
@@ -168,7 +187,9 @@ async fn relation_get_players_ordered_is(
             role_label.into_typedb().name().as_str(),
         );
         let role_type = relates.unwrap().unwrap().role();
-        let players = relation.get_players_ordered(tx.snapshot.as_ref(), &tx.thing_manager, role_type, StorageCounters::DISABLED).unwrap();
+        let players = relation
+            .get_players_ordered(tx.snapshot.as_ref(), &tx.thing_manager, role_type, StorageCounters::DISABLED)
+            .unwrap();
         players.into_iter().collect_vec()
     });
     let players =

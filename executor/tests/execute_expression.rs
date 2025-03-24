@@ -6,9 +6,6 @@
 
 use std::collections::HashMap;
 
-use itertools::Itertools;
-use typeql::query::stage::Stage;
-
 use answer::variable::Variable;
 use compiler::annotation::expression::{
     compiled_expression::{ExecutableExpression, ExpressionValueType},
@@ -20,9 +17,11 @@ use executor::read::expression_executor::{evaluate_expression, ExpressionValue};
 use ir::{
     pattern::{constraint::Constraint, variable_category::VariableCategory},
     pipeline::{function_signature::HashMapFunctionSignatureIndex, ParameterRegistry},
-    RepresentationError,
     translation::{match_::translate_match, TranslationContext},
+    RepresentationError,
 };
+use itertools::Itertools;
+use typeql::query::stage::Stage;
 
 #[derive(Debug)]
 pub enum PatternDefitionOrExpressionCompileError {

@@ -142,11 +142,10 @@ impl ObjectID {
         debug_assert_eq!(mem::size_of_val(&id), Self::LENGTH);
         Self::new_const(id)
     }
-    
+
     const fn new_const(id: u64) -> Self {
         ObjectID { value: id }
     }
-    
 
     pub fn decode(bytes: [u8; ObjectID::LENGTH]) -> Self {
         ObjectID { value: u64::from_be_bytes(bytes) }

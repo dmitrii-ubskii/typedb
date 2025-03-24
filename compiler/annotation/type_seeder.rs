@@ -10,6 +10,7 @@ use std::{
     iter::zip,
     sync::Arc,
 };
+
 use answer::{variable::Variable, Type as TypeAnnotation, Type};
 use concept::{
     error::ConceptReadError,
@@ -38,8 +39,6 @@ use crate::annotation::{
     match_inference::{NestedTypeInferenceGraphDisjunction, TypeInferenceEdge, TypeInferenceGraph, VertexAnnotations},
     TypeInferenceError,
 };
-use resource::profile::StorageCounters;
-
 
 pub struct TypeGraphSeedingContext<'this, Snapshot: ReadableSnapshot> {
     snapshot: &'this Snapshot,
@@ -118,7 +117,7 @@ impl<'this, Snapshot: ReadableSnapshot> TypeGraphSeedingContext<'this, Snapshot>
         }
 
         // Prune abstract types from type annotations of thing variables
-        self.prune_abstract_types_from_thing_vertex_annotations_recursive(graph);
+        self.prune_abstract_types_from_thing_vertex_annotations_recursive(graph)?;
 
         // Seed edges in root & disjunctions
         self.seed_edges(graph).map_err(|source| TypeInferenceError::ConceptRead { typedb_source: source })?;
@@ -1686,7 +1685,7 @@ pub mod tests {
         pipeline::{block::Block, ParameterRegistry},
         translation::TranslationContext,
     };
-    use resource::profile::StorageCounters;
+    use resource::profile::CommitProfile;
     use storage::snapshot::CommittableSnapshot;
 
     use crate::annotation::{

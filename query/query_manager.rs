@@ -6,10 +6,6 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use tracing::{event, Level};
-use tracing::log::logger;
-use typeql::query::SchemaQuery;
-
 use compiler::{
     annotation::pipeline::{annotate_preamble_and_pipeline, AnnotatedPipeline},
     executable::pipeline::{compile_pipeline_and_functions, ExecutablePipeline},
@@ -20,14 +16,18 @@ use executor::pipeline::{
     pipeline::Pipeline,
     stage::{ReadPipelineStage, WritePipelineStage},
 };
-use function::function_manager::{FunctionManager, ReadThroughFunctionSignatureIndex, validate_no_cycles};
+use function::function_manager::{validate_no_cycles, FunctionManager, ReadThroughFunctionSignatureIndex};
 use ir::{
     pipeline::function_signature::{FunctionID, HashMapFunctionSignatureIndex},
     translation::pipeline::{translate_pipeline, TranslatedPipeline},
 };
-use resource::perf_counters::{QUERY_CACHE_HITS, QUERY_CACHE_MISSES};
-use resource::profile::QueryProfile;
+use resource::{
+    perf_counters::{QUERY_CACHE_HITS, QUERY_CACHE_MISSES},
+    profile::QueryProfile,
+};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use tracing::{event, log::logger, Level};
+use typeql::query::SchemaQuery;
 
 use crate::{define, error::QueryError, query_cache::QueryCache, redefine, undefine};
 
@@ -81,7 +81,7 @@ impl QueryManager {
     ) -> Result<Pipeline<Snapshot, ReadPipelineStage<Snapshot>>, Box<QueryError>> {
         event!(Level::TRACE, "Running read query:\n{}", query);
         let mut query_profile = QueryProfile::new(tracing::enabled!(Level::TRACE));
-        let compile_profile = query_profile.profile_compilation();
+        let compile_profile = query_profile.compilation_profile();
         compile_profile.start();
         // 1: Translate
         let TranslatedPipeline {
@@ -194,7 +194,7 @@ impl QueryManager {
     ) -> Result<Pipeline<Snapshot, WritePipelineStage<Snapshot>>, (Snapshot, Box<QueryError>)> {
         event!(Level::TRACE, "Running write query:\n{}", query);
         let mut query_profile = QueryProfile::new(tracing::enabled!(Level::TRACE));
-        let compile_profile = query_profile.profile_compilation();
+        let compile_profile = query_profile.compilation_profile();
         compile_profile.start();
         // 1: Translate
         let TranslatedPipeline {

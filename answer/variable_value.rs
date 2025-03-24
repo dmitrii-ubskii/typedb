@@ -29,7 +29,7 @@ impl<'a> VariableValue<'a> {
     pub fn get_type(&self) -> Option<&Type> {
         match self {
             VariableValue::Type(type_) => Some(type_),
-            _ => None
+            _ => None,
         }
     }
 
@@ -40,7 +40,7 @@ impl<'a> VariableValue<'a> {
     pub fn get_thing(&self) -> Option<&Thing> {
         match self {
             VariableValue::Thing(thing) => Some(thing),
-            _ => None
+            _ => None,
         }
     }
 

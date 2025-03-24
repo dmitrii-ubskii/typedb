@@ -13,35 +13,36 @@ use std::{
     time::Instant,
 };
 
-use serde::{Deserialize, Serialize};
-use tracing::{event, Level, trace};
-
 use bytes::Bytes;
 use durability::{DurabilityRecordType, DurabilitySequenceNumber};
 use encoding::graph::{
     thing::{
         edge::{ThingEdgeHas, ThingEdgeIndexedRelation, ThingEdgeLinks},
-        ThingVertex,
         vertex_attribute::AttributeVertex,
         vertex_object::ObjectVertex,
+        ThingVertex,
     },
     type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeIDUInt, TypeVertexEncoding},
     Typed,
 };
 use error::typedb_error;
-use resource::constants::{database::STATISTICS_DURABLE_WRITE_CHANGE_PERCENT, snapshot::BUFFER_KEY_INLINE};
-use resource::profile::StorageCounters;
+use resource::{
+    constants::{database::STATISTICS_DURABLE_WRITE_CHANGE_PERCENT, snapshot::BUFFER_KEY_INLINE},
+    profile::StorageCounters,
+};
+use serde::{Deserialize, Serialize};
 use storage::{
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord, UnsequencedDurabilityRecord},
     isolation_manager::CommitType,
     iterator::MVCCReadError,
     key_value::{StorageKeyArray, StorageKeyReference},
     keyspace::IteratorPool,
-    MVCCStorage,
     recovery::commit_recovery::{load_commit_data_from, RecoveryCommitStatus, StorageRecoveryError},
     sequence_number::SequenceNumber,
     snapshot::{buffer::OperationsBuffer, write::Write},
+    MVCCStorage,
 };
+use tracing::{event, trace, Level};
 
 use crate::{
     thing::{attribute::Attribute, entity::Entity, object::Object, relation::Relation, ThingAPI},
@@ -159,7 +160,8 @@ impl Statistics {
                                 // If last write was at Seq[11] and this schema commit is at Seq[12],
                                 // no changes need to be applied or persisted.
                                 if self.last_durable_write_sequence_number.next() < seq {
-                                    self.update_writes(&data_commits, storage).map_err(|err| DataRead { source: err })?;
+                                    self.update_writes(&data_commits, storage)
+                                        .map_err(|err| DataRead { source: err })?;
                                     self.durably_write(storage.durability())?;
                                 }
                                 self.update_writes(&BTreeMap::from([(seq, writes)]), storage)
@@ -190,7 +192,6 @@ impl Statistics {
             storage_watermark,
             self.sequence_number
         );
-        event!(Level::TRACE, "{:?}", self);
         Ok(())
     }
 
@@ -211,7 +212,6 @@ impl Statistics {
             let delta = self.update_write(*sequence_number, writes, commits, storage)?;
             self.total_count = self.total_count.checked_add_signed(delta).unwrap();
             self.sequence_number = *sequence_number;
-            trace!("Updating statistics based on sequence number {sequence_number}. Delta: '{}'", delta);
         }
         Ok(())
     }
@@ -542,7 +542,15 @@ fn write_to_delta<D>(
                     Write::Delete => Ok(1),
                 }
             } else if open_sequence_number.next() < first_commit_sequence_number {
-                if storage.get::<0>(&IteratorPool::new(), write_key, commit_sequence_number.previous(), StorageCounters::DISABLED)?.is_some() {
+                if storage
+                    .get::<0>(
+                        &IteratorPool::new(),
+                        write_key,
+                        commit_sequence_number.previous(),
+                        StorageCounters::DISABLED,
+                    )?
+                    .is_some()
+                {
                     // exists in storage before PUT is committed
                     Ok(0)
                 } else {
@@ -749,8 +757,8 @@ mod serialise {
     use serde::{
         de,
         de::{MapAccess, SeqAccess, Visitor},
-        Deserialize,
-        Deserializer, ser::SerializeStruct, Serialize, Serializer,
+        ser::SerializeStruct,
+        Deserialize, Deserializer, Serialize, Serializer,
     };
 
     use crate::{

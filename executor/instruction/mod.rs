@@ -6,10 +6,8 @@
 
 use std::{collections::HashMap, fmt, marker::PhantomData, ops::Bound};
 
-use itertools::{Itertools, MinMaxResult};
-
 use ::iterator::minmax_or;
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{
     executable::match_::instructions::{
         CheckInstruction, CheckVertex, ConstraintInstruction, VariableMode, VariableModes,
@@ -22,8 +20,8 @@ use concept::{
     type_::{OwnerAPI, PlayerAPI},
 };
 use encoding::{
-    AsBytes,
     value::{value::Value, ValueEncodable},
+    AsBytes,
 };
 use error::unimplemented_feature;
 use ir::{
@@ -33,6 +31,7 @@ use ir::{
     },
     pipeline::ParameterRegistry,
 };
+use itertools::{Itertools, MinMaxResult};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
@@ -418,8 +417,12 @@ impl<T> Checker<T> {
                 CheckInstruction::Comparison { lhs, rhs, comparator } => {
                     if lhs.as_variable() == Some(target_variable) {
                         let rhs_variable_value = get_vertex_value(rhs, row.as_ref(), &context.parameters);
-                        let rhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value, storage_counters.clone())?;
+                        let rhs_value = Self::read_value(
+                            context.snapshot.as_ref(),
+                            &context.thing_manager,
+                            &rhs_variable_value,
+                            storage_counters.clone(),
+                        )?;
                         if let Some(rhs_value) = rhs_value {
                             let comp_range = match comparator {
                                 Comparator::Equal => (Bound::Included(rhs_value.clone()), Bound::Included(rhs_value)),
@@ -438,8 +441,12 @@ impl<T> Checker<T> {
                             rhs.as_variable().expect("RHS of comparison must be a variable") == target_variable
                         );
                         let lhs_variable_value = get_vertex_value(lhs, row.as_ref(), &context.parameters);
-                        let lhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value, storage_counters.clone())?;
+                        let lhs_value = Self::read_value(
+                            context.snapshot.as_ref(),
+                            &context.thing_manager,
+                            &lhs_variable_value,
+                            storage_counters.clone(),
+                        )?;
                         if let Some(lhs_value) = lhs_value {
                             let comp_range = match comparator {
                                 Comparator::Equal => (Bound::Included(lhs_value.clone()), Bound::Included(lhs_value)),
@@ -459,8 +466,12 @@ impl<T> Checker<T> {
                     if *lhs == target_variable {
                         let rhs_as_vertex = CheckVertex::Variable(*rhs);
                         let rhs_variable_value = get_vertex_value(&rhs_as_vertex, row.as_ref(), &context.parameters);
-                        let rhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &rhs_variable_value, storage_counters.clone())?;
+                        let rhs_value = Self::read_value(
+                            context.snapshot.as_ref(),
+                            &context.thing_manager,
+                            &rhs_variable_value,
+                            storage_counters.clone(),
+                        )?;
                         if let Some(rhs_value) = rhs_value {
                             let comp_range = (Bound::Included(rhs_value.clone()), Bound::Included(rhs_value));
                             range = intersect(range, comp_range);
@@ -468,8 +479,12 @@ impl<T> Checker<T> {
                     } else {
                         let lhs_as_vertex = CheckVertex::Variable(*lhs);
                         let lhs_variable_value = get_vertex_value(&lhs_as_vertex, row.as_ref(), &context.parameters);
-                        let lhs_value =
-                            Self::read_value(context.snapshot.as_ref(), &context.thing_manager, &lhs_variable_value, storage_counters.clone())?;
+                        let lhs_value = Self::read_value(
+                            context.snapshot.as_ref(),
+                            &context.thing_manager,
+                            &lhs_variable_value,
+                            storage_counters.clone(),
+                        )?;
                         if let Some(lhs_value) = lhs_value {
                             let comp_range = (Bound::Included(lhs_value.clone()), Bound::Included(lhs_value));
                             range = intersect(range, comp_range);

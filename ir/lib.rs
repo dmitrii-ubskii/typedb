@@ -8,9 +8,8 @@
 #![deny(elided_lifetimes_in_paths)]
 #![allow(unused_variables)]
 
-use typeql::{common::Span, statement::InIterable, token, value::StringLiteral};
-
 use error::typedb_error;
+use typeql::{common::Span, statement::InIterable, token, value::StringLiteral};
 
 use crate::{
     pattern::{expression::ExpressionRepresentationError, variable_category::VariableCategory},

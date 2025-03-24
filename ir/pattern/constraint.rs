@@ -12,22 +12,21 @@ use std::{
     ops::Deref,
 };
 
-use itertools::Itertools;
-use typeql::common::Span;
-
 use answer::variable::Variable;
 use error::UnimplementedFeature;
+use itertools::Itertools;
 use structural_equality::StructuralEquality;
+use typeql::common::Span;
 
 use crate::{
-    LiteralParseError,
     pattern::{
         expression::{ExpressionRepresentationError, ExpressionTree},
         function_call::FunctionCall,
-        IrID,
-        ParameterID, ScopeId, ValueType, variable_category::VariableCategory, Vertex,
+        variable_category::VariableCategory,
+        IrID, ParameterID, ScopeId, ValueType, Vertex,
     },
-    pipeline::{block::BlockBuilderContext, function_signature::FunctionSignature, ParameterRegistry}, RepresentationError,
+    pipeline::{block::BlockBuilderContext, function_signature::FunctionSignature, ParameterRegistry},
+    LiteralParseError, RepresentationError,
 };
 
 #[derive(Debug, Clone)]

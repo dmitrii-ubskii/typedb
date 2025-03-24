@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-use answer::{Thing, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing};
 use compiler::{
     executable::{
         modifiers::{DistinctExecutable, SortExecutable},
@@ -293,9 +293,12 @@ impl CollectorTrait for SortCollector {
             let x_row = x_row_as_row.row();
             let y_row = y_row_as_row.row();
             for (idx, asc) in &self.sort_on {
-                let ord = Self::get_value(&x_row[*idx], context, StorageCounters::DISABLED) // TODO: bring in counters
-                    .partial_cmp(&Self::get_value(&y_row[*idx], context, StorageCounters::DISABLED)) // TODO: bring in counters
-                    .expect("Sort on variable with uncomparable values should have been caught at query-compile time");
+                let ord =
+                    Self::get_value(&x_row[*idx], context, StorageCounters::DISABLED) // TODO: bring in counters
+                        .partial_cmp(&Self::get_value(&y_row[*idx], context, StorageCounters::DISABLED)) // TODO: bring in counters
+                        .expect(
+                            "Sort on variable with uncomparable values should have been caught at query-compile time",
+                        );
                 match (asc, ord) {
                     (true, Ordering::Less) | (false, Ordering::Greater) => return Ordering::Less,
                     (true, Ordering::Greater) | (false, Ordering::Less) => return Ordering::Greater,

@@ -4,7 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use answer::variable::Variable;
+use error::needs_update_when_feature_is_implemented;
 use itertools::Itertools;
+use storage::snapshot::ReadableSnapshot;
 use typeql::{
     common::Spanned,
     schema::definable::function::{
@@ -12,10 +15,6 @@ use typeql::{
     },
     type_::{NamedType, NamedTypeAny},
 };
-
-use answer::variable::Variable;
-use error::needs_update_when_feature_is_implemented;
-use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     pattern::variable_category::{VariableCategory, VariableOptionality},

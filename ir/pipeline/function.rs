@@ -10,18 +10,16 @@ use std::{
     mem,
 };
 
+use answer::variable::Variable;
+use structural_equality::StructuralEquality;
 use typeql::{
     common::Span,
     schema::definable::function::{Output, SingleSelector},
-    type_::NamedTypeAny
-    ,
+    type_::NamedTypeAny,
 };
 
-use answer::variable::Variable;
-use structural_equality::StructuralEquality;
-
 use crate::{
-    pipeline::{ParameterRegistry, reduce::Reducer},
+    pipeline::{reduce::Reducer, ParameterRegistry},
     translation::{pipeline::TranslatedStage, TranslationContext},
 };
 

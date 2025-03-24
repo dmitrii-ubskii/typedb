@@ -77,14 +77,20 @@ fn test_reading_snapshots() {
     snapshot_write_1.put_val(StorageKeyArray::new(Keyspace, ByteArray::copy(&KEY_1)), ByteArray::copy(&VALUE_1));
     let snapshot_read_01 = storage.clone().open_snapshot_read();
     assert_eq!(*snapshot_read_0.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
-    assert_eq!(*snapshot_read_01.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
+    assert_eq!(
+        *snapshot_read_01.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(),
+        VALUE_0
+    );
 
     let result_write_1 = snapshot_write_1.commit(&mut CommitProfile::DISABLED);
     assert!(result_write_1.is_ok());
 
     let snapshot_read_1 = storage.clone().open_snapshot_read();
     assert_eq!(*snapshot_read_0.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
-    assert_eq!(*snapshot_read_01.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
+    assert_eq!(
+        *snapshot_read_01.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(),
+        VALUE_0
+    );
     assert_eq!(*snapshot_read_1.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_1);
     snapshot_read_1.close_resources();
     snapshot_read_01.close_resources();
@@ -92,7 +98,10 @@ fn test_reading_snapshots() {
 
     // Read from further in the past.
     let snapshot_read_02 = storage.open_snapshot_read_at(watermark_0);
-    assert_eq!(*snapshot_read_02.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(), VALUE_0);
+    assert_eq!(
+        *snapshot_read_02.get::<128>(key_1.as_reference(), StorageCounters::DISABLED).unwrap().unwrap(),
+        VALUE_0
+    );
     snapshot_read_02.close_resources();
 }
 

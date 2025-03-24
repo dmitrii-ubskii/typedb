@@ -6,20 +6,19 @@
 
 use std::sync::Arc;
 
-use macro_rules_attribute::apply;
-
 use concept::{
     error::{ConceptReadError, ConceptWriteError},
     thing::{attribute::Attribute, ThingAPI},
     type_::TypeAPI,
 };
+use macro_rules_attribute::apply;
 use resource::profile::StorageCounters;
 
 use crate::{
-    Context,
     generic_step,
     params::{self, check_boolean},
     transaction_context::{with_read_tx, with_write_tx},
+    Context,
 };
 
 pub fn attribute_put_instance_with_value_impl(
@@ -96,7 +95,10 @@ async fn attribute_has_value(context: &mut Context, var: params::Var, value: par
         let value = value.into_typedb(
             attribute_type.get_value_type_without_source(tx.snapshot.as_ref(), &tx.type_manager).unwrap().unwrap(),
         );
-        assert_eq!(attribute.get_value(tx.snapshot.as_ref(), &tx.thing_manager, StorageCounters::DISABLED).unwrap(), value);
+        assert_eq!(
+            attribute.get_value(tx.snapshot.as_ref(), &tx.thing_manager, StorageCounters::DISABLED).unwrap(),
+            value
+        );
     });
 }
 
@@ -124,7 +126,12 @@ pub fn get_attribute_by_value(
         let value = value.into_typedb(
             attribute_type.get_value_type_without_source(tx.snapshot.as_ref(), &tx.type_manager).unwrap().unwrap(),
         );
-        tx.thing_manager.get_attribute_with_value(tx.snapshot.as_ref(), attribute_type, value, StorageCounters::DISABLED)
+        tx.thing_manager.get_attribute_with_value(
+            tx.snapshot.as_ref(),
+            attribute_type,
+            value,
+            StorageCounters::DISABLED,
+        )
     })
 }
 
@@ -159,7 +166,9 @@ async fn attribute_is_deleted(context: &mut Context, var: params::Var, is_delete
     let attribute_type = attribute.type_();
     let get = with_read_tx!(context, |tx| {
         let value = attribute.get_value(tx.snapshot.as_ref(), &tx.thing_manager, StorageCounters::DISABLED).unwrap();
-        tx.thing_manager.get_attribute_with_value(tx.snapshot.as_ref(), attribute_type, value, StorageCounters::DISABLED).unwrap()
+        tx.thing_manager
+            .get_attribute_with_value(tx.snapshot.as_ref(), attribute_type, value, StorageCounters::DISABLED)
+            .unwrap()
     });
     check_boolean!(is_deleted, get.is_none());
 }
@@ -177,9 +186,15 @@ async fn delete_attributes_of_type(context: &mut Context, type_label: params::La
     with_write_tx!(context, |tx| {
         let attribute_type =
             tx.type_manager.get_attribute_type(tx.snapshot.as_ref(), &type_label.into_typedb()).unwrap().unwrap();
-        let mut attribute_iterator = tx.thing_manager.get_attributes_in(tx.snapshot.as_ref(), attribute_type, StorageCounters::DISABLED).unwrap();
+        let mut attribute_iterator = tx
+            .thing_manager
+            .get_attributes_in(tx.snapshot.as_ref(), attribute_type, StorageCounters::DISABLED)
+            .unwrap();
         while let Some(attribute) = attribute_iterator.next() {
-            attribute.unwrap().delete(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, StorageCounters::DISABLED).unwrap();
+            attribute
+                .unwrap()
+                .delete(Arc::get_mut(&mut tx.snapshot).unwrap(), &tx.thing_manager, StorageCounters::DISABLED)
+                .unwrap();
         }
     })
 }
@@ -215,7 +230,12 @@ async fn object_instances_is_empty(
     with_read_tx!(context, |tx| {
         let attribute_type =
             tx.type_manager.get_attribute_type(tx.snapshot.as_ref(), &type_label.into_typedb()).unwrap().unwrap();
-        is_empty_or_not
-            .check(tx.thing_manager.get_attributes_in(tx.snapshot.as_ref(), attribute_type, StorageCounters::DISABLED).unwrap().next().is_none());
+        is_empty_or_not.check(
+            tx.thing_manager
+                .get_attributes_in(tx.snapshot.as_ref(), attribute_type, StorageCounters::DISABLED)
+                .unwrap()
+                .next()
+                .is_none(),
+        );
     });
 }

@@ -6,28 +6,27 @@
 
 use std::{collections::HashSet, fmt, sync::Arc};
 
-use itertools::Itertools;
-
 use encoding::{
     error::{EncodingError, EncodingError::UnexpectedPrefix},
     graph::type_::vertex::{TypeVertex, TypeVertexEncoding},
     layout::prefix::Prefix,
-    Prefixed,
     value::label::Label,
+    Prefixed,
 };
+use itertools::Itertools;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
-    ConceptAPI,
     error::{ConceptReadError, ConceptWriteError},
     thing::{object::Object, thing_manager::ThingManager},
     type_::{
-        attribute_type::AttributeType, constraint::CapabilityConstraint, entity_type::EntityType, ObjectTypeAPI,
-        Ordering, OwnerAPI, owns::Owns, PlayerAPI, plays::Plays,
-        relation_type::RelationType, role_type::RoleType, ThingTypeAPI, type_manager::TypeManager, TypeAPI,
+        attribute_type::AttributeType, constraint::CapabilityConstraint, entity_type::EntityType, owns::Owns,
+        plays::Plays, relation_type::RelationType, role_type::RoleType, type_manager::TypeManager, ObjectTypeAPI,
+        Ordering, OwnerAPI, PlayerAPI, ThingTypeAPI, TypeAPI,
     },
+    ConceptAPI,
 };
 
 macro_rules! with_object_type {
@@ -315,12 +314,12 @@ impl TypeAPI for ObjectType {
 
     fn next_possible(&self) -> Option<Self> {
         match self {
-            ObjectType::Entity(entity) => {
-                Some(
-                    entity.next_possible().map(|entity_type| Self::Entity(entity_type))
-                    .unwrap_or_else(|| Self::Relation(RelationType::MIN))
-                )
-            }
+            ObjectType::Entity(entity) => Some(
+                entity
+                    .next_possible()
+                    .map(|entity_type| Self::Entity(entity_type))
+                    .unwrap_or_else(|| Self::Relation(RelationType::MIN)),
+            ),
             ObjectType::Relation(relation) => {
                 relation.next_possible().map(|relation_type| Self::Relation(relation_type))
             }
@@ -330,10 +329,12 @@ impl TypeAPI for ObjectType {
     fn previous_possible(&self) -> Option<Self> {
         match self {
             ObjectType::Entity(entity) => entity.previous_possible().map(|entity_type| Self::Entity(entity_type)),
-            ObjectType::Relation(relation) => {
-                Some(relation.previous_possible().map(|relation_type| Self::Relation(relation_type))
-                    .unwrap_or_else(|| Self::Entity(EntityType::MAX)))
-            }
+            ObjectType::Relation(relation) => Some(
+                relation
+                    .previous_possible()
+                    .map(|relation_type| Self::Relation(relation_type))
+                    .unwrap_or_else(|| Self::Entity(EntityType::MAX)),
+            ),
         }
     }
 }

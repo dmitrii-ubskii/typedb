@@ -5,16 +5,14 @@
  */
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
+    ops::{Bound, Index},
     sync::Arc,
 };
-use std::cmp::Ordering;
-use std::ops::{Bound, Index};
 
-use itertools::Itertools;
-
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{
     executable::match_::instructions::{thing::IndexedRelationInstruction, VariableMode, VariableModes},
     ExecutorVariable,
@@ -25,40 +23,35 @@ use concept::{
         object::{Object, ObjectAPI},
         relation::{IndexedRelationPlayers, IndexedRelationsIterator, Relation},
         thing_manager::ThingManager,
+        ThingAPI,
     },
-    type_::role_type::RoleType,
+    type_::{object_type::ObjectType, relation_type::RelationType, role_type::RoleType, TypeAPI},
 };
-use concept::thing::ThingAPI;
-use concept::type_::object_type::ObjectType;
-use concept::type_::relation_type::RelationType;
-use concept::type_::TypeAPI;
-use encoding::graph::thing::vertex_object::{ObjectID, ObjectVertex};
-use encoding::graph::type_::vertex::{TypeID, TypeVertexEncoding};
-use encoding::graph::Typed;
-use lending_iterator::{LendingIterator, Peekable};
-use lending_iterator::kmerge::KMergeBy;
+use encoding::graph::{
+    thing::vertex_object::{ObjectID, ObjectVertex},
+    type_::vertex::{TypeID, TypeVertexEncoding},
+    Typed,
+};
+use itertools::Itertools;
+use lending_iterator::{kmerge::KMergeBy, LendingIterator, Peekable};
 use primitive::Bounds;
-use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
-use resource::profile::StorageCounters;
+use resource::{constants::traversal::CONSTANT_CONCEPT_LIMIT, profile::StorageCounters};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker
-        ,
-        FilterFn,
-        iterator::{SortedTupleIterator, TupleIterator}, tuple::{Tuple, TuplePositions, TupleResult},
+        has_executor::FixedHasBounds,
+        iterator::{SortedTupleIterator, TupleIterator, TupleSeekable},
+        tuple::{unsafe_compare_result_tuple, Tuple, TupleOrderingFn, TuplePositions, TupleResult},
+        Checker, FilterFn, FilterMapUnchangedFn,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::FilterMapUnchangedFn;
-use crate::instruction::has_executor::FixedHasBounds;
-use crate::instruction::iterator::TupleSeekable;
-use crate::instruction::tuple::{TupleOrderingFn, unsafe_compare_result_tuple};
 
 pub(crate) type IndexedRelationTupleIteratorSingle = IndexedRelationTupleIterator<IndexedRelationsIterator>;
-pub(crate) type IndexedRelationTupleIteratorMerged = KMergeBy<IndexedRelationTupleIterator<IndexedRelationsIterator>, TupleOrderingFn>;
+pub(crate) type IndexedRelationTupleIteratorMerged =
+    KMergeBy<IndexedRelationTupleIterator<IndexedRelationsIterator>, TupleOrderingFn>;
 
 type IndexedRelationValueExtractor = fn(&(IndexedRelationPlayers, u64)) -> VariableValue<'static>;
 
@@ -66,8 +59,9 @@ pub(super) const EXTRACT_PLAYER_START: IndexedRelationValueExtractor =
     |(indexed, _)| VariableValue::Thing(Thing::from(indexed.0));
 pub(super) const EXTRACT_PLAYER_END: IndexedRelationValueExtractor =
     |(indexed, _)| VariableValue::Thing(Thing::from(indexed.1));
-pub(super) const EXTRACT_RELATION: IndexedRelationValueExtractor =
-    |(indexed, _)| VariableValue::Thing(Thing::Relation(Relation::new(ObjectVertex::build_relation(indexed.2, indexed.3))));
+pub(super) const EXTRACT_RELATION: IndexedRelationValueExtractor = |(indexed, _)| {
+    VariableValue::Thing(Thing::Relation(Relation::new(ObjectVertex::build_relation(indexed.2, indexed.3))))
+};
 pub(super) const EXTRACT_ROLE_START: IndexedRelationValueExtractor =
     |(indexed, _)| VariableValue::Type(Type::RoleType(indexed.4));
 pub(super) const EXTRACT_ROLE_END: IndexedRelationValueExtractor =
@@ -76,7 +70,10 @@ pub(super) const EXTRACT_ROLE_END: IndexedRelationValueExtractor =
 pub(super) type IndexedRelationFilterFn = FilterFn<(IndexedRelationPlayers, u64)>;
 pub(super) type IndexedRelationFilterMapFn = FilterMapUnchangedFn<(IndexedRelationPlayers, u64)>;
 pub(crate) type IndexedRelationOrderingFn = for<'a, 'b> fn(
-    (&'a Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>, &'b Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>),
+    (
+        &'a Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+        &'b Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+    ),
 ) -> Ordering;
 
 pub(crate) struct IndexedRelationExecutor {
@@ -195,8 +192,11 @@ impl IndexedRelationExecutor {
         let start_player_cache = if iterate_mode == IndexedRelationIterateMode::UnboundInvertedToPlayer {
             let mut cache = Vec::new();
             for type_ in player_start_to_player_end_types.keys() {
-                let instances: Vec<Object> =
-                    Itertools::try_collect(thing_manager.get_objects_in(snapshot, type_.as_object_type(), StorageCounters::DISABLED))?;
+                let instances: Vec<Object> = Itertools::try_collect(thing_manager.get_objects_in(
+                    snapshot,
+                    type_.as_object_type(),
+                    StorageCounters::DISABLED,
+                ))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -253,7 +253,7 @@ impl IndexedRelationExecutor {
                 Err(_) => Some(item),
             },
             Ok(false) => None,
-            Err(_) => Some(item)
+            Err(_) => Some(item),
         });
 
         let snapshot = &**context.snapshot();
@@ -272,7 +272,7 @@ impl IndexedRelationExecutor {
                         filter_for_row,
                         self.tuple_positions.clone(),
                         component_ordering,
-                        FixedIndexedRelationBounds::new( Some(relation_type.vertex().type_id_()), None, None, None )
+                        FixedIndexedRelationBounds::new(Some(relation_type.vertex().type_id_()), None, None, None),
                     );
                     Ok(TupleIterator::IndexedRelationsSingle(SortedTupleIterator::new(
                         as_tuples,
@@ -285,7 +285,12 @@ impl IndexedRelationExecutor {
                         .keys()
                         .map(|relation_type| {
                             let iterator = thing_manager
-                                .get_indexed_relations_in(snapshot, relation_type.as_relation_type(), self.player_start_range(), storage_counters.clone())
+                                .get_indexed_relations_in(
+                                    snapshot,
+                                    relation_type.as_relation_type(),
+                                    self.player_start_range(),
+                                    storage_counters.clone(),
+                                )
                                 .expect("Relation index should be available");
                             IndexedRelationTupleIterator::new(
                                 iterator,
@@ -296,13 +301,15 @@ impl IndexedRelationExecutor {
                                     Some(relation_type.as_relation_type().vertex().type_id_()),
                                     None,
                                     None,
-                                    None
-                                )
+                                    None,
+                                ),
                             )
                         })
                         .collect_vec();
-                    let merged_tuples: KMergeBy<IndexedRelationTupleIterator<IndexedRelationsIterator>, TupleOrderingFn> =
-                        KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
+                    let merged_tuples: KMergeBy<
+                        IndexedRelationTupleIterator<IndexedRelationsIterator>,
+                        TupleOrderingFn,
+                    > = KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::IndexedRelationsMerged(SortedTupleIterator::new(
                         merged_tuples,
                         self.tuple_positions.clone(),
@@ -317,8 +324,13 @@ impl IndexedRelationExecutor {
                     |start_player| {
                         for relation_type in self.relation_to_player_start_types.keys() {
                             let iterator = start_player
-                                    .get_indexed_relations(snapshot, thing_manager, relation_type.as_relation_type(), storage_counters.clone())
-                                    .expect("Relation index expected to be available");
+                                .get_indexed_relations(
+                                    snapshot,
+                                    thing_manager,
+                                    relation_type.as_relation_type(),
+                                    storage_counters.clone(),
+                                )
+                                .expect("Relation index expected to be available");
                             let as_tuples = IndexedRelationTupleIterator::new(
                                 iterator,
                                 filter_for_row.clone(),
@@ -328,7 +340,7 @@ impl IndexedRelationExecutor {
                                     Some(relation_type.as_relation_type().vertex().type_id_()),
                                     None,
                                     Some(*start_player),
-                                    None
+                                    None,
                                 ),
                             );
                             iterators.push(as_tuples);
@@ -358,7 +370,12 @@ impl IndexedRelationExecutor {
                         filter_for_row,
                         self.tuple_positions.clone(),
                         component_ordering,
-                        FixedIndexedRelationBounds::new(Some(relation_type.vertex().type_id_()), None, Some(start_player), None),
+                        FixedIndexedRelationBounds::new(
+                            Some(relation_type.vertex().type_id_()),
+                            None,
+                            Some(start_player),
+                            None,
+                        ),
                     );
                     Ok(TupleIterator::IndexedRelationsSingle(SortedTupleIterator::new(
                         as_tuples,
@@ -371,7 +388,12 @@ impl IndexedRelationExecutor {
                         .keys()
                         .map(|relation_type| {
                             let iterator = start_player
-                                .get_indexed_relations(snapshot, thing_manager, relation_type.as_relation_type(), storage_counters.clone())
+                                .get_indexed_relations(
+                                    snapshot,
+                                    thing_manager,
+                                    relation_type.as_relation_type(),
+                                    storage_counters.clone(),
+                                )
                                 .expect("Relation index should be available");
                             let as_tuples = IndexedRelationTupleIterator::new(
                                 iterator,
@@ -382,14 +404,16 @@ impl IndexedRelationExecutor {
                                     Some(relation_type.as_relation_type().vertex().type_id_()),
                                     None,
                                     Some(start_player),
-                                    None
-                                )
+                                    None,
+                                ),
                             );
                             as_tuples
                         })
                         .collect_vec();
-                    let merged_tuples: KMergeBy<IndexedRelationTupleIterator<IndexedRelationsIterator>, TupleOrderingFn> =
-                        KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
+                    let merged_tuples: KMergeBy<
+                        IndexedRelationTupleIterator<IndexedRelationsIterator>,
+                        TupleOrderingFn,
+                    > = KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::IndexedRelationsMerged(SortedTupleIterator::new(
                         merged_tuples,
                         self.tuple_positions.clone(),
@@ -409,7 +433,13 @@ impl IndexedRelationExecutor {
                 if self.relation_to_player_start_types.len() == 1 {
                     let relation_type = self.relation_to_player_start_types.keys().next().unwrap().as_relation_type();
                     let iterator = start_player
-                        .get_indexed_relations_with_player(snapshot, thing_manager, end_player, relation_type, storage_counters)
+                        .get_indexed_relations_with_player(
+                            snapshot,
+                            thing_manager,
+                            end_player,
+                            relation_type,
+                            storage_counters,
+                        )
                         .expect("Relation index should be available");
                     let as_tuples = IndexedRelationTupleIterator::new(
                         iterator,
@@ -420,8 +450,8 @@ impl IndexedRelationExecutor {
                             Some(relation_type.vertex().type_id_()),
                             None,
                             Some(start_player),
-                            Some(end_player)
-                        )
+                            Some(end_player),
+                        ),
                     );
                     Ok(TupleIterator::IndexedRelationsSingle(SortedTupleIterator::new(
                         as_tuples,
@@ -451,14 +481,16 @@ impl IndexedRelationExecutor {
                                     Some(relation_type.as_relation_type().vertex().type_id_()),
                                     None,
                                     Some(start_player),
-                                    Some(end_player)
-                                )
+                                    Some(end_player),
+                                ),
                             );
                             as_tuples
                         })
                         .collect_vec();
-                    let merged_tuples: KMergeBy<IndexedRelationTupleIterator<IndexedRelationsIterator>, TupleOrderingFn> =
-                        KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
+                    let merged_tuples: KMergeBy<
+                        IndexedRelationTupleIterator<IndexedRelationsIterator>,
+                        TupleOrderingFn,
+                    > = KMergeBy::new(tuple_iterators, unsafe_compare_result_tuple);
                     Ok(TupleIterator::IndexedRelationsMerged(SortedTupleIterator::new(
                         merged_tuples,
                         self.tuple_positions.clone(),
@@ -480,7 +512,13 @@ impl IndexedRelationExecutor {
                     _ => unreachable!("Indexed relation must be a thing relation"),
                 };
                 let iterator = start_player
-                    .get_indexed_relation_roles_with_player_and_relation(snapshot, thing_manager, end_player, relation, storage_counters)
+                    .get_indexed_relation_roles_with_player_and_relation(
+                        snapshot,
+                        thing_manager,
+                        end_player,
+                        relation,
+                        storage_counters,
+                    )
                     .expect("Relation index should be available");
                 let as_tuples = IndexedRelationTupleIterator::new(
                     iterator,
@@ -491,8 +529,8 @@ impl IndexedRelationExecutor {
                         Some(relation.type_().vertex().type_id_()),
                         Some(relation.vertex().object_id()),
                         Some(start_player),
-                        Some(end_player)
-                    )
+                        Some(end_player),
+                    ),
                 );
                 Ok(TupleIterator::IndexedRelationsSingle(SortedTupleIterator::new(
                     as_tuples,
@@ -578,7 +616,12 @@ pub(super) struct FixedIndexedRelationBounds {
 }
 
 impl FixedIndexedRelationBounds {
-    fn new(relation_type_id: Option<TypeID>, relation_id: Option<ObjectID>, from: Option<Object>, to: Option<Object>) -> Self {
+    fn new(
+        relation_type_id: Option<TypeID>,
+        relation_id: Option<ObjectID>,
+        from: Option<Object>,
+        to: Option<Object>,
+    ) -> Self {
         Self { relation_type_id, relation_id, from, to }
     }
 }
@@ -593,15 +636,15 @@ pub(super) struct IndexedRelationTupleIterator<Iter: LendingIterator> {
 
 impl<Iter> IndexedRelationTupleIterator<Iter>
 where
-    Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
-        for<'a> LendingIterator<Item<'a>=Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+    Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>,
 {
     pub(super) fn new(
         inner: Iter,
         filter: Arc<IndexedRelationFilterMapFn>,
         tuple_positions: TuplePositions,
         component_ordering: [ExecutorVariable; 5],
-        fixed_bindings: FixedIndexedRelationBounds
+        fixed_bindings: FixedIndexedRelationBounds,
     ) -> Self {
         Self {
             inner: Peekable::new(inner),
@@ -614,22 +657,27 @@ where
 }
 
 impl<Iter: LendingIterator> IndexedRelationTupleIterator<Iter>
-    where
-        Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
-            for<'a> LendingIterator<Item<'a>=Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>,
 {
     fn indexed_to_tuple(
         &self,
-        indexed_relation_players: Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>
+        indexed_relation_players: Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
     ) -> TupleResult<'static> {
         let (components, _) = indexed_relation_players?;
         let tuple: [VariableValue<'static>; 5] = std::array::from_fn(|i| {
-            let variable_at_position = self.tuple_positions.as_quintuple()[i].expect("Indexed tuple positions must be a quintuple");
-            let source_component_index = self.component_ordering.iter().position(|var| *var == variable_at_position).unwrap();
+            let variable_at_position =
+                self.tuple_positions.as_quintuple()[i].expect("Indexed tuple positions must be a quintuple");
+            let source_component_index =
+                self.component_ordering.iter().position(|var| *var == variable_at_position).unwrap();
             match source_component_index {
                 0 => VariableValue::Thing(components.0.into()),
                 1 => VariableValue::Thing(components.1.into()),
-                2 => VariableValue::Thing(Thing::Relation(Relation::new(ObjectVertex::build_relation(components.2, components.3)))),
+                2 => VariableValue::Thing(Thing::Relation(Relation::new(ObjectVertex::build_relation(
+                    components.2,
+                    components.3,
+                )))),
                 3 => VariableValue::Type(Type::RoleType(components.4)),
                 4 => VariableValue::Type(Type::RoleType(components.5)),
                 _ => unreachable!("only 5 components exist"),
@@ -638,9 +686,16 @@ impl<Iter: LendingIterator> IndexedRelationTupleIterator<Iter>
         TupleResult::Ok(Tuple::Quintuple(tuple))
     }
 
-    fn tuple_to_indexed(&self, tuple: &Tuple<'_> ) -> IndexedRelationPlayers {
+    fn tuple_to_indexed(&self, tuple: &Tuple<'_>) -> IndexedRelationPlayers {
         debug_assert!(matches!(tuple, &Tuple::Quintuple(_)));
-        let mut indexed: (Option<Object>, Option<Object>, Option<TypeID>, Option<ObjectID>, Option<RoleType>, Option<RoleType>) = (
+        let mut indexed: (
+            Option<Object>,
+            Option<Object>,
+            Option<TypeID>,
+            Option<ObjectID>,
+            Option<RoleType>,
+            Option<RoleType>,
+        ) = (
             self.fixed_bounds.from.clone(),
             self.fixed_bounds.to.clone(),
             self.fixed_bounds.relation_type_id.clone(),
@@ -649,40 +704,74 @@ impl<Iter: LendingIterator> IndexedRelationTupleIterator<Iter>
             None,
         );
         for (index, value) in tuple.values().iter().enumerate() {
-            let variable_at_position = self.tuple_positions.as_quintuple()[index].expect("Indexed tuple positions must be a quintuple");
-            let source_component_index = self.component_ordering.iter().position(|var| *var == variable_at_position).expect("Variable -> indexed component not found.");
+            let variable_at_position =
+                self.tuple_positions.as_quintuple()[index].expect("Indexed tuple positions must be a quintuple");
+            let source_component_index = self
+                .component_ordering
+                .iter()
+                .position(|var| *var == variable_at_position)
+                .expect("Variable -> indexed component not found.");
             match source_component_index {
-                0 => if indexed.0.is_none() {
-                    indexed.0 = Some(value.get_thing().map(|thing| thing.as_object()).unwrap_or_else(|| Object::MIN))
-                },
-                1 => if indexed.1.is_none() {
-                    indexed.1 = Some(value.get_thing().map(|thing| thing.as_object()).unwrap_or_else(|| Object::MIN))
-                },
+                0 => {
+                    if indexed.0.is_none() {
+                        indexed.0 =
+                            Some(value.get_thing().map(|thing| thing.as_object()).unwrap_or_else(|| Object::MIN))
+                    }
+                }
+                1 => {
+                    if indexed.1.is_none() {
+                        indexed.1 =
+                            Some(value.get_thing().map(|thing| thing.as_object()).unwrap_or_else(|| Object::MIN))
+                    }
+                }
                 2 => {
-                    if indexed.2.is_none () {
-                        indexed.2 = Some(value.get_thing().map(|thing| thing.as_relation().type_().vertex().type_id_()).unwrap_or_else(|| TypeID::MIN))
+                    if indexed.2.is_none() {
+                        indexed.2 = Some(
+                            value
+                                .get_thing()
+                                .map(|thing| thing.as_relation().type_().vertex().type_id_())
+                                .unwrap_or_else(|| TypeID::MIN),
+                        )
                     }
                     if indexed.3.is_none() {
-                        indexed.3 = Some(value.get_thing().map(|thing| thing.as_relation().vertex().object_id()).unwrap_or_else(|| ObjectID::MIN))
+                        indexed.3 = Some(
+                            value
+                                .get_thing()
+                                .map(|thing| thing.as_relation().vertex().object_id())
+                                .unwrap_or_else(|| ObjectID::MIN),
+                        )
                     }
-                },
-                3 => if indexed.4.is_none() {
-                    indexed.4 = Some(value.get_type().map(|type_| type_.as_role_type()).unwrap_or_else(|| RoleType::MIN))
-                },
-                4 => if indexed.5.is_none() {
-                    indexed.5 = Some(value.get_type().map(|type_| type_.as_role_type()).unwrap_or_else(|| RoleType::MIN))
-                },
+                }
+                3 => {
+                    if indexed.4.is_none() {
+                        indexed.4 =
+                            Some(value.get_type().map(|type_| type_.as_role_type()).unwrap_or_else(|| RoleType::MIN))
+                    }
+                }
+                4 => {
+                    if indexed.5.is_none() {
+                        indexed.5 =
+                            Some(value.get_type().map(|type_| type_.as_role_type()).unwrap_or_else(|| RoleType::MIN))
+                    }
+                }
                 _ => unreachable!("only 5 components exist"),
             }
         }
-        (indexed.0.unwrap(), indexed.1.unwrap(), indexed.2.unwrap(), indexed.3.unwrap(), indexed.4.unwrap(), indexed.5.unwrap())
+        (
+            indexed.0.unwrap(),
+            indexed.1.unwrap(),
+            indexed.2.unwrap(),
+            indexed.3.unwrap(),
+            indexed.4.unwrap(),
+            indexed.5.unwrap(),
+        )
     }
 }
 
 impl<Iter> LendingIterator for IndexedRelationTupleIterator<Iter>
-    where
-        Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
-            for<'a> LendingIterator<Item<'a>=Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>,
 {
     type Item<'a> = TupleResult<'static>;
 
@@ -698,9 +787,9 @@ impl<Iter> LendingIterator for IndexedRelationTupleIterator<Iter>
 }
 
 impl<Iter> TupleSeekable for IndexedRelationTupleIterator<Iter>
-    where
-        Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
-            for<'a> LendingIterator<Item<'a>=Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>> +
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>>,
 {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         let target = self.tuple_to_indexed(&target);
@@ -732,7 +821,10 @@ fn create_indexed_players_filter(
 }
 
 fn compare_indexed_players(
-    (left, right): (&Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>, &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>),
+    (left, right): (
+        &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+        &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+    ),
 ) -> Ordering {
     if let (Ok((indexed_players_1, _)), Ok((indexed_players_2, _))) = (left, right) {
         indexed_players_1.cmp(&indexed_players_2)
@@ -743,16 +835,24 @@ fn compare_indexed_players(
 }
 
 fn compare_indexed_players_inverted(
-    (left, right): (&Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>, &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>),
+    (left, right): (
+        &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+        &Result<(IndexedRelationPlayers, u64), Box<ConceptReadError>>,
+    ),
 ) -> Ordering {
     if let (
         Ok(((start_1, end_1, rel_type_1, rel_id_1, start_role_1, end_role_1), _)),
         Ok(((start_2, end_2, rel_type_2, rel_id_2, start_role_2, end_role_2), _)),
     ) = (left, right)
     {
-        (end_1, start_1, rel_type_1, rel_id_1, start_role_1, end_role_1).cmp(
-            &(end_2, start_2, rel_type_2, rel_id_2, start_role_2, end_role_2)
-        )
+        (end_1, start_1, rel_type_1, rel_id_1, start_role_1, end_role_1).cmp(&(
+            end_2,
+            start_2,
+            rel_type_2,
+            rel_id_2,
+            start_role_2,
+            end_role_2,
+        ))
     } else {
         // arbitrary
         Ordering::Equal

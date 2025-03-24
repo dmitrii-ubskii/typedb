@@ -13,17 +13,17 @@ use concept::{
     type_::{
         annotation::{AnnotationCardinality, AnnotationIndependent},
         attribute_type::AttributeTypeAnnotation,
-        ObjectTypeAPI,
-        Ordering, OwnerAPI, PlayerAPI, relates::RelatesAnnotation,
+        relates::RelatesAnnotation,
+        ObjectTypeAPI, Ordering, OwnerAPI, PlayerAPI,
     },
 };
 use encoding::value::{label::Label, value::Value, value_type::ValueType};
 use resource::profile::{CommitProfile, StorageCounters};
 use storage::{
     durability_client::WALClient,
-    MVCCStorage,
     sequence_number::SequenceNumber,
     snapshot::{CommittableSnapshot, ReadableSnapshot},
+    MVCCStorage,
 };
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
@@ -272,7 +272,7 @@ fn put_has_twice() {
         .unwrap();
     person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, name_type, Ordering::Unordered).unwrap();
     let person = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    let name = thing_manager.create_attribute(&mut snapshot, name_type, Value::String("alice".into()), ).unwrap();
+    let name = thing_manager.create_attribute(&mut snapshot, name_type, Value::String("alice".into())).unwrap();
     thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED).unwrap();
     let create_commit_seq = snapshot.commit(&mut CommitProfile::DISABLED).unwrap().unwrap();
 
@@ -322,13 +322,17 @@ fn put_plays() {
         .unwrap();
     let person = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
     let friendship = thing_manager.create_relation(&mut snapshot, friendship_type).unwrap();
-    friendship.add_player(&mut snapshot, &thing_manager, friend_role, person.into_object(), StorageCounters::DISABLED).unwrap();
+    friendship
+        .add_player(&mut snapshot, &thing_manager, friend_role, person.into_object(), StorageCounters::DISABLED)
+        .unwrap();
     thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED).unwrap();
     let create_commit_seq = snapshot.commit(&mut CommitProfile::DISABLED).unwrap().unwrap();
 
     let mut snapshot = storage.clone().open_snapshot_write_at(create_commit_seq);
     let person_2 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    friendship.add_player(&mut snapshot, &thing_manager, friend_role, person_2.into_object(), StorageCounters::DISABLED).unwrap();
+    friendship
+        .add_player(&mut snapshot, &thing_manager, friend_role, person_2.into_object(), StorageCounters::DISABLED)
+        .unwrap();
     thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED).unwrap();
     snapshot.commit(&mut CommitProfile::DISABLED).unwrap().unwrap();
 

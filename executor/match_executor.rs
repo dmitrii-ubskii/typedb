@@ -15,13 +15,13 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
-    ExecutionInterrupt,
     pipeline::stage::ExecutionContext,
     read::{
-        pattern_executor::PatternExecutor, QueryPatternSuspensions, tabled_functions::TabledFunctions,
+        pattern_executor::PatternExecutor, tabled_functions::TabledFunctions, QueryPatternSuspensions,
         TODO_REMOVE_create_executors_for_match,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
 
 pub struct MatchExecutor {

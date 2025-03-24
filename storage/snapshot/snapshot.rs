@@ -9,8 +9,10 @@ use std::{any::type_name, error::Error, fmt, iter::empty, sync::Arc};
 use bytes::byte_array::ByteArray;
 use error::typedb_error;
 use lending_iterator::LendingIterator;
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::{CommitProfile, StorageCounters};
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::{CommitProfile, StorageCounters},
+};
 
 use crate::{
     durability_client::DurabilityClient,
@@ -62,11 +64,19 @@ pub trait ReadableSnapshot {
 
     get_mapped_method!(get_last_existing_mapped, get_last_existing);
 
-    fn contains(&self, key: StorageKeyReference<'_>, storage_counters: StorageCounters) -> Result<bool, SnapshotGetError> {
+    fn contains(
+        &self,
+        key: StorageKeyReference<'_>,
+        storage_counters: StorageCounters,
+    ) -> Result<bool, SnapshotGetError> {
         Ok(self.get_mapped(key, |_| (), storage_counters)?.is_some())
     }
 
-    fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator;
+    fn iterate_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator;
 
     fn any_in_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, buffered_only: bool) -> bool;
 
@@ -77,7 +87,11 @@ pub trait ReadableSnapshot {
 
     fn iterate_writes_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>) -> BufferRangeIterator;
 
-    fn iterate_storage_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator;
+    fn iterate_storage_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator;
 
     fn iterator_pool(&self) -> &IteratorPool;
 }
@@ -152,7 +166,8 @@ pub trait WritableSnapshot: ReadableSnapshot {
                 Err(SnapshotGetError::ExpectedRequiredKeyToExist { key: StorageKey::Array(key.into_owned_array()) })
             }
             None => {
-                let storage_value = self.get_mapped(key.as_reference(), |reference| ByteArray::from(reference), storage_counters)?;
+                let storage_value =
+                    self.get_mapped(key.as_reference(), |reference| ByteArray::from(reference), storage_counters)?;
                 if let Some(value) = storage_value {
                     self.operations_mut().lock_add(ByteArray::copy(key.bytes()), LockType::Unmodifiable);
                     Ok(value)
@@ -236,18 +251,23 @@ impl<D> ReadableSnapshot for ReadSnapshot<D> {
         self.get(key, storage_counters)
     }
 
-    fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
-        let mvcc_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+    fn iterate_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
+        let mvcc_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(mvcc_iterator, None)
     }
 
     fn any_in_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, buffered_only: bool) -> bool {
-        !buffered_only && self.storage.iterate_range(
-            self.iterator_pool(),
-            range,
-            self.open_sequence_number,
-            StorageCounters::DISABLED
-        ).next().is_some()
+        !buffered_only
+            && self
+                .storage
+                .iterate_range(self.iterator_pool(), range, self.open_sequence_number, StorageCounters::DISABLED)
+                .next()
+                .is_some()
     }
 
     fn get_write(&self, _: StorageKeyReference<'_>) -> Option<&Write> {
@@ -262,8 +282,13 @@ impl<D> ReadableSnapshot for ReadSnapshot<D> {
         BufferRangeIterator::new_empty()
     }
 
-    fn iterate_storage_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
-        let mvcc_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+    fn iterate_storage_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
+        let mvcc_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(mvcc_iterator, None)
     }
 
@@ -343,12 +368,17 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
         }
     }
 
-    fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
+    fn iterate_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
         let buffered_iterator = self
             .operations
             .writes_in(range.start().get_value().keyspace_id())
             .iterate_range(range.clone().map(|k| k.as_bytes(), |fixed| fixed));
-        let storage_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+        let storage_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(storage_iterator, Some(buffered_iterator))
     }
 
@@ -379,8 +409,13 @@ impl<D> ReadableSnapshot for WriteSnapshot<D> {
             .iterate_range(range.map(|k| k.as_bytes(), |fixed| fixed))
     }
 
-    fn iterate_storage_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
-        let mvcc_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+    fn iterate_storage_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
+        let mvcc_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(mvcc_iterator, None)
     }
 
@@ -491,12 +526,17 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
         }
     }
 
-    fn iterate_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
+    fn iterate_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
         let buffered_iterator = self
             .operations
             .writes_in(range.start().get_value().keyspace_id())
             .iterate_range(range.clone().map(|k| k.as_bytes(), |fixed| fixed));
-        let storage_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+        let storage_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(storage_iterator, Some(buffered_iterator))
     }
 
@@ -527,8 +567,13 @@ impl<D> ReadableSnapshot for SchemaSnapshot<D> {
             .iterate_range(range.map(|k| k.as_bytes(), |fixed| fixed))
     }
 
-    fn iterate_storage_range<const PS: usize>(&self, range: &KeyRange<StorageKey<'_, PS>>, storage_counters: StorageCounters) -> SnapshotRangeIterator {
-        let mvcc_iterator = self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
+    fn iterate_storage_range<const PS: usize>(
+        &self,
+        range: &KeyRange<StorageKey<'_, PS>>,
+        storage_counters: StorageCounters,
+    ) -> SnapshotRangeIterator {
+        let mvcc_iterator =
+            self.storage.iterate_range(self.iterator_pool(), range, self.open_sequence_number, storage_counters);
         SnapshotRangeIterator::new(mvcc_iterator, None)
     }
 

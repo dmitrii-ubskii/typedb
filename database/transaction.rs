@@ -5,7 +5,6 @@
  */
 
 use std::sync::{mpsc::RecvTimeoutError, Arc};
-use tracing::Level;
 
 use concept::{
     error::ConceptWriteError,
@@ -22,9 +21,10 @@ use query::query_manager::QueryManager;
 use resource::profile::{QueryProfile, StorageCounters, TransactionProfile};
 use storage::{
     durability_client::DurabilityClient,
+    sequence_number::SequenceNumber,
     snapshot::{CommittableSnapshot, ReadSnapshot, SchemaSnapshot, SnapshotError, WritableSnapshot, WriteSnapshot},
 };
-use storage::sequence_number::SequenceNumber;
+use tracing::Level;
 
 use crate::Database;
 
@@ -76,7 +76,7 @@ impl<D: DurabilityClient> TransactionRead<D> {
             query_manager,
             database,
             transaction_options,
-            profile: TransactionProfile::new(tracing::enabled!(Level::TRACE))
+            profile: TransactionProfile::new(tracing::enabled!(Level::TRACE)),
         })
     }
 
@@ -134,7 +134,7 @@ impl<D: DurabilityClient> TransactionWrite<D> {
             query_manager,
             database,
             transaction_options,
-            profile: TransactionProfile::new(tracing::enabled!(Level::TRACE))
+            profile: TransactionProfile::new(tracing::enabled!(Level::TRACE)),
         })
     }
 
@@ -148,13 +148,22 @@ impl<D: DurabilityClient> TransactionWrite<D> {
         transaction_options: TransactionOptions,
         profile: TransactionProfile,
     ) -> Self {
-        Self { snapshot, type_manager, thing_manager, function_manager, query_manager, database, transaction_options, profile }
+        Self {
+            snapshot,
+            type_manager,
+            thing_manager,
+            function_manager,
+            query_manager,
+            database,
+            transaction_options,
+            profile,
+        }
     }
 
     pub fn commit(mut self) -> (TransactionProfile, Result<(), DataCommitError>) {
         self.profile.commit_profile().start();
-        let database = self.database.clone(); // TODO: can we get away without cloning the database before?
-        let (mut profile, result) = self.try_commit(); // TODO: counters
+        let database = self.database.clone();
+        let (mut profile, result) = self.try_commit();
         database.release_write_transaction();
         profile.commit_profile().end();
         (profile, result)
@@ -291,14 +300,20 @@ impl<D: DurabilityClient> TransactionSchema<D> {
         if let Err(errs) = self.type_manager.validate(&snapshot) {
             // TODO: send all the errors, not just the first,
             // when we can print the stacktraces of multiple errors, not just a single one
-            return (profile, Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }));
+            return (
+                profile,
+                Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }),
+            );
         };
         commit_profile.types_validated();
 
         if let Err(errs) = self.thing_manager.finalise(&mut snapshot, commit_profile.storage_counters()) {
             // TODO: send all the errors, not just the first,
             // when we can print the stacktraces of multiple errors, not just a single one
-            return (profile, Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }));
+            return (
+                profile,
+                Err(ConceptWriteErrorsFirst { typedb_source: Box::new(errs.into_iter().next().unwrap()) }),
+            );
         };
         commit_profile.things_finalised();
         drop(self.thing_manager);
@@ -347,7 +362,8 @@ impl<D: DurabilityClient> TransactionSchema<D> {
                 self.database.type_vertex_generator.clone(),
                 Some(schema.type_cache.clone()),
             );
-            let function_cache = match FunctionCache::new(self.database.storage.clone(), &type_manager, sequence_number) {
+            let function_cache = match FunctionCache::new(self.database.storage.clone(), &type_manager, sequence_number)
+            {
                 Ok(function_cache) => function_cache,
                 Err(typedb_source) => return (profile, Err(SchemaCommitError::FunctionError { typedb_source })),
             };

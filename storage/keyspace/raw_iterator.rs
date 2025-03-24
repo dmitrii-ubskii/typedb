@@ -7,8 +7,8 @@
 use std::{cmp::Ordering, mem, mem::transmute};
 
 use lending_iterator::{LendingIterator, Seekable};
-use rocksdb::{DBRawIterator};
 use resource::profile::StorageCounters;
+use rocksdb::DBRawIterator;
 
 use crate::snapshot::pool::PoolRecycleGuard;
 
@@ -18,7 +18,7 @@ enum IteratorItemState {
     None,
     Some(KeyValue<'static>),
     Finished,
-    Err(rocksdb::Error)
+    Err(rocksdb::Error),
 }
 
 impl IteratorItemState {
@@ -34,16 +34,12 @@ impl IteratorItemState {
                 // unchanged
                 Self::None
             }
-            IteratorItemState::Some(_) => {
-                mem::replace(self, IteratorItemState::None)
-            }
+            IteratorItemState::Some(_) => mem::replace(self, IteratorItemState::None),
             IteratorItemState::Finished => {
                 // unchanged, keep finished
                 Self::Finished
             }
-            IteratorItemState::Err(err) => {
-                Self::Err(err.clone())
-            }
+            IteratorItemState::Err(err) => Self::Err(err.clone()),
         }
     }
 }
@@ -59,7 +55,11 @@ pub(super) struct DBIterator {
 }
 
 impl DBIterator {
-    pub(super) fn new_from(mut iterator: PoolRecycleGuard<DBRawIterator<'static>>, start: &[u8], storage_counters: StorageCounters) -> Self {
+    pub(super) fn new_from(
+        mut iterator: PoolRecycleGuard<DBRawIterator<'static>>,
+        start: &[u8],
+        storage_counters: StorageCounters,
+    ) -> Self {
         iterator.seek(start);
         storage_counters.increment_raw_seek();
         let mut this = Self { iterator, state: IteratorItemState::None, storage_counters };
@@ -71,7 +71,7 @@ impl DBIterator {
         let state = self.next_internal();
         self.state = state;
         match &self.state {
-            IteratorItemState::None =>  unreachable!("State after internal check should be error, Some, or Finished"),
+            IteratorItemState::None => unreachable!("State after internal check should be error, Some, or Finished"),
             IteratorItemState::Some(kv) => Some(Ok(*kv)),
             IteratorItemState::Finished => None,
             IteratorItemState::Err(err) => Some(Err(err.clone())),
@@ -91,12 +91,10 @@ impl DBIterator {
 
     fn record_iterator_state(&mut self) {
         self.state = match self.iterator.item() {
-            None => {
-                match self.iterator.status() {
-                    Ok(_) => IteratorItemState::Finished,
-                    Err(err) => IteratorItemState::Err(err),
-                }
-            }
+            None => match self.iterator.status() {
+                Ok(_) => IteratorItemState::Finished,
+                Err(err) => IteratorItemState::Err(err),
+            },
             Some(item) => {
                 let kv = unsafe { transmute::<KeyValue<'_>, KeyValue<'static>>(item) };
                 IteratorItemState::Some(kv)

@@ -12,19 +12,19 @@ use compiler::executable::{
 };
 use concept::thing::thing_manager::ThingManager;
 use ir::pipeline::ParameterRegistry;
+use resource::profile::StageProfile;
 use storage::snapshot::WritableSnapshot;
 
 use crate::{
-    ExecutionInterrupt,
     pipeline::{
         insert::prepare_output_rows,
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI}, WrittenRowsIterator,
+        stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError, WrittenRowsIterator,
     },
     row::Row,
     write::{write_instruction::AsWriteInstruction, WriteError},
+    ExecutionInterrupt,
 };
-use resource::profile::StageProfile;
 
 pub struct UpdateStageExecutor<PreviousStage> {
     executable: Arc<UpdateExecutable>,

@@ -11,32 +11,30 @@ use std::{
     vec,
 };
 
-use itertools::Itertools;
-
 use answer::Type;
 use compiler::{executable::match_::instructions::type_::RelatesReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     type_::{relation_type::RelationType, role_type::RoleType},
 };
-use lending_iterator::{AsLendingIterator, };
+use itertools::Itertools;
+use lending_iterator::AsLendingIterator;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        iterator::{SortedTupleIterator, TupleIterator},
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator},
         relates_executor::{
-            EXTRACT_RELATION, EXTRACT_ROLE, RelatesFilterFn, RelatesFilterMapFn, RelatesTupleIterator,
-            RelatesVariableValueExtractor,
-        }, tuple::{relates_to_tuple_relation_role, relates_to_tuple_role_relation, TuplePositions}, type_from_row_or_annotations, VariableModes,
+            RelatesFilterFn, RelatesFilterMapFn, RelatesTupleIterator, RelatesVariableValueExtractor, EXTRACT_RELATION,
+            EXTRACT_ROLE,
+        },
+        tuple::{relates_to_tuple_relation_role, relates_to_tuple_role_relation, TuplePositions},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 pub(crate) struct RelatesReverseExecutor {
     relates: ir::pattern::constraint::Relates<ExecutorVariable>,

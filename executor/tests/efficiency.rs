@@ -4,54 +4,65 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
-use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::ops::Bound;
-use std::sync::Arc;
-
-use typeql::common::Span;
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap, HashSet},
+    ops::Bound,
+    sync::Arc,
+};
 
 use answer::variable::Variable;
-use compiler::{ExecutorVariable, VariablePosition};
-use compiler::annotation::function::EmptyAnnotatedFunctionSignatures;
-use compiler::annotation::match_inference::infer_types;
-use compiler::annotation::type_annotations::TypeAnnotations;
-use compiler::executable::function::ExecutableFunctionRegistry;
-use compiler::executable::match_::instructions::{CheckInstruction, CheckVertex, ConstraintInstruction, Inputs};
-use compiler::executable::match_::instructions::thing::{HasInstruction, HasReverseInstruction, IsaReverseInstruction};
-use compiler::executable::match_::instructions::type_::TypeListInstruction;
-use compiler::executable::match_::planner::match_executable::{ExecutionStep, IntersectionStep, MatchExecutable};
-use compiler::executable::match_::planner::plan::PlannerStatistics;
-use compiler::executable::next_executable_id;
-use concept::thing::object::ObjectAPI;
-use concept::thing::thing_manager::ThingManager;
-use concept::type_::{Ordering, OwnerAPI, PlayerAPI};
-use concept::type_::annotation::AnnotationCardinality;
-use concept::type_::object_type::ObjectType;
-use concept::type_::owns::OwnsAnnotation;
-use concept::type_::relates::RelatesAnnotation;
-use concept::type_::type_manager::TypeManager;
-use encoding::value::label::Label;
-use encoding::value::value::Value;
-use encoding::value::value_type::ValueType;
-use executor::error::ReadExecutionError;
-use executor::ExecutionInterrupt;
-use executor::match_executor::MatchExecutor;
-use executor::pipeline::stage::ExecutionContext;
-use executor::row::MaybeOwnedRow;
-use ir::pattern::constraint::{Comparator, IsaKind};
-use ir::pattern::Vertex;
-use ir::pipeline::block::Block;
-use ir::pipeline::ParameterRegistry;
-use ir::translation::TranslationContext;
+use compiler::{
+    annotation::{
+        function::EmptyAnnotatedFunctionSignatures, match_inference::infer_types, type_annotations::TypeAnnotations,
+    },
+    executable::{
+        function::ExecutableFunctionRegistry,
+        match_::{
+            instructions::{
+                thing::{HasInstruction, HasReverseInstruction, IsaReverseInstruction},
+                type_::TypeListInstruction,
+                CheckInstruction, CheckVertex, ConstraintInstruction, Inputs,
+            },
+            planner::{
+                match_executable::{ExecutionStep, IntersectionStep, MatchExecutable},
+                plan::PlannerStatistics,
+            },
+        },
+        next_executable_id,
+    },
+    ExecutorVariable, VariablePosition,
+};
+use concept::{
+    thing::{object::ObjectAPI, thing_manager::ThingManager},
+    type_::{
+        annotation::AnnotationCardinality, object_type::ObjectType, owns::OwnsAnnotation, relates::RelatesAnnotation,
+        type_manager::TypeManager, Ordering, OwnerAPI, PlayerAPI,
+    },
+};
+use encoding::value::{label::Label, value::Value, value_type::ValueType};
+use executor::{
+    error::ReadExecutionError, match_executor::MatchExecutor, pipeline::stage::ExecutionContext, row::MaybeOwnedRow,
+    ExecutionInterrupt,
+};
+use ir::{
+    pattern::{
+        constraint::{Comparator, IsaKind},
+        Vertex,
+    },
+    pipeline::{block::Block, ParameterRegistry},
+    translation::TranslationContext,
+};
 use lending_iterator::LendingIterator;
-use resource::profile::{QueryProfile, StorageCounters};
-use storage::durability_client::WALClient;
-use storage::MVCCStorage;
-use storage::snapshot::{CommittableSnapshot, ReadableSnapshot};
+use resource::profile::{CommitProfile, QueryProfile, StorageCounters};
+use storage::{
+    durability_client::WALClient,
+    snapshot::{CommittableSnapshot, ReadableSnapshot},
+    MVCCStorage,
+};
 use test_utils_concept::{load_managers, setup_concept_storage};
 use test_utils_encoding::create_core_storage;
+use typeql::common::Span;
 
 const PERSON_LABEL: Label = Label::new_static("person");
 const MOVIE_LABEL: Label = Label::new_static("group");
@@ -136,20 +147,24 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
         person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, age_type, Ordering::Unordered).unwrap();
     let person_owns_gov_id =
         person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, gov_id_type, Ordering::Unordered).unwrap();
-    person_owns_gov_id.set_annotation(
-        &mut snapshot,
-        &type_manager,
-        &thing_manager,
-        OwnsAnnotation::Cardinality(AnnotationCardinality::new(0, None)),
-    ).unwrap();
+    person_owns_gov_id
+        .set_annotation(
+            &mut snapshot,
+            &type_manager,
+            &thing_manager,
+            OwnsAnnotation::Cardinality(AnnotationCardinality::new(0, None)),
+        )
+        .unwrap();
     let person_owns_name =
         person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, name_type, Ordering::Unordered).unwrap();
-    person_owns_name.set_annotation(
-        &mut snapshot,
-        &type_manager,
-        &thing_manager,
-        OwnsAnnotation::Cardinality(AnnotationCardinality::new(0, None)),
-    ).unwrap();
+    person_owns_name
+        .set_annotation(
+            &mut snapshot,
+            &type_manager,
+            &thing_manager,
+            OwnsAnnotation::Cardinality(AnnotationCardinality::new(0, None)),
+        )
+        .unwrap();
     let _movie_owns_id =
         movie_type.set_owns(&mut snapshot, &type_manager, &thing_manager, id_type, Ordering::Unordered).unwrap();
     let _character_owns_id =
@@ -201,92 +216,144 @@ fn setup_database(storage: &mut Arc<MVCCStorage<WALClient>>) {
          $casting_quaternary_multi_role_player isa casting,
             links (movie: $movie_3, actor: $person_2, character: $character_2, character: $character_3);
     */
-    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10), ).unwrap();
-    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11), ).unwrap();
+    let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(10)).unwrap();
+    let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(11)).unwrap();
 
-    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0), ).unwrap();
-    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1), ).unwrap();
-    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2), ).unwrap();
+    let id_0 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(0)).unwrap();
+    let id_1 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(1)).unwrap();
+    let id_2 = thing_manager.create_attribute(&mut snapshot, id_type, Value::Integer(2)).unwrap();
 
-    let gov_id_0 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(0), ).unwrap();
-    let gov_id_1 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(1), ).unwrap();
-    let gov_id_2 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(2), ).unwrap();
-    let gov_id_3 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(3), ).unwrap();
-    let gov_id_4 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(4), ).unwrap();
-    let gov_id_5 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(5), ).unwrap();
-    let gov_id_6 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(6), ).unwrap();
+    let gov_id_0 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(0)).unwrap();
+    let gov_id_1 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(1)).unwrap();
+    let gov_id_2 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(2)).unwrap();
+    let gov_id_3 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(3)).unwrap();
+    let gov_id_4 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(4)).unwrap();
+    let gov_id_5 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(5)).unwrap();
+    let gov_id_6 = thing_manager.create_attribute(&mut snapshot, gov_id_type, Value::Integer(6)).unwrap();
 
-    let name_abby = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_ABBY)), ).unwrap();
-    let name_bolton = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_BOLTON)), ).unwrap();
-    let name_uninlineable = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE)), ).unwrap();
-    let name_willa = thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_WILLOW)), ).unwrap();
+    let name_abby = thing_manager
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_ABBY)))
+        .unwrap();
+    let name_bolton = thing_manager
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_BOLTON)))
+        .unwrap();
+    let name_uninlineable = thing_manager
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE)))
+        .unwrap();
+    let name_willa = thing_manager
+        .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(VALUE_STRING_WILLOW)))
+        .unwrap();
 
     let person_1 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10,  StorageCounters::DISABLED).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_0, StorageCounters::DISABLED ).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_1, StorageCounters::DISABLED ).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_2, StorageCounters::DISABLED ).unwrap();
-    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_3, StorageCounters::DISABLED ).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_0, StorageCounters::DISABLED).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_1, StorageCounters::DISABLED).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_2, StorageCounters::DISABLED).unwrap();
+    person_1.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_3, StorageCounters::DISABLED).unwrap();
 
     let person_2 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11, StorageCounters::DISABLED ).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_abby,  StorageCounters::DISABLED).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_bolton, StorageCounters::DISABLED ).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_uninlineable, StorageCounters::DISABLED ).unwrap();
-    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_willa, StorageCounters::DISABLED ).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &age_11, StorageCounters::DISABLED).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_abby, StorageCounters::DISABLED).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_bolton, StorageCounters::DISABLED).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_uninlineable, StorageCounters::DISABLED).unwrap();
+    person_2.set_has_unordered(&mut snapshot, &thing_manager, &name_willa, StorageCounters::DISABLED).unwrap();
 
     let person_3 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED ).unwrap();
-    person_3.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_4, StorageCounters::DISABLED ).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
+    person_3.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_4, StorageCounters::DISABLED).unwrap();
 
     let person_4 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED ).unwrap();
+    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
 
     let person_5 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_5.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED ).unwrap();
-    person_5.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_5, StorageCounters::DISABLED ).unwrap();
+    person_5.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
+    person_5.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_5, StorageCounters::DISABLED).unwrap();
 
     let person_6 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-    person_6.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_6,  StorageCounters::DISABLED).unwrap();
+    person_6.set_has_unordered(&mut snapshot, &thing_manager, &gov_id_6, StorageCounters::DISABLED).unwrap();
 
     let movie_1 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_2 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
     let movie_3 = thing_manager.create_entity(&mut snapshot, movie_type).unwrap();
-    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0,  StorageCounters::DISABLED).unwrap();
-    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1,  StorageCounters::DISABLED).unwrap();
-    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2,  StorageCounters::DISABLED).unwrap();
+    movie_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, StorageCounters::DISABLED).unwrap();
+    movie_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, StorageCounters::DISABLED).unwrap();
+    movie_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, StorageCounters::DISABLED).unwrap();
 
     let character_1 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_2 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
     let character_3 = thing_manager.create_entity(&mut snapshot, character_type).unwrap();
-    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, StorageCounters::DISABLED ).unwrap();
-    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, StorageCounters::DISABLED ).unwrap();
-    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, StorageCounters::DISABLED ).unwrap();
+    character_1.set_has_unordered(&mut snapshot, &thing_manager, &id_0, StorageCounters::DISABLED).unwrap();
+    character_2.set_has_unordered(&mut snapshot, &thing_manager, &id_1, StorageCounters::DISABLED).unwrap();
+    character_3.set_has_unordered(&mut snapshot, &thing_manager, &id_2, StorageCounters::DISABLED).unwrap();
 
     let casting_binary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_ternary = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
     let casting_quaternary_multi_role_player = thing_manager.create_relation(&mut snapshot, casting_type).unwrap();
 
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object(),  StorageCounters::DISABLED).unwrap();
-    casting_binary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), StorageCounters::DISABLED ).unwrap();
+    casting_binary
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_1.into_object(), StorageCounters::DISABLED)
+        .unwrap();
+    casting_binary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
 
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object(),  StorageCounters::DISABLED).unwrap();
-    casting_ternary.add_player(&mut snapshot, &thing_manager, casting_actor_type, person_1.into_object(), StorageCounters::DISABLED ).unwrap();
     casting_ternary
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_1.into_object(), StorageCounters::DISABLED )
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_2.into_object(), StorageCounters::DISABLED)
+        .unwrap();
+    casting_ternary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_1.into_object(),
+            StorageCounters::DISABLED,
+        )
+        .unwrap();
+    casting_ternary
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_1.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
 
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object(),  StorageCounters::DISABLED)
+        .add_player(&mut snapshot, &thing_manager, casting_movie_type, movie_3.into_object(), StorageCounters::DISABLED)
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_actor_type, person_2.into_object(),  StorageCounters::DISABLED)
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_actor_type,
+            person_2.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_2.into_object(),  StorageCounters::DISABLED)
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_2.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
     casting_quaternary_multi_role_player
-        .add_player(&mut snapshot, &thing_manager, casting_character_type, character_3.into_object(), StorageCounters::DISABLED )
+        .add_player(
+            &mut snapshot,
+            &thing_manager,
+            casting_character_type,
+            character_3.into_object(),
+            StorageCounters::DISABLED,
+        )
         .unwrap();
 
     let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
@@ -320,7 +387,7 @@ fn get_type_annotations(
     translation_context: &TranslationContext,
     entry: &Block,
     snapshot: &impl ReadableSnapshot,
-    type_manager: &Arc<TypeManager>
+    type_manager: &Arc<TypeManager>,
 ) -> TypeAnnotations {
     let previous_stage_variable_annotations = &BTreeMap::new();
     infer_types(
@@ -332,7 +399,7 @@ fn get_type_annotations(
         &EmptyAnnotatedFunctionSignatures,
         false,
     )
-        .unwrap()
+    .unwrap()
 }
 
 fn execute_steps(
@@ -360,9 +427,9 @@ fn execute_steps(
         &thing_manager,
         MaybeOwnedRow::empty(),
         Arc::new(ExecutableFunctionRegistry::empty()),
-        profile
+        profile,
     )
-        .unwrap();
+    .unwrap();
 
     let context = ExecutionContext::new(snapshot, thing_manager.clone(), value_parameters.clone());
     let iterator = executor.into_iterator(context, ExecutionInterrupt::new_uninterruptible());
@@ -388,18 +455,16 @@ fn value_int_equality_isa_reads() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_id_type =
-        conjunction.constraints_mut().get_or_declare_variable("var_id_type", None).unwrap();
+    let var_id_type = conjunction.constraints_mut().get_or_declare_variable("var_id_type", None).unwrap();
     let var_attr = conjunction.constraints_mut().get_or_declare_variable("attr", None).unwrap();
 
-    let isa = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_attr, var_id_type.into(), None).unwrap().clone();
+    let isa =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_attr, var_id_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_id_type, ID_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_attr),
-        Vertex::Parameter(value_int_2_id),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_attr), Vertex::Parameter(value_int_2_id), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -408,10 +473,7 @@ fn value_int_equality_isa_reads() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_id_type, var_attr],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) = position_mapping([var_id_type, var_attr], []);
 
     // Plan
     //    1. Intersection($id_type label ID;)
@@ -423,13 +485,11 @@ fn value_int_equality_isa_reads() {
     let value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_attr),
         rhs: CheckVertex::Parameter(value_int_2_id),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut isa_reverse_instruction = IsaReverseInstruction::new(
-        isa,
-        Inputs::Single([var_id_type]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut isa_reverse_instruction =
+        IsaReverseInstruction::new(isa, Inputs::Single([var_id_type]), &type_annotations).map(&mapping);
     isa_reverse_instruction.add_check(value_check);
 
     let steps = vec![
@@ -438,14 +498,14 @@ fn value_int_equality_isa_reads() {
             vec![ConstraintInstruction::TypeList(
                 TypeListInstruction::new(
                     var_id_type,
-                    type_annotations.vertex_annotations().get(&Vertex::Variable(var_id_type)).unwrap().clone()
-                ).map(&mapping)
+                    type_annotations.vertex_annotations().get(&Vertex::Variable(var_id_type)).unwrap().clone(),
+                )
+                .map(&mapping),
             )],
             vec![variable_positions[&var_id_type]],
             &named_variables,
             1,
         )),
-
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_attr],
             vec![ConstraintInstruction::IsaReverse(isa_reverse_instruction)],
@@ -456,7 +516,8 @@ fn value_int_equality_isa_reads() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
 
     assert_eq!(rows.len(), 1);
 
@@ -486,24 +547,28 @@ fn value_int_equality_has_reverse_reads() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_gov_id =
-        conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
+    let var_gov_id = conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
     let var_gov_id_type = conjunction.constraints_mut().get_or_declare_variable("var_gov_id_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_gov_id, None).unwrap().clone();
-    let _isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let _isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_gov_id = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None).unwrap().clone();
+    let _isa_gov_id = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_gov_id_type, GOV_ID_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_gov_id),
-        Vertex::Parameter(value_int_1_id),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_gov_id), Vertex::Parameter(value_int_1_id), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -512,10 +577,7 @@ fn value_int_equality_has_reverse_reads() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_gov_id],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) = position_mapping([var_person, var_gov_id], []);
 
     // plan (requires correct type annotations)
     //       HasReverse($person, $gov_id) with $gov_id = 1
@@ -526,29 +588,24 @@ fn value_int_equality_has_reverse_reads() {
     let value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_gov_id),
         rhs: CheckVertex::Parameter(value_int_1_id),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut has_reverse_instruction = HasReverseInstruction::new(
-        has,
-        Inputs::None([]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut has_reverse_instruction =
+        HasReverseInstruction::new(has, Inputs::None([]), &type_annotations).map(&mapping);
     has_reverse_instruction.add_check(value_check);
 
-    let steps = vec![
-        ExecutionStep::Intersection(IntersectionStep::new(
-            mapping[&var_gov_id],
-            vec![ConstraintInstruction::HasReverse(
-                has_reverse_instruction
-            )],
-            vec![variable_positions[&var_person], variable_positions[&var_gov_id]],
-            &named_variables,
-            2,
-        )),
-    ];
+    let steps = vec![ExecutionStep::Intersection(IntersectionStep::new(
+        mapping[&var_gov_id],
+        vec![ConstraintInstruction::HasReverse(has_reverse_instruction)],
+        vec![variable_positions[&var_person], variable_positions[&var_gov_id]],
+        &named_variables,
+        2,
+    ))];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
 
     assert_eq!(rows.len(), 1);
 
@@ -578,24 +635,28 @@ fn value_int_equality_has_bound_owner() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_gov_id =
-        conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
+    let var_gov_id = conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
     let var_gov_id_type = conjunction.constraints_mut().get_or_declare_variable("var_gov_id_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_gov_id, None).unwrap().clone();
-    let isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_gov_id = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None).unwrap().clone();
+    let _isa_gov_id = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_gov_id_type, GOV_ID_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_gov_id),
-        Vertex::Parameter(value_int_1_id),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_gov_id), Vertex::Parameter(value_int_1_id), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -604,10 +665,8 @@ fn value_int_equality_has_bound_owner() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_person_type, var_gov_id],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_person, var_person_type, var_gov_id], []);
 
     // plan (requires correct type annotations)
     //      IsaReverse($person_type, $person)
@@ -619,24 +678,17 @@ fn value_int_equality_has_bound_owner() {
     let value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_gov_id),
         rhs: CheckVertex::Parameter(value_int_1_id),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut has_instruction = HasInstruction::new(
-        has,
-        Inputs::Single([var_person]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut has_instruction = HasInstruction::new(has, Inputs::Single([var_person]), &type_annotations).map(&mapping);
     has_instruction.add_check(value_check);
 
     let steps = vec![
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_person_type],
             vec![ConstraintInstruction::IsaReverse(
-                IsaReverseInstruction::new(
-                    isa_person,
-                    Inputs::None([]),
-                    &type_annotations
-                ).map(&mapping)
+                IsaReverseInstruction::new(isa_person, Inputs::None([]), &type_annotations).map(&mapping),
             )],
             vec![variable_positions[&var_person], variable_positions[&var_person_type]],
             &named_variables,
@@ -652,7 +704,8 @@ fn value_int_equality_has_bound_owner() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
 
     assert_eq!(rows.len(), 1);
 
@@ -683,30 +736,37 @@ fn value_int_inequality_has_bound_owner() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_gov_id =
-        conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
+    let var_gov_id = conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
     let var_gov_id_type = conjunction.constraints_mut().get_or_declare_variable("var_gov_id_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_gov_id, None).unwrap().clone();
-    let isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_gov_id = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None).unwrap().clone();
+    let _isa_gov_id = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_gov_id_type, GOV_ID_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_gov_id),
-        Vertex::Parameter(value_int_1_id),
-        Comparator::GreaterOrEqual,
-        None
-    ).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_gov_id),
-        Vertex::Parameter(value_int_3_id),
-        Comparator::Less,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(
+            Vertex::Variable(var_gov_id),
+            Vertex::Parameter(value_int_1_id),
+            Comparator::GreaterOrEqual,
+            None,
+        )
+        .unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_gov_id), Vertex::Parameter(value_int_3_id), Comparator::Less, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -715,10 +775,8 @@ fn value_int_inequality_has_bound_owner() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_person_type, var_gov_id],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_person, var_person_type, var_gov_id], []);
 
     // plan (requires correct type annotations)
     // plan: Isa($person, person)
@@ -731,18 +789,16 @@ fn value_int_inequality_has_bound_owner() {
     let greater_value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_gov_id),
         rhs: CheckVertex::Parameter(value_int_1_id),
-        comparator: Comparator::GreaterOrEqual
-    }.map(&mapping);
+        comparator: Comparator::GreaterOrEqual,
+    }
+    .map(&mapping);
     let lesser_value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_gov_id),
         rhs: CheckVertex::Parameter(value_int_3_id),
-        comparator: Comparator::Less
-    }.map(&mapping);
-    let mut has_instruction = HasInstruction::new(
-        has,
-        Inputs::Single([var_person]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Less,
+    }
+    .map(&mapping);
+    let mut has_instruction = HasInstruction::new(has, Inputs::Single([var_person]), &type_annotations).map(&mapping);
     has_instruction.add_check(greater_value_check);
     has_instruction.add_check(lesser_value_check);
 
@@ -750,11 +806,7 @@ fn value_int_inequality_has_bound_owner() {
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_person_type],
             vec![ConstraintInstruction::IsaReverse(
-                IsaReverseInstruction::new(
-                    isa_person,
-                    Inputs::None([]),
-                    &type_annotations
-                ).map(&mapping)
+                IsaReverseInstruction::new(isa_person, Inputs::None([]), &type_annotations).map(&mapping),
             )],
             vec![variable_positions[&var_person], variable_positions[&var_person_type]],
             &named_variables,
@@ -770,7 +822,8 @@ fn value_int_inequality_has_bound_owner() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
     assert_eq!(rows.len(), 2);
 
     let stage_profiles = query_profile.stage_profiles().read().unwrap();
@@ -795,28 +848,30 @@ fn value_inline_string_equality_has_bound_owner() {
     // IR to compute type annotations
     let mut translation_context = TranslationContext::new();
     let mut value_parameters = ParameterRegistry::new();
-    let value_string_abby = value_parameters.register_value(Value::String(Cow::Borrowed(VALUE_STRING_ABBY)), Span { begin_offset: 0, end_offset: 0 });
+    let value_string_abby = value_parameters
+        .register_value(Value::String(Cow::Borrowed(VALUE_STRING_ABBY)), Span { begin_offset: 0, end_offset: 0 });
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_name =
-        conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
+    let var_name = conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
     let var_name_type = conjunction.constraints_mut().get_or_declare_variable("var_name_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_name, None).unwrap().clone();
-    let isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_name = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
+    let _isa_name =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_name_type, NAME_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_name),
-        Vertex::Parameter(value_string_abby),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_name), Vertex::Parameter(value_string_abby), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -825,10 +880,8 @@ fn value_inline_string_equality_has_bound_owner() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let entry_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_person_type, var_name],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_person, var_person_type, var_name], []);
 
     // plan (requires correct type annotations)
     //      IsaReverse($person_type, $person)
@@ -840,24 +893,17 @@ fn value_inline_string_equality_has_bound_owner() {
     let value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_name),
         rhs: CheckVertex::Parameter(value_string_abby),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut has_instruction = HasInstruction::new(
-        has,
-        Inputs::Single([var_person]),
-        &entry_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut has_instruction = HasInstruction::new(has, Inputs::Single([var_person]), &entry_annotations).map(&mapping);
     has_instruction.add_check(value_check);
 
     let steps = vec![
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_person_type],
             vec![ConstraintInstruction::IsaReverse(
-                IsaReverseInstruction::new(
-                    isa_person,
-                    Inputs::None([]),
-                    &entry_annotations
-                ).map(&mapping)
+                IsaReverseInstruction::new(isa_person, Inputs::None([]), &entry_annotations).map(&mapping),
             )],
             vec![variable_positions[&var_person], variable_positions[&var_person_type]],
             &named_variables,
@@ -873,7 +919,8 @@ fn value_inline_string_equality_has_bound_owner() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
 
     assert_eq!(rows.len(), 1);
 
@@ -899,28 +946,32 @@ fn value_hashed_string_equality_has_bound_owner() {
     // IR to compute type annotations
     let mut translation_context = TranslationContext::new();
     let mut value_parameters = ParameterRegistry::new();
-    let value_string_hashed = value_parameters.register_value(Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE)), Span { begin_offset: 0, end_offset: 0 });
+    let value_string_hashed = value_parameters.register_value(
+        Value::String(Cow::Borrowed(VALUE_STRING_LONG_UNINLINEABLE)),
+        Span { begin_offset: 0, end_offset: 0 },
+    );
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_name =
-        conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
+    let var_name = conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
     let var_name_type = conjunction.constraints_mut().get_or_declare_variable("var_name_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_name, None).unwrap().clone();
-    let isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_name = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
+    let _isa_name =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_name_type, NAME_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_name),
-        Vertex::Parameter(value_string_hashed),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_name), Vertex::Parameter(value_string_hashed), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -929,10 +980,8 @@ fn value_hashed_string_equality_has_bound_owner() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_person_type, var_name],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_person, var_person_type, var_name], []);
 
     // plan (requires correct type annotations)
     //      IsaReverse($person_type, $person)
@@ -944,24 +993,17 @@ fn value_hashed_string_equality_has_bound_owner() {
     let value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_name),
         rhs: CheckVertex::Parameter(value_string_hashed),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut has_instruction = HasInstruction::new(
-        has,
-        Inputs::Single([var_person]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut has_instruction = HasInstruction::new(has, Inputs::Single([var_person]), &type_annotations).map(&mapping);
     has_instruction.add_check(value_check);
 
     let steps = vec![
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_person_type],
             vec![ConstraintInstruction::IsaReverse(
-                IsaReverseInstruction::new(
-                    isa_person,
-                    Inputs::None([]),
-                    &type_annotations
-                ).map(&mapping)
+                IsaReverseInstruction::new(isa_person, Inputs::None([]), &type_annotations).map(&mapping),
             )],
             vec![variable_positions[&var_person], variable_positions[&var_person_type]],
             &named_variables,
@@ -977,7 +1019,8 @@ fn value_hashed_string_equality_has_bound_owner() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
 
     assert_eq!(rows.len(), 1);
 
@@ -986,7 +1029,8 @@ fn value_hashed_string_equality_has_bound_owner() {
     let intersection_step_profile = match_profile.extend_or_get(1, || String::new());
     let storage_counters = intersection_step_profile.storage_counters();
     // 6 seeks: for each person, we should skip directly to the person + owned name
-    assert_eq!(storage_counters.get_raw_seek().unwrap(), 6);
+    // 1 seek: for the unlined name, we have to get the value in order to filter it out
+    assert_eq!(storage_counters.get_raw_seek().unwrap(), 7);
     // 1 advance: the iterator matching the only person + name needs to step forward and finish
     assert_eq!(storage_counters.get_raw_advance().unwrap(), 1);
 }
@@ -1003,35 +1047,41 @@ fn value_string_inequality_reduces_has_reads_bound_owner() {
     // IR to compute type annotations
     let mut translation_context = TranslationContext::new();
     let mut value_parameters = ParameterRegistry::new();
-    let value_string_bolton = value_parameters.register_value(Value::String(Cow::Borrowed(VALUE_STRING_BOLTON)), Span { begin_offset: 0, end_offset: 0 });
-    let value_string_willow = value_parameters.register_value(Value::String(Cow::Borrowed(VALUE_STRING_WILLOW)), Span { begin_offset: 0, end_offset: 0 });
+    let value_string_bolton = value_parameters
+        .register_value(Value::String(Cow::Borrowed(VALUE_STRING_BOLTON)), Span { begin_offset: 0, end_offset: 0 });
+    let value_string_willow = value_parameters
+        .register_value(Value::String(Cow::Borrowed(VALUE_STRING_WILLOW)), Span { begin_offset: 0, end_offset: 0 });
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_name =
-        conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
+    let var_name = conjunction.constraints_mut().get_or_declare_variable("var_name", None).unwrap();
     let var_name_type = conjunction.constraints_mut().get_or_declare_variable("var_name_type", None).unwrap();
 
     let has = conjunction.constraints_mut().add_has(var_person, var_name, None).unwrap().clone();
-    let isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_name = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
+    let _isa_name =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_name, var_name_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_name_type, NAME_LABEL.clone()).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_name),
-        Vertex::Parameter(value_string_bolton),
-        Comparator::GreaterOrEqual,
-        None
-    ).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_name),
-        Vertex::Parameter(value_string_willow),
-        Comparator::Less,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(
+            Vertex::Variable(var_name),
+            Vertex::Parameter(value_string_bolton),
+            Comparator::GreaterOrEqual,
+            None,
+        )
+        .unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_name), Vertex::Parameter(value_string_willow), Comparator::Less, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -1040,10 +1090,8 @@ fn value_string_inequality_reduces_has_reads_bound_owner() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_person, var_person_type, var_name],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_person, var_person_type, var_name], []);
 
     // plan (requires correct type annotations)
     // plan: Isa($person, person)
@@ -1055,18 +1103,16 @@ fn value_string_inequality_reduces_has_reads_bound_owner() {
     let greater_value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_name),
         rhs: CheckVertex::Parameter(value_string_bolton),
-        comparator: Comparator::GreaterOrEqual
-    }.map(&mapping);
+        comparator: Comparator::GreaterOrEqual,
+    }
+    .map(&mapping);
     let lesser_value_check = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_name),
         rhs: CheckVertex::Parameter(value_string_willow),
-        comparator: Comparator::Less
-    }.map(&mapping);
-    let mut has_instruction = HasInstruction::new(
-        has,
-        Inputs::Single([var_person]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Less,
+    }
+    .map(&mapping);
+    let mut has_instruction = HasInstruction::new(has, Inputs::Single([var_person]), &type_annotations).map(&mapping);
     has_instruction.add_check(greater_value_check);
     has_instruction.add_check(lesser_value_check);
 
@@ -1074,11 +1120,7 @@ fn value_string_inequality_reduces_has_reads_bound_owner() {
         ExecutionStep::Intersection(IntersectionStep::new(
             mapping[&var_person_type],
             vec![ConstraintInstruction::IsaReverse(
-                IsaReverseInstruction::new(
-                    isa_person,
-                    Inputs::None([]),
-                    &type_annotations
-                ).map(&mapping)
+                IsaReverseInstruction::new(isa_person, Inputs::None([]), &type_annotations).map(&mapping),
             )],
             vec![variable_positions[&var_person], variable_positions[&var_person_type]],
             &named_variables,
@@ -1094,15 +1136,18 @@ fn value_string_inequality_reduces_has_reads_bound_owner() {
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
     assert_eq!(rows.len(), 2);
 
     let stage_profiles = query_profile.stage_profiles().read().unwrap();
     let (_, match_profile) = stage_profiles.iter().next().unwrap();
     let intersection_step_profile = match_profile.extend_or_get(1, || String::new());
     let storage_counters = intersection_step_profile.storage_counters();
-    // 6 seeks: for each person, we should skip directly to the person + owned name
-    assert_eq!(storage_counters.get_raw_seek().unwrap(), 6);
+    // 6 seeks: for each person, we should skip directly to the person + owned name.
+    // 2 seeks: each of the 2 comparison check filters get the value of the Attribute repeatedly...
+    //      TODO: if we embed the Value cache into the AttributeVertex, this could be avoided? Note: only expensive for un-inlined values!
+    assert_eq!(storage_counters.get_raw_seek().unwrap(), 8);
     // 2 advance: the iterator matching person 1 will advance twice (once to find the second name, then to fail)
     assert_eq!(storage_counters.get_raw_advance().unwrap(), 2)
 }
@@ -1125,31 +1170,35 @@ fn intersection_seeks() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_gov_id =
-        conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
+    let var_gov_id = conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
     let var_gov_id_type = conjunction.constraints_mut().get_or_declare_variable("var_gov_id_type", None).unwrap();
-    let var_age =
-        conjunction.constraints_mut().get_or_declare_variable("var_age", None).unwrap();
+    let var_age = conjunction.constraints_mut().get_or_declare_variable("var_age", None).unwrap();
     let var_age_type = conjunction.constraints_mut().get_or_declare_variable("var_age_type", None).unwrap();
 
     let has_age = conjunction.constraints_mut().add_has(var_person, var_age, None).unwrap().clone();
     let has_gov_id = conjunction.constraints_mut().add_has(var_person, var_gov_id, None).unwrap().clone();
-    let _isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let _isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_gov_id = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None).unwrap().clone();
+    let _isa_gov_id = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_gov_id_type, GOV_ID_LABEL.clone()).unwrap();
-    let isa_age = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_age, var_age_type.into(), None).unwrap().clone();
+    let isa_age =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_age, var_age_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_age_type, AGE_LABEL.clone()).unwrap();
 
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_age),
-        Vertex::Parameter(value_int_10),
-        Comparator::Equal,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_age), Vertex::Parameter(value_int_10), Comparator::Equal, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -1158,10 +1207,8 @@ fn intersection_seeks() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_age, var_age_type, var_person, var_gov_id],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_age, var_age_type, var_person, var_gov_id], []);
 
     // plan (requires correct type annotations)
     // plan:
@@ -1180,13 +1227,10 @@ fn intersection_seeks() {
     let age_equal_10 = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_age),
         rhs: CheckVertex::Parameter(value_int_10),
-        comparator: Comparator::Equal
-    }.map(&mapping);
-    let mut isa_age = IsaReverseInstruction::new(
-        isa_age,
-        Inputs::None([]),
-        &type_annotations
-    ).map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
+    let mut isa_age = IsaReverseInstruction::new(isa_age, Inputs::None([]), &type_annotations).map(&mapping);
     isa_age.add_check(age_equal_10);
 
     let steps = vec![
@@ -1203,22 +1247,26 @@ fn intersection_seeks() {
                 ConstraintInstruction::HasReverse(HasReverseInstruction::new(
                     has_age,
                     Inputs::Single([var_age]),
-                    &type_annotations
-                )).map(&mapping),
-                ConstraintInstruction::Has(HasInstruction::new(
-                    has_gov_id,
-                    Inputs::None([]),
-                    &type_annotations
-                )).map(&mapping)
+                    &type_annotations,
+                ))
+                .map(&mapping),
+                ConstraintInstruction::Has(HasInstruction::new(has_gov_id, Inputs::None([]), &type_annotations))
+                    .map(&mapping),
             ],
-            vec![variable_positions[&var_person], variable_positions[&var_gov_id], variable_positions[&var_age], variable_positions[&var_age_type]],
+            vec![
+                variable_positions[&var_person],
+                variable_positions[&var_gov_id],
+                variable_positions[&var_age],
+                variable_positions[&var_age_type],
+            ],
             &named_variables,
             4,
         )),
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
     for row in rows.iter() {
         println!("Row: {}", row.as_ref().unwrap())
     }
@@ -1278,15 +1326,22 @@ fn intersections_seeks_with_extra_values() {
     let person_type = type_manager.get_entity_type(&mut snapshot, &PERSON_LABEL).unwrap().unwrap();
     let age_type = type_manager.get_attribute_type(&mut snapshot, &AGE_LABEL).unwrap().unwrap();
     let gov_id_type = type_manager.get_attribute_type(&mut snapshot, &GOV_ID_LABEL).unwrap().unwrap();
-    let gov_id_4 = thing_manager.get_attribute_with_value(&snapshot, gov_id_type, Value::Integer(4),  StorageCounters::DISABLED).unwrap().unwrap();
+    let gov_id_4 = thing_manager
+        .get_attribute_with_value(&snapshot, gov_id_type, Value::Integer(4), StorageCounters::DISABLED)
+        .unwrap()
+        .unwrap();
     let person_4 = Iterator::next(&mut thing_manager.get_has_reverse_by_attribute_and_owner_type_range(
         &snapshot,
         &gov_id_4,
         &(Bound::Included(ObjectType::Entity(person_type)), Bound::Included(ObjectType::Entity(person_type))),
         StorageCounters::DISABLED,
-    )).unwrap().unwrap().0.owner();
-    let age_12 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(12), ).unwrap();
-    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_12,  StorageCounters::DISABLED).unwrap();
+    ))
+    .unwrap()
+    .unwrap()
+    .0
+    .owner();
+    let age_12 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(12)).unwrap();
+    person_4.set_has_unordered(&mut snapshot, &thing_manager, &age_12, StorageCounters::DISABLED).unwrap();
     snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
 
     // IR to compute type annotations
@@ -1297,37 +1352,39 @@ fn intersections_seeks_with_extra_values() {
     let mut builder = Block::builder(translation_context.new_block_builder_context(&mut value_parameters));
     let mut conjunction = builder.conjunction_mut();
 
-    let var_person =
-        conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
+    let var_person = conjunction.constraints_mut().get_or_declare_variable("var_person", None).unwrap();
     let var_person_type = conjunction.constraints_mut().get_or_declare_variable("var_person_type", None).unwrap();
-    let var_gov_id =
-        conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
+    let var_gov_id = conjunction.constraints_mut().get_or_declare_variable("var_gov_id", None).unwrap();
     let var_gov_id_type = conjunction.constraints_mut().get_or_declare_variable("var_gov_id_type", None).unwrap();
-    let var_age =
-        conjunction.constraints_mut().get_or_declare_variable("var_age", None).unwrap();
+    let var_age = conjunction.constraints_mut().get_or_declare_variable("var_age", None).unwrap();
     let var_age_type = conjunction.constraints_mut().get_or_declare_variable("var_age_type", None).unwrap();
 
     let has_age = conjunction.constraints_mut().add_has(var_person, var_age, None).unwrap().clone();
     let has_gov_id = conjunction.constraints_mut().add_has(var_person, var_gov_id, None).unwrap().clone();
-    let _isa_person = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None).unwrap().clone();
+    let _isa_person = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_person, var_person_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_person_type, PERSON_LABEL.clone()).unwrap();
-    let _isa_gov_id = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None).unwrap().clone();
+    let _isa_gov_id = conjunction
+        .constraints_mut()
+        .add_isa(IsaKind::Subtype, var_gov_id, var_gov_id_type.into(), None)
+        .unwrap()
+        .clone();
     conjunction.constraints_mut().add_label(var_gov_id_type, GOV_ID_LABEL.clone()).unwrap();
-    let isa_age = conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_age, var_age_type.into(), None).unwrap().clone();
+    let isa_age =
+        conjunction.constraints_mut().add_isa(IsaKind::Subtype, var_age, var_age_type.into(), None).unwrap().clone();
     conjunction.constraints_mut().add_label(var_age_type, AGE_LABEL.clone()).unwrap();
 
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_age),
-        Vertex::Parameter(value_int_12),
-        Comparator::Equal,
-        None
-    ).unwrap();
-    conjunction.constraints_mut().add_comparison(
-        Vertex::Variable(var_gov_id),
-        Vertex::Parameter(value_int_2),
-        Comparator::Greater,
-        None
-    ).unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_age), Vertex::Parameter(value_int_12), Comparator::Equal, None)
+        .unwrap();
+    conjunction
+        .constraints_mut()
+        .add_comparison(Vertex::Variable(var_gov_id), Vertex::Parameter(value_int_2), Comparator::Greater, None)
+        .unwrap();
 
     let entry = builder.finish().unwrap();
     let value_parameters = Arc::new(value_parameters);
@@ -1336,10 +1393,8 @@ fn intersections_seeks_with_extra_values() {
     let (type_manager, thing_manager) = load_managers(storage.clone(), None);
     let type_annotations = get_type_annotations(&mut translation_context, &entry, &snapshot, &type_manager);
 
-    let (row_vars, variable_positions, mapping, named_variables) = position_mapping(
-        [var_age, var_age_type, var_person, var_gov_id],
-        [],
-    );
+    let (row_vars, variable_positions, mapping, named_variables) =
+        position_mapping([var_age, var_age_type, var_person, var_gov_id], []);
 
     // plan (requires correct type annotations)
     // plan:
@@ -1355,24 +1410,18 @@ fn intersections_seeks_with_extra_values() {
     let age_equal_12 = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_age),
         rhs: CheckVertex::Parameter(value_int_12),
-        comparator: Comparator::Equal
-    }.map(&mapping);
+        comparator: Comparator::Equal,
+    }
+    .map(&mapping);
     let gov_id_gt_2 = CheckInstruction::Comparison {
         lhs: CheckVertex::Variable(var_gov_id),
         rhs: CheckVertex::Parameter(value_int_2),
         comparator: Comparator::Greater,
-    }.map(&mapping);
-    let mut isa_age = IsaReverseInstruction::new(
-        isa_age,
-        Inputs::None([]),
-        &type_annotations
-    ).map(&mapping);
+    }
+    .map(&mapping);
+    let mut isa_age = IsaReverseInstruction::new(isa_age, Inputs::None([]), &type_annotations).map(&mapping);
     isa_age.add_check(age_equal_12);
-    let mut has_gov_id = HasInstruction::new(
-        has_gov_id,
-        Inputs::None([]),
-        &type_annotations
-    ).map(&mapping);
+    let mut has_gov_id = HasInstruction::new(has_gov_id, Inputs::None([]), &type_annotations).map(&mapping);
     has_gov_id.add_check(gov_id_gt_2);
 
     let steps = vec![
@@ -1389,18 +1438,25 @@ fn intersections_seeks_with_extra_values() {
                 ConstraintInstruction::HasReverse(HasReverseInstruction::new(
                     has_age,
                     Inputs::Single([var_age]),
-                    &type_annotations
-                )).map(&mapping),
-                ConstraintInstruction::Has(has_gov_id)
+                    &type_annotations,
+                ))
+                .map(&mapping),
+                ConstraintInstruction::Has(has_gov_id),
             ],
-            vec![variable_positions[&var_person], variable_positions[&var_gov_id], variable_positions[&var_age], variable_positions[&var_age_type]],
+            vec![
+                variable_positions[&var_person],
+                variable_positions[&var_gov_id],
+                variable_positions[&var_age],
+                variable_positions[&var_age_type],
+            ],
             &named_variables,
             4,
         )),
     ];
 
     let query_profile = QueryProfile::new(true);
-    let rows = execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
+    let rows =
+        execute_steps(steps, variable_positions, row_vars, storage, thing_manager, value_parameters, &query_profile);
     for row in rows.iter() {
         println!("Row: {}", row.as_ref().unwrap())
     }

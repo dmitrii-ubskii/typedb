@@ -6,20 +6,22 @@
 
 use bytes::{byte_array::ByteArray, Bytes};
 use encoding::{
-    AsBytes,
-    graph::thing::{ThingVertex, vertex_attribute::AttributeID, vertex_object::ObjectVertex},
+    graph::thing::{vertex_attribute::AttributeID, vertex_object::ObjectVertex, ThingVertex},
     layout::prefix::Prefix,
     value::value_type::ValueTypeCategory,
+    AsBytes,
 };
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::StorageCounters;
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::StorageCounters,
+};
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
 
 use crate::{
-    ConceptStatus,
     error::{ConceptReadError, ConceptWriteError},
     thing::thing_manager::ThingManager,
     type_::TypeAPI,
+    ConceptStatus,
 };
 
 pub mod attribute;
@@ -28,13 +30,13 @@ pub mod has;
 pub mod object;
 pub mod relation;
 pub mod statistics;
-pub mod thing_manager;
 mod r#struct;
+pub mod thing_manager;
 
 pub trait ThingAPI: Sized + Clone {
     type TypeAPI: TypeAPI;
     type Vertex: ThingVertex;
-    
+
     const MIN: Self;
     const PREFIX_RANGE_INCLUSIVE: (Prefix, Prefix);
 
@@ -52,7 +54,12 @@ pub trait ThingAPI: Sized + Clone {
     ) -> Result<(), Box<ConceptReadError>>;
 
     // TODO: implementers could cache the status in a OnceCell if we do many operations on the same Thing at once
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus;
+    fn get_status(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> ConceptStatus;
 
     fn delete(
         self,

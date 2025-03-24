@@ -6,13 +6,12 @@
 
 use std::collections::HashMap;
 
-use itertools::Itertools;
-
 use answer::{Concept, Thing, Type};
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use encoding::graph::type_::Kind;
 use executor::document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode};
 use ir::pipeline::ParameterRegistry;
+use itertools::Itertools;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
@@ -87,7 +86,8 @@ fn encode_map(
             let mut encoded_map = HashMap::with_capacity(map.len());
             for (key, value) in map.into_iter() {
                 let key_name = parameters.fetch_key(key).expect("Expected key in parameters to get its name");
-                let encoded_value = encode_node(value, snapshot, type_manager, thing_manager, parameters, storage_counters.clone())?;
+                let encoded_value =
+                    encode_node(value, snapshot, type_manager, thing_manager, parameters, storage_counters.clone())?;
                 encoded_map.insert(key_name.to_owned(), encoded_value);
             }
             encoded_map
@@ -95,7 +95,8 @@ fn encode_map(
         DocumentMap::GeneratedKeys(map) => {
             let mut encoded_map = HashMap::with_capacity(map.len());
             for (key, value) in map.into_iter() {
-                let encoded_value = encode_node(value, snapshot, type_manager, thing_manager, parameters, storage_counters.clone())?;
+                let encoded_value =
+                    encode_node(value, snapshot, type_manager, thing_manager, parameters, storage_counters.clone())?;
                 encoded_map.insert(key.scoped_name().as_str().to_owned(), encoded_value);
             }
             encoded_map

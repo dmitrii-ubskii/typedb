@@ -6,41 +6,39 @@
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use cucumber::gherkin::Step;
-use itertools::Itertools;
-use macro_rules_attribute::apply;
-
-use answer::{Thing, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing};
 use compiler::VariablePosition;
 use concept::{
-    thing::{object::ObjectAPI, ThingAPI},
+    error::ConceptReadError,
+    thing::{attribute::Attribute, object::ObjectAPI, ThingAPI},
     type_::TypeAPI,
 };
-use concept::error::ConceptReadError;
-use concept::thing::attribute::Attribute;
+use cucumber::gherkin::Step;
 use encoding::{
-    AsBytes,
     value::{label::Label, value_type::ValueType, ValueEncodable},
+    AsBytes,
 };
 use executor::{
     batch::Batch,
-    ExecutionInterrupt,
     pipeline::stage::{ExecutionContext, StageIterator},
+    ExecutionInterrupt,
 };
+use itertools::Itertools;
 use lending_iterator::LendingIterator;
+use macro_rules_attribute::apply;
 use query::error::QueryError;
 use resource::profile::StorageCounters;
 use test_utils::assert_matches;
 
 use crate::{
-    BehaviourTestExecutionError, Context,
-    generic_step,
-    params,
-    query_answer_context::{QueryAnswer, with_rows_answer},
+    generic_step, params,
+    query_answer_context::{with_rows_answer, QueryAnswer},
     transaction_context::{
-        ActiveTransaction::{Read, Schema}, with_read_tx, with_schema_tx,
-        with_write_tx_deconstructed,
-    }, util::{iter_table_map, list_contains_json, parse_json},
+        with_read_tx, with_schema_tx, with_write_tx_deconstructed,
+        ActiveTransaction::{Read, Schema},
+    },
+    util::{iter_table_map, list_contains_json, parse_json},
+    BehaviourTestExecutionError, Context,
 };
 
 fn row_batch_result_to_answer(
@@ -377,9 +375,17 @@ fn does_key_match(var: &str, id: &str, var_value: &VariableValue<'_>, context: &
                 .unwrap()
                 .unwrap_or_else(|| panic!("expected the key type {key_label} to have a value type")),
         );
-        let mut attr_iter: Box<dyn Iterator<Item=Result<(Attribute, u64), Box<ConceptReadError>>>> = match thing {
-            Thing::Entity(entity) => Box::new(entity.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, &.., StorageCounters::DISABLED).unwrap()),
-            Thing::Relation(relation) => Box::new(relation.get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, &.., StorageCounters::DISABLED).unwrap()),
+        let mut attr_iter: Box<dyn Iterator<Item = Result<(Attribute, u64), Box<ConceptReadError>>>> = match thing {
+            Thing::Entity(entity) => Box::new(
+                entity
+                    .get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, &.., StorageCounters::DISABLED)
+                    .unwrap(),
+            ),
+            Thing::Relation(relation) => Box::new(
+                relation
+                    .get_has_type_unordered(&*tx.snapshot, &tx.thing_manager, key_type, &.., StorageCounters::DISABLED)
+                    .unwrap(),
+            ),
             Thing::Attribute(_) => return false,
         };
         let (attr, count) = Iterator::next(&mut attr_iter)

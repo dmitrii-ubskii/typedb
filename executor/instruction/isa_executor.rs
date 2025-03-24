@@ -6,39 +6,38 @@
 
 use std::{cmp::Ordering, collections::BTreeMap, fmt, iter, ops::Bound, sync::Arc, vec};
 
-use itertools::Itertools;
-
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{executable::match_::instructions::thing::IsaInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     iterator::InstanceIterator,
     thing::{
+        attribute,
         attribute::{Attribute, AttributeIterator},
         object::Object,
         thing_manager::ThingManager,
+        ThingAPI,
     },
 };
-use concept::thing::{attribute, ThingAPI};
 use encoding::value::value::Value;
 use ir::pattern::{
     constraint::{Isa, IsaKind},
     Vertex,
 };
-use lending_iterator::{AsLendingIterator, LendingIterator, };
+use itertools::Itertools;
+use lending_iterator::{AsLendingIterator, LendingIterator};
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        FilterMapUnchangedFn, iterator::{SortedTupleIterator, TupleIterator, TupleSeekable}, tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, Tuple, TuplePositions, TupleResult}, TYPES_EMPTY, VariableModes,
+        iterator::{NaiiveSeekable, SortedTupleIterator, TupleIterator, TupleSeekable},
+        tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, IsaToTupleFn, Tuple, TuplePositions, TupleResult},
+        BinaryIterateMode, Checker, FilterMapUnchangedFn, VariableModes, TYPES_EMPTY,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::NaiiveSeekable;
 
 #[derive(Debug)]
 pub(crate) struct IsaExecutor {
@@ -59,7 +58,7 @@ pub(super) type IsaBoundedSortedType = NaiiveSeekable<
                 fn((Thing, Type)) -> Result<(Thing, Type), Box<ConceptReadError>>,
             >,
         >,
-    >
+    >,
 >;
 
 type ThingWithTypes<I> = iter::FlatMap<
@@ -199,12 +198,18 @@ impl LendingIterator for IsaUnboundedSortedThing {
 
 impl TupleSeekable for IsaUnboundedSortedThing {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
-        let target_thing = target.values().get(0)
+        let target_thing = target
+            .values()
+            .get(0)
             .expect("Reverse tuple mapping missing thing")
-            .get_thing().unwrap_or_else(|| &answer::MIN_THING_STATIC);
-        let target_type = target.values().get(1)
+            .get_thing()
+            .unwrap_or_else(|| &answer::MIN_THING_STATIC);
+        let target_type = target
+            .values()
+            .get(1)
             .expect("Reverse tuple mapping missing type")
-            .get_type().unwrap_or_else(|| &answer::MIN_TYPE_STATIC);
+            .get_type()
+            .unwrap_or_else(|| &answer::MIN_TYPE_STATIC);
         self.inner.seek(target_thing, *target_type)
     }
 }
@@ -221,11 +226,7 @@ impl MultipleTypeIsaIterator {
         Self { object_iters: objects, attribute_iters: attributes }
     }
 
-    fn seek(
-        &mut self,
-        target_thing: &Thing,
-        target_type: Type,
-    ) -> Result<(), Box<ConceptReadError>> {
+    fn seek(&mut self, target_thing: &Thing, target_type: Type) -> Result<(), Box<ConceptReadError>> {
         match target_thing {
             Thing::Entity(_) | Thing::Relation(_) => {
                 let mut first_comparison = true;
@@ -234,15 +235,17 @@ impl MultipleTypeIsaIterator {
                     match cmp_type {
                         Ordering::Less => {
                             self.object_iters.pop();
-                        },
+                        }
                         Ordering::Equal => return object_iter.seek(target_thing, target_type),
                         Ordering::Greater => {
                             if first_comparison {
-                                unreachable!("This iterator's next value is ahead of the target (seek target is behind)");
+                                unreachable!(
+                                    "This iterator's next value is ahead of the target (seek target is behind)"
+                                );
                             } else {
                                 return Ok(());
                             }
-                        },
+                        }
                     };
                     first_comparison = false;
                 }
@@ -265,16 +268,15 @@ impl MultipleTypeIsaIterator {
                         Ordering::Less => self.attribute_iters.pop(),
                         Ordering::Equal => {
                             attribute_iter.seek(target_thing, target_type)?;
-                            return Ok(())
-                        },
+                            return Ok(());
+                        }
                         Ordering::Greater => {
                             if first_comparison {
                                 unreachable!("Iterator is ahead of seek target")
                             } else {
                                 return Ok(());
                             }
-
-                        },
+                        }
                     };
                     first_comparison = false;
                 }
@@ -502,7 +504,12 @@ pub(super) fn instances_of_all_types_chained(
         .map(|(&type_, types)| {
             let returned_types = if matches!(isa_kind, IsaKind::Subtype) { types.clone() } else { vec![type_] };
             thing_manager
-                .get_attributes_in_range(snapshot, type_.as_attribute_type(), &instance_values_range, storage_counters.clone())
+                .get_attributes_in_range(
+                    snapshot,
+                    type_.as_attribute_type(),
+                    &instance_values_range,
+                    storage_counters.clone(),
+                )
                 .map(|iterator| IsaAttributeIterator::new(iterator, type_, returned_types))
         })
         .try_collect()?;

@@ -14,16 +14,15 @@ use encoding::{
     error::{EncodingError, EncodingError::UnexpectedPrefix},
     graph::{
         type_::{
+            vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertex, TypeVertexEncoding},
             Kind,
-            vertex::{PrefixedTypeVertexEncoding, TypeVertex, TypeVertexEncoding},
         },
         Typed,
     },
     layout::prefix::Prefix,
-    Prefixed,
     value::label::Label,
+    Prefixed,
 };
-use encoding::graph::type_::vertex::TypeID;
 use lending_iterator::higher_order::Hkt;
 use primitive::maybe_owns::MaybeOwns;
 use resource::constants::snapshot::BUFFER_KEY_INLINE;
@@ -32,24 +31,23 @@ use storage::{
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 
+use super::{Capability, Ordering};
 use crate::{
     concept_iterator,
-    ConceptAPI,
     error::{ConceptReadError, ConceptWriteError},
     thing::thing_manager::ThingManager,
     type_::{
         annotation::{Annotation, AnnotationError},
         constraint::{CapabilityConstraint, TypeConstraint},
-        KindAPI,
         object_type::ObjectType,
         plays::Plays,
         relates::Relates,
         relation_type::RelationType,
-        type_manager::TypeManager, TypeAPI,
+        type_manager::TypeManager,
+        KindAPI, TypeAPI,
     },
+    ConceptAPI,
 };
-
-use super::{Capability, Ordering};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RoleType {

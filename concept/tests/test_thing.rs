@@ -8,8 +8,6 @@
 
 use std::{borrow::Cow, collections::HashMap, ops::Bound};
 
-use itertools::Itertools;
-
 use concept::{
     error::ConceptReadError,
     thing::{
@@ -23,10 +21,10 @@ use concept::{
         annotation::{AnnotationCardinality, AnnotationDistinct, AnnotationIndependent, AnnotationUnique},
         attribute_type::AttributeTypeAnnotation,
         object_type::ObjectType,
-        Ordering,
-        OwnerAPI,
         owns::OwnsAnnotation,
-        PlayerAPI, relates::RelatesAnnotation, type_manager::TypeManager,
+        relates::RelatesAnnotation,
+        type_manager::TypeManager,
+        Ordering, OwnerAPI, PlayerAPI,
     },
 };
 use encoding::{
@@ -39,6 +37,7 @@ use encoding::{
         value_type::{ValueType, ValueTypeCategory},
     },
 };
+use itertools::Itertools;
 use resource::profile::{CommitProfile, StorageCounters};
 use storage::{
     durability_client::WALClient,
@@ -112,12 +111,18 @@ fn attribute_create() {
             )
             .unwrap();
 
-        let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value), ).unwrap();
-        assert_eq!(age_1.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(), Value::Integer(age_value));
+        let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value)).unwrap();
+        assert_eq!(
+            age_1.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(),
+            Value::Integer(age_value)
+        );
 
         let name_1 =
-            thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name_value)), ).unwrap();
-        assert_eq!(name_1.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(), Value::String(Cow::Borrowed(name_value)));
+            thing_manager.create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name_value))).unwrap();
+        assert_eq!(
+            name_1.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(),
+            Value::String(Cow::Borrowed(name_value))
+        );
 
         let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
         assert!(finalise_result.is_ok());
@@ -131,9 +136,16 @@ fn attribute_create() {
         assert_eq!(attributes_count, 2);
 
         let age_type = type_manager.get_attribute_type(&snapshot, &age_label).unwrap().unwrap();
-        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED).unwrap().try_collect().unwrap();
+        let mut ages: Vec<_> = thing_manager
+            .get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED)
+            .unwrap()
+            .try_collect()
+            .unwrap();
         assert_eq!(ages.len(), 1);
-        assert_eq!(ages.first_mut().unwrap().get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(), Value::Integer(age_value));
+        assert_eq!(
+            ages.first_mut().unwrap().get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap(),
+            Value::Integer(age_value)
+        );
     }
 }
 
@@ -179,15 +191,16 @@ fn has() {
         person_type.set_owns(&mut snapshot, &type_manager, &thing_manager, name_type, Ordering::Unordered).unwrap();
 
         let person_1 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-        let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value), ).unwrap();
+        let age_1 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value)).unwrap();
         let name_1 = thing_manager
-            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned(String::from(name_value))), )
+            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned(String::from(name_value))))
             .unwrap();
 
         person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_1, StorageCounters::DISABLED).unwrap();
         person_1.set_has_unordered(&mut snapshot, &thing_manager, &name_1, StorageCounters::DISABLED).unwrap();
 
-        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
+        let retrieved_attributes_count =
+            person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(retrieved_attributes_count, 2);
 
         let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
@@ -201,9 +214,11 @@ fn has() {
         let attributes_count = thing_manager.get_attributes(&snapshot, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(attributes_count, 2);
 
-        let people: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).try_collect().unwrap();
+        let people: Vec<Entity> =
+            thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).try_collect().unwrap();
         let person_1 = people.first().unwrap();
-        let retrieved_attributes_count = person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
+        let retrieved_attributes_count =
+            person_1.get_has_unordered(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(retrieved_attributes_count, 2);
     }
 }
@@ -295,13 +310,13 @@ fn get_has_reverse_in_range() {
 
         let person_1 = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
         let company_1 = thing_manager.create_entity(&mut snapshot, company_type).unwrap();
-        let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value_10), ).unwrap();
-        let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value_11), ).unwrap();
+        let age_10 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value_10)).unwrap();
+        let age_11 = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value_11)).unwrap();
         let name_inline = thing_manager
-            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(inlineable_name)), )
+            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(inlineable_name)))
             .unwrap();
         let name_hashed = thing_manager
-            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(uninlinable_name)), )
+            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(uninlinable_name)))
             .unwrap();
 
         person_1.set_has_unordered(&mut snapshot, &thing_manager, &age_10, StorageCounters::DISABLED).unwrap();
@@ -441,18 +456,20 @@ fn attribute_cleanup_on_concurrent_detach() {
 
         let alice = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
         let bob = thing_manager.create_entity(&mut snapshot, person_type).unwrap();
-        let age = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value), ).unwrap();
+        let age = thing_manager.create_attribute(&mut snapshot, age_type, Value::Integer(age_value)).unwrap();
         let name_alice = thing_manager
-            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name_alice_value)), )
+            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Borrowed(name_alice_value)))
             .unwrap();
         let name_bob = thing_manager
-            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned(String::from(name_bob_value))), )
+            .create_attribute(&mut snapshot, name_type, Value::String(Cow::Owned(String::from(name_bob_value))))
             .unwrap();
 
-        alice.set_has_ordered(&mut snapshot, &thing_manager, age_type, vec![age.clone()], StorageCounters::DISABLED).unwrap();
+        alice
+            .set_has_ordered(&mut snapshot, &thing_manager, age_type, vec![age.clone()], StorageCounters::DISABLED)
+            .unwrap();
         alice.set_has_unordered(&mut snapshot, &thing_manager, &name_alice, StorageCounters::DISABLED).unwrap();
         bob.set_has_ordered(&mut snapshot, &thing_manager, age_type, vec![age], StorageCounters::DISABLED).unwrap();
-        bob.set_has_unordered(&mut snapshot, &thing_manager, &name_bob, StorageCounters::DISABLED   ).unwrap();
+        bob.set_has_unordered(&mut snapshot, &thing_manager, &name_bob, StorageCounters::DISABLED).unwrap();
         let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
         assert!(finalise_result.is_ok());
     }
@@ -479,7 +496,7 @@ fn attribute_cleanup_on_concurrent_detach() {
                         &thing_manager,
                         name_type,
                         Value::String(Cow::Borrowed(name_bob_value)),
-                        StorageCounters::DISABLED
+                        StorageCounters::DISABLED,
                     )
                     .unwrap()
             })
@@ -509,17 +526,24 @@ fn attribute_cleanup_on_concurrent_detach() {
                         &thing_manager,
                         name_type,
                         Value::String(Cow::Borrowed(name_alice_value)),
-                        StorageCounters::DISABLED
+                        StorageCounters::DISABLED,
                     )
                     .unwrap()
             })
             .unwrap()
             .unwrap();
 
-        let mut ages: Vec<_> = thing_manager.get_attributes_in(&snapshot_2, age_type, StorageCounters::DISABLED).unwrap().try_collect().unwrap();
+        let mut ages: Vec<_> = thing_manager
+            .get_attributes_in(&snapshot_2, age_type, StorageCounters::DISABLED)
+            .unwrap()
+            .try_collect()
+            .unwrap();
         let age_position = ages
             .iter()
-            .position(|attr| attr.get_value(&snapshot_2, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_integer() == age_value)
+            .position(|attr| {
+                attr.get_value(&snapshot_2, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_integer()
+                    == age_value
+            })
             .unwrap();
         ages.remove(age_position);
         alice.set_has_ordered(&mut snapshot_2, &thing_manager, age_type, ages, StorageCounters::DISABLED).unwrap();
@@ -536,7 +560,8 @@ fn attribute_cleanup_on_concurrent_detach() {
 
         let age_type = type_manager.get_attribute_type(&snapshot, &age_label).unwrap().unwrap();
 
-        let attributes_count = thing_manager.get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED).unwrap().count();
+        let attributes_count =
+            thing_manager.get_attributes_in(&snapshot, age_type, StorageCounters::DISABLED).unwrap().count();
         assert_eq!(attributes_count, 0);
     }
 }
@@ -614,13 +639,53 @@ fn role_player_distinct() {
         let company_3 = thing_manager.create_entity(&mut snapshot, company_type).unwrap();
 
         let employment_1 = thing_manager.create_relation(&mut snapshot, employment_type).unwrap();
-        employment_1.add_player(&mut snapshot, &thing_manager, employee_type, Object::Entity(person_1), StorageCounters::DISABLED).unwrap();
-        employment_1.add_player(&mut snapshot, &thing_manager, employer_type, Object::Entity(company_1),StorageCounters::DISABLED ).unwrap();
+        employment_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                employee_type,
+                Object::Entity(person_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        employment_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                employer_type,
+                Object::Entity(company_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
 
         let employment_2 = thing_manager.create_relation(&mut snapshot, employment_type).unwrap();
-        employment_2.add_player(&mut snapshot, &thing_manager, employee_type, Object::Entity(person_1), StorageCounters::DISABLED).unwrap();
-        employment_2.add_player(&mut snapshot, &thing_manager, employer_type, Object::Entity(company_2), StorageCounters::DISABLED).unwrap();
-        employment_2.add_player(&mut snapshot, &thing_manager, employer_type, Object::Entity(company_3), StorageCounters::DISABLED).unwrap();
+        employment_2
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                employee_type,
+                Object::Entity(person_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        employment_2
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                employer_type,
+                Object::Entity(company_2),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        employment_2
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                employer_type,
+                Object::Entity(company_3),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
 
         assert_eq!(employment_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
         assert_eq!(employment_2.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 3);
@@ -630,7 +695,13 @@ fn role_player_distinct() {
         assert_eq!(company_2.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 1);
         assert_eq!(company_3.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 1);
 
-        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED).unwrap().count(), 3);
+        assert_eq!(
+            person_1
+                .get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED)
+                .unwrap()
+                .count(),
+            3
+        );
 
         let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
         assert!(finalise_result.is_ok());
@@ -642,9 +713,11 @@ fn role_player_distinct() {
 
         let employment_type = type_manager.get_relation_type(&snapshot, &employment_label).unwrap().unwrap();
 
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> =
+            thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 4);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> =
+            thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 2);
 
         let players_0 = relations[0].get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).count();
@@ -660,7 +733,13 @@ fn role_player_distinct() {
             .unwrap();
 
         assert_eq!(person_1.get_relations_roles(&snapshot, &thing_manager, StorageCounters::DISABLED).count(), 2);
-        assert_eq!(person_1.get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED).unwrap().count(), 3);
+        assert_eq!(
+            person_1
+                .get_indexed_relations(&snapshot, &thing_manager, employment_type, StorageCounters::DISABLED)
+                .unwrap()
+                .count(),
+            3
+        );
     }
 }
 
@@ -709,11 +788,32 @@ fn role_player_duplicates_unordered() {
         let resource_1 = thing_manager.create_entity(&mut snapshot, resource_type).unwrap();
 
         let collection_1 = thing_manager.create_relation(&mut snapshot, collection_type).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
+        collection_1
+            .add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED)
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 2);
 
         let group_relations_count: u64 = group_1
@@ -770,13 +870,18 @@ fn role_player_duplicates_unordered() {
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
 
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> =
+            thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> =
+            thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 2);
 
         let group_1 = entities
@@ -870,11 +975,32 @@ fn role_player_duplicates_ordered_default_card() {
         let resource_1 = thing_manager.create_entity(&mut snapshot, resource_type).unwrap();
 
         let collection_1 = thing_manager.create_relation(&mut snapshot, collection_type).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
+        collection_1
+            .add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED)
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 3);
 
         let group_relations_count: u64 = group_1
@@ -894,7 +1020,8 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(resource_relations_count, 2);
 
-        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
+        let result =
+            group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
 
         let group_relations_count: u64 = group_1
@@ -906,7 +1033,7 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(group_relations_count, 1);
 
-        let finalise_result = thing_manager.finalise(&mut snapshot,StorageCounters::DISABLED );
+        let finalise_result = thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED);
         assert!(finalise_result.is_ok());
     }
     snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
@@ -914,13 +1041,18 @@ fn role_player_duplicates_ordered_default_card() {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> =
+            thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> =
+            thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 3);
 
         let group_1 = entities
@@ -950,9 +1082,11 @@ fn role_player_duplicates_ordered_default_card() {
             .sum();
         assert_eq!(resource_relations_count, 2);
 
-        let result = group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
+        let result =
+            group_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
-        let result = resource_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
+        let result =
+            resource_1.get_indexed_relations(&snapshot, &thing_manager, collection_type, StorageCounters::DISABLED);
         assert!(result.is_err());
     }
 }
@@ -1007,11 +1141,32 @@ fn role_player_duplicates_ordered_small_card() {
         let resource_1 = thing_manager.create_entity(&mut snapshot, resource_type).unwrap();
 
         let collection_1 = thing_manager.create_relation(&mut snapshot, collection_type).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
-        collection_1.add_player(&mut snapshot, &thing_manager, entry_type, Object::Entity(resource_1), StorageCounters::DISABLED).unwrap();
+        collection_1
+            .add_player(&mut snapshot, &thing_manager, owner_type, Object::Entity(group_1), StorageCounters::DISABLED)
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
+        collection_1
+            .add_player(
+                &mut snapshot,
+                &thing_manager,
+                entry_type,
+                Object::Entity(resource_1),
+                StorageCounters::DISABLED,
+            )
+            .unwrap();
 
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 3);
 
         let group_relations_count: u64 = group_1
@@ -1067,13 +1222,18 @@ fn role_player_duplicates_ordered_small_card() {
         let snapshot: ReadSnapshot<WALClient> = storage.clone().open_snapshot_read();
         let (type_manager, thing_manager) = load_managers(storage.clone(), None);
         let collection_type = type_manager.get_relation_type(&snapshot, &collection_label).unwrap().unwrap();
-        let entities: Vec<Entity> = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let entities: Vec<Entity> =
+            thing_manager.get_entities(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(entities.len(), 2);
-        let relations: Vec<Relation> = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
+        let relations: Vec<Relation> =
+            thing_manager.get_relations(&snapshot, StorageCounters::DISABLED).map(|result| result.unwrap()).collect();
         assert_eq!(relations.len(), 1);
 
         let collection_1 = relations.first().unwrap();
-        let player_counts: u64 = collection_1.get_players(&snapshot, &thing_manager, StorageCounters::DISABLED).map(|res| res.unwrap().1).sum();
+        let player_counts: u64 = collection_1
+            .get_players(&snapshot, &thing_manager, StorageCounters::DISABLED)
+            .map(|res| res.unwrap().1)
+            .sum();
         assert_eq!(player_counts, 3);
 
         let group_1 = entities
@@ -1154,10 +1314,10 @@ fn attribute_string_write_read_delete() {
     {
         let mut snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         thing_manager
-            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), )
+            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())))
             .unwrap();
         thing_manager
-            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), )
+            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())))
             .unwrap();
         thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED).unwrap();
         snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
@@ -1166,11 +1326,17 @@ fn attribute_string_write_read_delete() {
     // read them back by type
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
-        let attrs: Vec<Attribute> =
-            thing_manager.get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED).unwrap().map(|result| result.unwrap()).collect();
+        let attrs: Vec<Attribute> = thing_manager
+            .get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED)
+            .unwrap()
+            .map(|result| result.unwrap())
+            .collect();
         let attr_values: Vec<String> = attrs
             .into_iter()
-            .map(|attr| (*attr.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()).to_owned())
+            .map(|attr| {
+                (*attr.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string())
+                    .to_owned()
+            })
             .collect();
         assert!(attr_values.contains(&short_string));
         assert!(attr_values.contains(&long_string));
@@ -1180,15 +1346,31 @@ fn attribute_string_write_read_delete() {
     {
         let mut snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let read_short_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(short_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .unwrap();
-        assert_eq!(short_string, read_short_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string());
+        assert_eq!(
+            short_string,
+            read_short_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()
+        );
         let read_long_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(long_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .unwrap();
-        assert_eq!(long_string, read_long_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string());
+        assert_eq!(
+            long_string,
+            read_long_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()
+        );
 
         read_short_string.delete(&mut snapshot, &thing_manager, StorageCounters::DISABLED).unwrap();
         read_long_string.delete(&mut snapshot, &thing_manager, StorageCounters::DISABLED).unwrap();
@@ -1200,11 +1382,21 @@ fn attribute_string_write_read_delete() {
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let read_short_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(short_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap();
         assert_eq!(None, read_short_string);
         let read_long_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(long_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap();
         assert_eq!(None, read_long_string);
     }
@@ -1246,10 +1438,10 @@ fn attribute_string_write_read_delete_with_has() {
         let mut snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let owner = thing_manager.create_entity(&mut snapshot, owner_type).unwrap();
         let short_attr = thing_manager
-            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), )
+            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())))
             .unwrap();
         let long_attr = thing_manager
-            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), )
+            .create_attribute(&mut snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())))
             .unwrap();
         owner.set_has_unordered(&mut snapshot, &thing_manager, &short_attr, StorageCounters::DISABLED).unwrap();
         owner.set_has_unordered(&mut snapshot, &thing_manager, &long_attr, StorageCounters::DISABLED).unwrap();
@@ -1260,11 +1452,17 @@ fn attribute_string_write_read_delete_with_has() {
     // read them back by type
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
-        let attrs: Vec<Attribute> =
-            thing_manager.get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED).unwrap().map(|result| result.unwrap()).collect();
+        let attrs: Vec<Attribute> = thing_manager
+            .get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED)
+            .unwrap()
+            .map(|result| result.unwrap())
+            .collect();
         let attr_values: Vec<String> = attrs
             .into_iter()
-            .map(|attr| (*attr.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()).to_owned())
+            .map(|attr| {
+                (*attr.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string())
+                    .to_owned()
+            })
             .collect();
         assert!(attr_values.contains(&short_string));
         assert!(attr_values.contains(&long_string));
@@ -1274,15 +1472,31 @@ fn attribute_string_write_read_delete_with_has() {
     {
         let mut snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let read_short_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(short_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .unwrap();
-        assert_eq!(short_string, read_short_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string());
+        assert_eq!(
+            short_string,
+            read_short_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()
+        );
         let read_long_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(long_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .unwrap();
-        assert_eq!(long_string, read_long_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string());
+        assert_eq!(
+            long_string,
+            read_long_string.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap().unwrap_string()
+        );
 
         read_short_string.delete(&mut snapshot, &thing_manager, StorageCounters::DISABLED).unwrap();
         read_long_string.delete(&mut snapshot, &thing_manager, StorageCounters::DISABLED).unwrap();
@@ -1295,11 +1509,21 @@ fn attribute_string_write_read_delete_with_has() {
     {
         let snapshot: WriteSnapshot<WALClient> = storage.clone().open_snapshot_write();
         let read_short_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(short_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(short_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap();
         assert_eq!(None, read_short_string);
         let read_long_string = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::String(Cow::Borrowed(long_string.as_str())), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::String(Cow::Borrowed(long_string.as_str())),
+                StorageCounters::DISABLED,
+            )
             .unwrap();
         assert_eq!(None, read_long_string);
     }
@@ -1355,9 +1579,9 @@ fn attribute_struct_write_read() {
         let attr_value_type = attr_type.get_value_type_without_source(&snapshot, &type_manager).unwrap().unwrap();
         assert_eq!(ValueTypeCategory::Struct, attr_value_type.category());
         let attr_instance = thing_manager
-            .create_attribute(&mut snapshot, attr_type, Value::Struct(Cow::Owned(struct_value.clone())), )
+            .create_attribute(&mut snapshot, attr_type, Value::Struct(Cow::Owned(struct_value.clone())))
             .unwrap();
-        thing_manager.finalise(&mut snapshot,StorageCounters::DISABLED).unwrap();
+        thing_manager.finalise(&mut snapshot, StorageCounters::DISABLED).unwrap();
         snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
         (attr_instance, struct_value)
     };
@@ -1368,7 +1592,8 @@ fn attribute_struct_write_read() {
         let attr_vec: Vec<Attribute> = thing_manager
             .get_attributes_in(&snapshot, attr_type, StorageCounters::DISABLED)
             .unwrap()
-            .map(|result| result.unwrap()).collect();
+            .map(|result| result.unwrap())
+            .collect();
         let attr = attr_vec.first().unwrap().clone();
         let value_0 = attr.get_value(&snapshot, &thing_manager, StorageCounters::DISABLED).unwrap();
         match value_0 {
@@ -1377,7 +1602,12 @@ fn attribute_struct_write_read() {
         }
 
         let attr_by_id = thing_manager
-            .get_attribute_with_value(&snapshot, attr_type, Value::Struct(Cow::Borrowed(&struct_value)), StorageCounters::DISABLED)
+            .get_attribute_with_value(
+                &snapshot,
+                attr_type,
+                Value::Struct(Cow::Borrowed(&struct_value)),
+                StorageCounters::DISABLED,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(attr, attr_by_id);
@@ -1440,7 +1670,7 @@ fn read_attribute_struct_by_field() {
                 HashMap::from([(0, Value::Struct(Cow::Owned(nested_struct_value)))]),
             );
             let attr = thing_manager
-                .create_attribute(&mut snapshot, attr_type, Value::Struct(Cow::Borrowed(&outer_struct_value)), )
+                .create_attribute(&mut snapshot, attr_type, Value::Struct(Cow::Borrowed(&outer_struct_value)))
                 .unwrap();
             attrs.push(attr);
         }
@@ -1450,7 +1680,13 @@ fn read_attribute_struct_by_field() {
                 .resolve_struct_field(&snapshot, &["f_nested", "nested_string"], struct_def.clone())
                 .unwrap();
             let attr_by_field_iterator = thing_manager
-                .get_attributes_by_struct_field(&snapshot, attr_type, field_path, Value::String(Cow::Borrowed(val)), StorageCounters::DISABLED)
+                .get_attributes_by_struct_field(
+                    &snapshot,
+                    attr_type,
+                    field_path,
+                    Value::String(Cow::Borrowed(val)),
+                    StorageCounters::DISABLED,
+                )
                 .unwrap();
             let mut attr_by_field: Vec<Attribute> = Vec::new();
             for res in attr_by_field_iterator {

@@ -6,7 +6,7 @@
 
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use answer::{Concept, Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Concept, Thing, Type};
 use concept::{
     thing::thing_manager::ThingManager,
     type_::{type_manager::TypeManager, TypeAPI},
@@ -187,7 +187,9 @@ impl QueryAnswer {
                 Thing::Entity(_) => todo!("Unexpected entity result, requires implementation"),
                 Thing::Relation(_) => todo!("Unexpected relation result, requires implementation"),
                 Thing::Attribute(attribute) => Self::value_as_json(
-                    &attribute.get_value(snapshot, thing_manager, StorageCounters::DISABLED).expect("Expected attribute's value"),
+                    &attribute
+                        .get_value(snapshot, thing_manager, StorageCounters::DISABLED)
+                        .expect("Expected attribute's value"),
                 ),
             },
             Concept::Value(value) => Self::value_as_json(value),

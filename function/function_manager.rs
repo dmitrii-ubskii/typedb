@@ -39,13 +39,12 @@ use ir::{
 };
 use itertools::Itertools;
 use primitive::maybe_owns::MaybeOwns;
-use resource::constants::snapshot::BUFFER_VALUE_INLINE;
+use resource::{constants::snapshot::BUFFER_VALUE_INLINE, profile::StorageCounters};
 use storage::{
     key_range::KeyRange,
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 use typeql::common::Spanned;
-use resource::profile::StorageCounters;
 
 use crate::{function::SchemaFunction, function_cache::FunctionCache, FunctionError};
 
@@ -112,9 +111,11 @@ impl FunctionManager {
             let function =
                 SchemaFunction::build(definition_key, FunctionDefinition::build_ref(definition.unparsed.as_str()))?;
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
-            let existing = snapshot.get::<BUFFER_VALUE_INLINE>(index_key.as_reference(), StorageCounters::DISABLED).map_err(|source| {
-                FunctionError::FunctionRetrieval { typedb_source: FunctionReadError::FunctionRetrieval { source } }
-            })?;
+            let existing = snapshot
+                .get::<BUFFER_VALUE_INLINE>(index_key.as_reference(), StorageCounters::DISABLED)
+                .map_err(|source| FunctionError::FunctionRetrieval {
+                    typedb_source: FunctionReadError::FunctionRetrieval { source },
+                })?;
             if existing.is_some() {
                 Err(FunctionError::FunctionAlreadyExists { name: function.name(), source_span: definition.span() })?;
             } else {
@@ -231,10 +232,13 @@ impl FunctionReader {
         snapshot: &impl ReadableSnapshot,
     ) -> Result<Vec<SchemaFunction>, FunctionReadError> {
         snapshot
-            .iterate_range(&KeyRange::new_within(
-                DefinitionKey::build_prefix(FunctionDefinition::PREFIX),
-                DefinitionKey::FIXED_WIDTH_ENCODING,
-            ), StorageCounters::DISABLED)
+            .iterate_range(
+                &KeyRange::new_within(
+                    DefinitionKey::build_prefix(FunctionDefinition::PREFIX),
+                    DefinitionKey::FIXED_WIDTH_ENCODING,
+                ),
+                StorageCounters::DISABLED,
+            )
             .collect_cloned_vec(|key, value| {
                 SchemaFunction::build(
                     DefinitionKey::new(Bytes::Reference(key.bytes()).into_owned()),

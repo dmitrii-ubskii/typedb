@@ -6,43 +6,42 @@
 
 use std::{collections::HashMap, fmt};
 
-use itertools::Itertools;
-
 use bytes::Bytes;
 use encoding::{
-    AsBytes,
     graph::{
         thing::{
             edge::{ThingEdgeIndexedRelation, ThingEdgeLinks},
+            vertex_object::{ObjectID, ObjectVertex},
             ThingVertex,
-            vertex_object::ObjectVertex,
         },
-        type_::vertex::{PrefixedTypeVertexEncoding, TypeVertexEncoding},
+        type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeVertexEncoding},
         Typed,
     },
-    Keyable,
-    layout::prefix::Prefix, Prefixed, value::decode_value_u64,
+    layout::prefix::Prefix,
+    value::decode_value_u64,
+    AsBytes, Keyable, Prefixed,
 };
-use encoding::graph::thing::vertex_object::ObjectID;
-use encoding::graph::type_::vertex::TypeID;
-use lending_iterator::{higher_order::Hkt};
-use resource::constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE};
-use resource::profile::StorageCounters;
+use itertools::Itertools;
+use lending_iterator::higher_order::Hkt;
+use resource::{
+    constants::snapshot::{BUFFER_KEY_INLINE, BUFFER_VALUE_INLINE},
+    profile::StorageCounters,
+};
 use storage::{
     key_value::StorageKey,
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
 
 use crate::{
-    ConceptAPI,
-    ConceptStatus,
     edge_iterator,
     error::{ConceptReadError, ConceptWriteError},
     thing::{
-        HKInstance,
         object::{Object, ObjectAPI},
-        thing_manager::{ThingManager, validation::operation_time_validation::OperationTimeValidation}, ThingAPI,
-    }, type_::{ObjectTypeAPI, Ordering, OwnerAPI, relation_type::RelationType, role_type::RoleType},
+        thing_manager::{validation::operation_time_validation::OperationTimeValidation, ThingManager},
+        HKInstance, ThingAPI,
+    },
+    type_::{relation_type::RelationType, role_type::RoleType, ObjectTypeAPI, Ordering, OwnerAPI},
+    ConceptAPI, ConceptStatus,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -54,13 +53,18 @@ impl Relation {
     const fn new_const(vertex: ObjectVertex) -> Self {
         Relation { vertex }
     }
-    
+
     pub fn type_(&self) -> RelationType {
         RelationType::build_from_type_id(self.vertex.type_id_())
     }
 
-    pub fn has_players(self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> bool {
-        match self.get_status(snapshot, thing_manager, storage_counters ) {
+    pub fn has_players(
+        self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> bool {
+        match self.get_status(snapshot, thing_manager, storage_counters) {
             ConceptStatus::Inserted => thing_manager.has_links(snapshot, self, true),
             ConceptStatus::Persisted => thing_manager.has_links(snapshot, self, false),
             ConceptStatus::Put => unreachable!("Encountered a `put` relation"),
@@ -117,9 +121,11 @@ impl Relation {
         role_type: RoleType,
         storage_counters: StorageCounters,
     ) -> impl Iterator<Item = Result<Object, Box<ConceptReadError>>> {
-        self.get_players(snapshot, thing_manager, storage_counters).filter_map::<Result<Object, _>, _>(move |res| match res {
-            Ok((roleplayer, _count)) => (roleplayer.role_type() == role_type).then_some(Ok(roleplayer.player)),
-            Err(error) => Some(Err(error)),
+        self.get_players(snapshot, thing_manager, storage_counters).filter_map::<Result<Object, _>, _>(move |res| {
+            match res {
+                Ok((roleplayer, _count)) => (roleplayer.role_type() == role_type).then_some(Ok(roleplayer.player)),
+                Err(error) => Some(Err(error)),
+            }
         })
     }
 
@@ -152,11 +158,22 @@ impl Relation {
         player: Object,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_relation_exists_to_add_player(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
+        OperationTimeValidation::validate_relation_exists_to_add_player(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
-        OperationTimeValidation::validate_role_player_exists_to_add_player(snapshot, thing_manager, self, player, storage_counters.clone())
-            .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
+        OperationTimeValidation::validate_role_player_exists_to_add_player(
+            snapshot,
+            thing_manager,
+            self,
+            player,
+            storage_counters.clone(),
+        )
+        .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
         OperationTimeValidation::validate_relation_type_relates_role_type(
             snapshot,
@@ -201,8 +218,13 @@ impl Relation {
             Ordering::Ordered => (),
         }
 
-        OperationTimeValidation::validate_relation_exists_to_add_player(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
+        OperationTimeValidation::validate_relation_exists_to_add_player(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
         OperationTimeValidation::validate_relation_type_relates_role_type(
             snapshot,
@@ -228,8 +250,14 @@ impl Relation {
             OperationTimeValidation::validate_plays_is_not_abstract(snapshot, thing_manager, player, role_type)
                 .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
-            OperationTimeValidation::validate_role_player_exists_to_add_player(snapshot, thing_manager, self, player, storage_counters.clone())
-                .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
+            OperationTimeValidation::validate_role_player_exists_to_add_player(
+                snapshot,
+                thing_manager,
+                self,
+                player,
+                storage_counters.clone(),
+            )
+            .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
             *new_counts.entry(player).or_default() += 1;
         }
@@ -244,7 +272,8 @@ impl Relation {
         .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
         // 1. get owned list
-        let old_players = thing_manager.get_role_players_ordered(snapshot, self, role_type, storage_counters.clone())?;
+        let old_players =
+            thing_manager.get_role_players_ordered(snapshot, self, role_type, storage_counters.clone())?;
 
         let mut old_counts = HashMap::<_, u64>::new();
         for &player in &old_players {
@@ -288,8 +317,13 @@ impl Relation {
         delete_count: u64,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        OperationTimeValidation::validate_relation_exists_to_remove_player(snapshot, thing_manager, self, storage_counters.clone())
-            .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
+        OperationTimeValidation::validate_relation_exists_to_remove_player(
+            snapshot,
+            thing_manager,
+            self,
+            storage_counters.clone(),
+        )
+        .map_err(|error| Box::new(ConceptWriteError::DataValidation { typedb_source: error }))?;
 
         OperationTimeValidation::validate_relation_type_relates_role_type(
             snapshot,
@@ -363,7 +397,12 @@ impl ThingAPI for Relation {
         Ok(())
     }
 
-    fn get_status(&self, snapshot: &impl ReadableSnapshot, thing_manager: &ThingManager, storage_counters: StorageCounters) -> ConceptStatus {
+    fn get_status(
+        &self,
+        snapshot: &impl ReadableSnapshot,
+        thing_manager: &ThingManager,
+        storage_counters: StorageCounters,
+    ) -> ConceptStatus {
         thing_manager.get_status(snapshot, self.vertex().into_storage_key(), storage_counters)
     }
 
@@ -373,7 +412,10 @@ impl ThingAPI for Relation {
         thing_manager: &ThingManager,
         storage_counters: StorageCounters,
     ) -> Result<(), Box<ConceptWriteError>> {
-        for attr in self.get_has_unordered(snapshot, thing_manager, storage_counters.clone())?.map_ok(|(has, _value)| has.attribute()) {
+        for attr in self
+            .get_has_unordered(snapshot, thing_manager, storage_counters.clone())?
+            .map_ok(|(has, _value)| has.attribute())
+        {
             thing_manager.unset_has(snapshot, self, &attr?, storage_counters.clone())?;
         }
 
@@ -400,14 +442,14 @@ impl ThingAPI for Relation {
             //       Instead, we could delete the players, then delete the entire index at once, if there is one
             thing_manager.unset_links(snapshot, self, player, role, storage_counters.clone())?;
 
-            debug_assert!(!player.get_indexed_relations(snapshot, thing_manager, self.type_(), storage_counters.clone()).is_ok_and(
-                |mut iterator| iterator.any(|result| {
+            debug_assert!(!player
+                .get_indexed_relations(snapshot, thing_manager, self.type_(), storage_counters.clone())
+                .is_ok_and(|mut iterator| iterator.any(|result| {
                     match result {
                         Ok(((start, _, _, _, start_role, _), _)) => start == player && start_role == role,
                         Err(_) => false,
                     }
-                })
-            ));
+                })));
         }
 
         thing_manager.delete_relation(snapshot, self, storage_counters);
@@ -460,9 +502,7 @@ pub enum Links {
 impl Links {
     pub fn role_type(&self) -> RoleType {
         match self {
-            Links::Edge(edge) | Links::EdgeReverse(edge) => {
-                RoleType::build_from_type_id(edge.role_id())
-            }
+            Links::Edge(edge) | Links::EdgeReverse(edge) => RoleType::build_from_type_id(edge.role_id()),
         }
     }
 
@@ -480,10 +520,7 @@ impl Links {
 
     // TODO: legacy - ideally we'd delete these
     pub(crate) fn into_role_player(self) -> RolePlayer {
-        RolePlayer {
-            player: self.player(),
-            role_type: self.role_type(),
-        }
+        RolePlayer { player: self.player(), role_type: self.role_type() }
     }
 
     pub(crate) fn into_relation_role(self) -> (Relation, RoleType) {
@@ -526,7 +563,8 @@ fn storage_key_reverse_edge_to_links<'a>(
 
 fn links_to_reverse_edge_storage_key(links_count: &(Links, u64)) -> StorageKey<'static, BUFFER_KEY_INLINE> {
     let (links, _count) = links_count;
-    let edge = ThingEdgeLinks::new_reverse(links.player().vertex(), links.relation().vertex(), links.role_type().vertex());
+    let edge =
+        ThingEdgeLinks::new_reverse(links.player().vertex(), links.relation().vertex(), links.role_type().vertex());
     edge.into_storage_key()
 }
 
@@ -548,14 +586,22 @@ fn storage_key_to_indexed_players<'a>(
     let end_player = Object::new(edge.to());
     let start_role_type = RoleType::build_from_type_id(edge.from_role_id());
     let end_role_type = RoleType::build_from_type_id(edge.to_role_id());
-    let decoded = (start_player, end_player, edge.relation_type_id(), edge.relation_id(), start_role_type, end_role_type);
+    let decoded =
+        (start_player, end_player, edge.relation_type_id(), edge.relation_id(), start_role_type, end_role_type);
     (decoded, decode_value_u64(&value))
 }
 
-fn indexed_players_to_edge_storage_key(indexed_relation_players_count: &(IndexedRelationPlayers, u64)) -> StorageKey<'static, BUFFER_KEY_INLINE> {
+fn indexed_players_to_edge_storage_key(
+    indexed_relation_players_count: &(IndexedRelationPlayers, u64),
+) -> StorageKey<'static, BUFFER_KEY_INLINE> {
     let ((from, to, relation_type_id, relation_id, from_role, to_role), _count) = indexed_relation_players_count;
     let edge = ThingEdgeIndexedRelation::new_from_relation_parts(
-        from.vertex(), to.vertex(), *relation_type_id, *relation_id, from_role.vertex().type_id_(), to_role.vertex().type_id_()
+        from.vertex(),
+        to.vertex(),
+        *relation_type_id,
+        *relation_id,
+        from_role.vertex().type_id_(),
+        to_role.vertex().type_id_(),
     );
     edge.into_storage_key()
 }

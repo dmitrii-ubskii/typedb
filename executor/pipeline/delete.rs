@@ -13,13 +13,13 @@ use resource::profile::StageProfile;
 use storage::snapshot::WritableSnapshot;
 
 use crate::{
-    ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI}, StageIterator, WrittenRowsIterator,
+        stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError, StageIterator, WrittenRowsIterator,
     },
     row::Row,
     write::{write_instruction::AsWriteInstruction, WriteError},
+    ExecutionInterrupt,
 };
 
 pub struct DeleteStageExecutor<PreviousStage> {
@@ -99,7 +99,9 @@ pub fn execute_delete(
         let counters = step_profile.storage_counters();
         let measurement = step_profile.start_measurement();
         match instruction {
-            ConnectionInstruction::Has(has) => has.execute(snapshot, thing_manager, parameters, input_output_row, counters)?,
+            ConnectionInstruction::Has(has) => {
+                has.execute(snapshot, thing_manager, parameters, input_output_row, counters)?
+            }
             ConnectionInstruction::Links(role_player) => {
                 role_player.execute(snapshot, thing_manager, parameters, input_output_row, counters)?
             }

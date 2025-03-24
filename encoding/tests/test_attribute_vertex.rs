@@ -11,7 +11,6 @@ use std::sync::Arc;
 use bytes::{byte_array::ByteArray, Bytes};
 use durability::wal::WAL;
 use encoding::{
-    EncodingKeyspace,
     graph::{
         thing::{
             vertex_attribute::{StringAttributeID, StructAttributeID},
@@ -21,10 +20,10 @@ use encoding::{
         Typed,
     },
     value::{string_bytes::StringBytes, struct_bytes::StructBytes},
+    EncodingKeyspace,
 };
-use resource::constants::snapshot::BUFFER_KEY_INLINE;
-use resource::profile::CommitProfile;
-use storage::{durability_client::WALClient, MVCCStorage, snapshot::CommittableSnapshot};
+use resource::{constants::snapshot::BUFFER_KEY_INLINE, profile::CommitProfile};
+use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
 use test_utils::{create_tmp_dir, init_logging};
 use test_utils_encoding::create_core_storage;
 

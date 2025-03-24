@@ -6,8 +6,6 @@
 
 use std::{cmp::Ordering, collections::HashMap, fmt, sync::Arc};
 
-use itertools::Itertools;
-
 use answer::variable_value::VariableValue;
 use compiler::{
     annotation::expression::compiled_expression::ExecutableExpression,
@@ -19,6 +17,7 @@ use compiler::{
 };
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager};
 use error::{unimplemented_feature, UnimplementedFeature};
+use itertools::Itertools;
 use lending_iterator::{LendingIterator, Peekable};
 use resource::profile::StepProfile;
 use storage::snapshot::ReadableSnapshot;
@@ -26,14 +25,14 @@ use storage::snapshot::ReadableSnapshot;
 use crate::{
     batch::{FixedBatch, FixedBatchRowIterator},
     error::ReadExecutionError,
-    ExecutionInterrupt,
-    instruction::{Checker, InstructionExecutor, iterator::TupleIterator},
+    instruction::{iterator::TupleIterator, Checker, InstructionExecutor},
     pipeline::stage::ExecutionContext,
     read::{
         expression_executor::{evaluate_expression, ExpressionValue},
         step_executor::StepExecutors,
     },
-    row::{MaybeOwnedRow, Row}, SelectedPositions,
+    row::{MaybeOwnedRow, Row},
+    ExecutionInterrupt, SelectedPositions,
 };
 
 #[derive(Debug)]
@@ -364,8 +363,7 @@ impl IntersectionExecutor {
                             Some(Ordering::Less) => {
                                 unreachable!("Skip to should always be empty or equal/greater than the target")
                             }
-                            Some(Ordering::Equal) => {
-                            },
+                            Some(Ordering::Equal) => {}
                             Some(Ordering::Greater) => {
                                 current_max_index = i;
                                 retry = true;
@@ -394,11 +392,12 @@ impl IntersectionExecutor {
             let next_row: &MaybeOwnedRow<'_> = input.as_ref().map_err(|err| (*err).clone())?;
             for executor in &self.instruction_executors {
                 self.iterators.push(
-                    executor.get_iterator(context, next_row.as_reference(), self.profile.storage_counters())
-                        .map_err(|err| ReadExecutionError::CreatingIterator {
+                    executor.get_iterator(context, next_row.as_reference(), self.profile.storage_counters()).map_err(
+                        |err| ReadExecutionError::CreatingIterator {
                             instruction_name: executor.name().to_string(),
                             typedb_source: err,
-                        })?
+                        },
+                    )?,
                 );
             }
         }
@@ -582,10 +581,12 @@ impl CartesianIterator {
                         None => self.reopen_iterator(context, &iterator_executors[index])?,
                         Some(Ok(value)) => {
                             if value < source_intersection_value {
-                                iter
-                                    .advance_until_first_unbound_is(source_intersection_value)
+                                iter.advance_until_first_unbound_is(source_intersection_value)
                                     .map_err(|err| ReadExecutionError::ConceptRead { typedb_source: err })?;
-                                debug_assert_eq!(iter.peek_first_unbound_value().unwrap().unwrap(), source_intersection_value);
+                                debug_assert_eq!(
+                                    iter.peek_first_unbound_value().unwrap().unwrap(),
+                                    source_intersection_value
+                                );
                                 iter
                             } else if value == source_intersection_value {
                                 iter
@@ -799,8 +800,9 @@ impl AssignExecutor {
                 .iter()
                 .map(|&pos| {
                     let value = input_row.get(pos).to_owned();
-                    let expression_value = ExpressionValue::try_from_value(value, context, self.profile.storage_counters())
-                        .map_err(|typedb_source| ReadExecutionError::ExpressionEvaluate { typedb_source })?;
+                    let expression_value =
+                        ExpressionValue::try_from_value(value, context, self.profile.storage_counters())
+                            .map_err(|typedb_source| ReadExecutionError::ExpressionEvaluate { typedb_source })?;
                     Ok((pos, expression_value))
                 })
                 .try_collect()?;

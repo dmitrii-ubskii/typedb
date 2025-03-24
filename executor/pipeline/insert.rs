@@ -18,13 +18,13 @@ use storage::snapshot::WritableSnapshot;
 
 use crate::{
     batch::Batch,
-    ExecutionInterrupt,
     pipeline::{
-        PipelineExecutionError,
-        stage::{ExecutionContext, StageAPI}, StageIterator, WrittenRowsIterator,
+        stage::{ExecutionContext, StageAPI},
+        PipelineExecutionError, StageIterator, WrittenRowsIterator,
     },
     row::{MaybeOwnedRow, Row},
     write::{write_instruction::AsWriteInstruction, WriteError},
+    ExecutionInterrupt,
 };
 
 pub struct InsertStageExecutor<PreviousStage> {

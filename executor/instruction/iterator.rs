@@ -4,11 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
-use std::mem;
-
-use itertools::{Itertools, zip_eq};
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    mem,
+};
 
 use answer::variable_value::VariableValue;
 use compiler::{
@@ -16,20 +16,20 @@ use compiler::{
     ExecutorVariable, VariablePosition,
 };
 use concept::error::ConceptReadError;
-use lending_iterator::{kmerge, LendingIterator, Peekable};
-use lending_iterator::adaptors::Inspect;
-use lending_iterator::kmerge::KMergeBy;
+use itertools::{zip_eq, Itertools};
+use lending_iterator::{adaptors::Inspect, kmerge, kmerge::KMergeBy, LendingIterator, Peekable};
 
 use crate::{
     instruction::{
-        has_executor::HasTupleIteratorMerged,
-        has_reverse_executor::HasReverseTupleIteratorMerged,
+        has_executor::{HasTupleIteratorMerged, HasTupleIteratorSingle},
+        has_reverse_executor::{HasReverseTupleIteratorMerged, HasReverseTupleIteratorSingle},
         iid_executor::IidIterator,
         indexed_relation_executor::{IndexedRelationTupleIteratorMerged, IndexedRelationTupleIteratorSingle},
         is_executor::IsIterator,
         isa_executor::{IsaBoundedSortedType, IsaUnboundedSortedThing},
         isa_reverse_executor::{IsaReverseBoundedSortedThing, IsaReverseUnboundedSortedType},
         links_executor::{LinksTupleIteratorMerged, LinksTupleIteratorSingle},
+        links_reverse_executor::{LinksReverseTupleIteratorMerged, LinksReverseTupleIteratorSingle},
         owns_executor::{OwnsBoundedSortedAttribute, OwnsUnboundedSortedOwner},
         owns_reverse_executor::{OwnsReverseBoundedSortedOwner, OwnsReverseUnboundedSortedAttribute},
         plays_executor::{PlaysBoundedSortedRole, PlaysUnboundedSortedPlayer},
@@ -38,22 +38,18 @@ use crate::{
         relates_reverse_executor::{RelatesReverseBoundedSortedRelation, RelatesReverseUnboundedSortedRole},
         sub_executor::{SubBoundedSortedSuper, SubUnboundedSortedSub},
         sub_reverse_executor::{SubReverseBoundedSortedSub, SubReverseUnboundedSortedSuper},
-        tuple::{Tuple, TupleIndex, TuplePositions, TupleResult},
+        tuple::{Tuple, TupleIndex, TupleOrderingFn, TuplePositions, TupleResult},
         type_list_executor::TypeIterator,
     },
     row::Row,
 };
-use crate::instruction::has_executor::HasTupleIteratorSingle;
-use crate::instruction::has_reverse_executor::HasReverseTupleIteratorSingle;
-use crate::instruction::links_reverse_executor::{LinksReverseTupleIteratorMerged, LinksReverseTupleIteratorSingle};
-use crate::instruction::tuple::TupleOrderingFn;
 
 pub(super) trait TupleSeekable {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>>;
 }
 
 pub(crate) struct NaiiveSeekable<I: LendingIterator> {
-    iter: Peekable<I>
+    iter: Peekable<I>,
 }
 
 impl<I: LendingIterator> NaiiveSeekable<I> {
@@ -69,7 +65,7 @@ impl<I: LendingIterator> LendingIterator for NaiiveSeekable<I> {
     }
 }
 
-impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>>> TupleSeekable for NaiiveSeekable<I> {
+impl<I: for<'a> LendingIterator<Item<'a> = TupleResult<'static>>> TupleSeekable for NaiiveSeekable<I> {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         loop {
             match self.iter.peek() {
@@ -78,7 +74,7 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>>> TupleSeekable fo
                     Some(_ordering) => return Ok(()),
                     None => {
                         unreachable!("seeking toward incomparable tuple")
-                    },
+                    }
                 },
                 Some(Err(err)) => return Err(err.clone()),
                 None => return Ok(()),
@@ -88,7 +84,7 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>>> TupleSeekable fo
     }
 }
 
-impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> TupleSeekable for Peekable<I> {
+impl<I: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekable> TupleSeekable for Peekable<I> {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         // TODO: this is close to a copy-paste of the Seek() implementation for Peekable<I> where I is seekable
         if self.item.is_some() {
@@ -101,11 +97,11 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> 
                 Ordering::Less => {
                     // fallthrough to seek operation
                     ()
-                },
+                }
                 Ordering::Equal => {
                     // do nothing
                     return Ok(());
-                },
+                }
                 Ordering::Greater => {
                     unreachable!("Key behind the stored item in a Peekable iterator")
                 }
@@ -116,26 +112,26 @@ impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> 
     }
 }
 
-impl<F, I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> TupleSeekable for Inspect<I, F> {
+impl<F, I: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekable> TupleSeekable for Inspect<I, F> {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         self.iter.seek(target)
     }
 }
 
-impl<I: for<'a> LendingIterator<Item<'a>=TupleResult<'static>> + TupleSeekable> TupleSeekable for KMergeBy<I, TupleOrderingFn> {
+impl<I: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekable> TupleSeekable
+    for KMergeBy<I, TupleOrderingFn>
+{
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         // TODO: this is close to a copy-paste of the Seek() implementation for seekable KMergeBy<I>
         self.iterators = mem::take(&mut self.iterators)
             .drain()
-            .map(|mut it| {
-                it.iter.seek(target).map(|_| it)
-            })
+            .map(|mut it| it.iter.seek(target).map(|_| it))
             .collect::<Result<_, _>>()?;
         if let Some(mut next_iterator) = self.next_iterator.as_mut() {
             next_iterator.iter.seek(target)?;
         }
         // force recomputation of heap element
-        self.state = kmerge::State::Used; 
+        self.state = kmerge::State::Used;
         Ok(())
     }
 }
@@ -464,7 +460,7 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
 
     fn seek_to_first_unbound_value(
         &mut self,
-        target: &VariableValue<'_>
+        target: &VariableValue<'_>,
     ) -> Result<Option<Ordering>, Box<ConceptReadError>> {
         // create target tuple using [0..index]
         let first_unbound_index = self.first_unbound_index() as usize;
@@ -476,7 +472,7 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
         let mut target_tuple = current.clone().into_owned();
         target_tuple.values_mut()[first_unbound_index] = target.clone();
         // zero out the rest of the values
-        for i in (first_unbound_index +1)..target_tuple.values().len() {
+        for i in (first_unbound_index + 1)..target_tuple.values().len() {
             target_tuple.values_mut()[i] = VariableValue::Empty;
         }
         if target_tuple > *current {
@@ -488,8 +484,8 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
                         None => return Err(Box::new(ConceptReadError::InternalIncomparableTypes {})),
                         Some(ordering) => return Ok(Some(ordering)),
                     }
-                },
-                Some(Err(err)) => return Err(err.clone())
+                }
+                Some(Err(err)) => return Err(err.clone()),
             }
         } else {
             Ok(Some(Ordering::Greater))
@@ -525,7 +521,9 @@ impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekabl
     }
 }
 
-impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekable> TupleIteratorAPI for SortedTupleIterator<It> {
+impl<It: for<'a> LendingIterator<Item<'a> = TupleResult<'static>> + TupleSeekable> TupleIteratorAPI
+    for SortedTupleIterator<It>
+{
     fn write_values(&mut self, row: &mut Row<'_>) {
         debug_assert!(self.peek().is_some() && self.peek().unwrap().is_ok());
         // note: can't use self.peek() since it will cause mut and immutable reference to self

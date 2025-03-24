@@ -3,8 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-use itertools::Itertools;
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::executable::insert::{
     instructions::{PutAttribute, PutObject},
     ThingPosition, TypeSource, ValueSource,
@@ -15,6 +14,7 @@ use concept::{
 };
 use encoding::value::value::Value;
 use ir::pipeline::ParameterRegistry;
+use itertools::Itertools;
 use resource::profile::StorageCounters;
 use storage::snapshot::WritableSnapshot;
 
@@ -63,7 +63,7 @@ pub trait AsWriteInstruction {
         thing_manager: &ThingManager,
         parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>>;
 }
 
@@ -75,7 +75,7 @@ impl AsWriteInstruction for PutAttribute {
         thing_manager: &ThingManager,
         parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let attribute_type = try_unwrap_as!(answer::Type::Attribute: get_type(row, &self.type_)).unwrap();
         let inserted = thing_manager
@@ -94,7 +94,7 @@ impl AsWriteInstruction for PutObject {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let inserted = match get_type(row, &self.type_) {
             Type::Entity(entity_type) => {
@@ -124,7 +124,7 @@ impl AsWriteInstruction for compiler::executable::insert::instructions::Has {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let owner_thing = get_thing(row, &self.owner);
         let attribute = get_thing(row, &self.attribute);
@@ -143,7 +143,7 @@ impl AsWriteInstruction for compiler::executable::insert::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let relation_thing = try_unwrap_as!(answer::Thing::Relation : get_thing(row, &self.relation)).unwrap();
         let player_thing = get_thing(row, &self.player).as_object();
@@ -162,7 +162,7 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Has {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let owner = get_thing(row, &self.owner).as_object();
         let new_attribute = get_thing(row, &self.attribute).as_attribute();
@@ -206,13 +206,14 @@ impl AsWriteInstruction for compiler::executable::update::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let relation = try_unwrap_as!(answer::Thing::Relation : get_thing(row, &self.relation)).unwrap();
         let new_player = get_thing(row, &self.player).as_object();
         let role_type = try_unwrap_as!(answer::Type::RoleType : get_type(row, &self.role)).unwrap();
 
-        let mut old_players = relation.get_players_role_type(snapshot, thing_manager, *role_type, StorageCounters::DISABLED);
+        let mut old_players =
+            relation.get_players_role_type(snapshot, thing_manager, *role_type, StorageCounters::DISABLED);
         if let Some(old_player) = old_players.next() {
             match old_player {
                 Ok(old_player) => {
@@ -242,7 +243,7 @@ impl AsWriteInstruction for compiler::executable::delete::instructions::ThingIns
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         let thing = get_thing(row, &self.thing).clone();
         match thing {
@@ -293,7 +294,7 @@ impl AsWriteInstruction for compiler::executable::delete::instructions::Links {
         thing_manager: &ThingManager,
         _parameters: &ParameterRegistry,
         row: &mut Row<'_>,
-        storage_counters: StorageCounters
+        storage_counters: StorageCounters,
     ) -> Result<(), Box<WriteError>> {
         // TODO: Lists
         let relation = get_thing(row, &self.relation).as_relation();

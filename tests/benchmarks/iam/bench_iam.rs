@@ -7,11 +7,11 @@
 use std::{fs::File, io::Read, path::Path, sync::Arc, time::Instant};
 
 use database::{
-    Database,
     database_manager::DatabaseManager,
     transaction::{TransactionRead, TransactionSchema, TransactionWrite},
+    Database,
 };
-use executor::{batch::Batch, ExecutionInterrupt, pipeline::stage::StageIterator};
+use executor::{batch::Batch, pipeline::stage::StageIterator, ExecutionInterrupt};
 use options::TransactionOptions;
 use storage::durability_client::WALClient;
 use test_utils::create_tmp_dir;
@@ -60,7 +60,7 @@ fn load_schema_tql(database: Arc<Database<WALClient>>, schema_tql: &Path) {
         transaction_options,
         profile,
     );
-    tx.commit().unwrap();
+    tx.commit().1.unwrap();
 }
 
 fn load_data_tql(database: Arc<Database<WALClient>>, data_tql: &Path) {
@@ -101,7 +101,7 @@ fn load_data_tql(database: Arc<Database<WALClient>>, data_tql: &Path) {
         transaction_options,
         profile,
     );
-    tx.commit().unwrap();
+    tx.commit().1.unwrap();
 }
 
 fn setup() -> Arc<Database<WALClient>> {

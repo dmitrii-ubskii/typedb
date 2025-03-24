@@ -6,17 +6,15 @@
 
 use std::sync::Arc;
 
-use tracing::Level;
-
 use concept::{thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
 use ir::pipeline::ParameterRegistry;
 use lending_iterator::LendingIterator;
 use resource::profile::QueryProfile;
 use storage::snapshot::{ReadableSnapshot, WritableSnapshot};
+use tracing::Level;
 
 use crate::{
     batch::Batch,
-    ExecutionInterrupt,
     pipeline::{
         delete::DeleteStageExecutor,
         initial::{InitialIterator, InitialStage},
@@ -27,12 +25,13 @@ use crate::{
             OffsetStageIterator, RequireStageExecutor, RequireStageIterator, SelectStageExecutor, SelectStageIterator,
             SortStageExecutor, SortStageIterator,
         },
+        reduce::ReduceStageExecutor,
         update::UpdateStageExecutor,
         PipelineExecutionError, WrittenRowsIterator,
     },
     row::MaybeOwnedRow,
+    ExecutionInterrupt,
 };
-use crate::pipeline::reduce::ReduceStageExecutor;
 
 #[derive(Debug)]
 pub struct ExecutionContext<Snapshot> {
@@ -47,7 +46,12 @@ impl<Snapshot> ExecutionContext<Snapshot> {
         Self::new_with_profile(snapshot, thing_manager, parameters, Arc::new(QueryProfile::new(false)))
     }
 
-    pub fn new_with_profile(snapshot: Arc<Snapshot>, thing_manager: Arc<ThingManager>, parameters: Arc<ParameterRegistry>, query_profile: Arc<QueryProfile>) -> Self {
+    pub fn new_with_profile(
+        snapshot: Arc<Snapshot>,
+        thing_manager: Arc<ThingManager>,
+        parameters: Arc<ParameterRegistry>,
+        query_profile: Arc<QueryProfile>,
+    ) -> Self {
         Self { snapshot, thing_manager, parameters, profile: query_profile }
     }
 

@@ -11,10 +11,10 @@ use lending_iterator::LendingIterator;
 use crate::{
     batch::Batch,
     error::ReadExecutionError,
-    InterruptType,
     pipeline::{fetch::FetchExecutionError, stage::StageIterator},
     row::MaybeOwnedRow,
     write::WriteError,
+    InterruptType,
 };
 
 pub mod delete;

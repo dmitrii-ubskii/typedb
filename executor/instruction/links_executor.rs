@@ -5,50 +5,46 @@
  */
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     ops::Bound,
     sync::Arc,
 };
-use std::cmp::Ordering;
 
-use itertools::Itertools;
-
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{executable::match_::instructions::thing::LinksInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
     thing::{
-        relation::{LinksIterator, Relation},
+        object::Object,
+        relation::{Links, LinksIterator, Relation},
         thing_manager::ThingManager,
     },
     type_::{object_type::ObjectType, relation_type::RelationType, role_type::RoleType},
 };
-use concept::thing::object::Object;
-use concept::thing::relation::Links;
-use lending_iterator::{LendingIterator, Peekable};
-use lending_iterator::kmerge::KMergeBy;
+use itertools::Itertools;
+use lending_iterator::{kmerge::KMergeBy, LendingIterator, Peekable};
 use primitive::Bounds;
-use resource::constants::traversal::CONSTANT_CONCEPT_LIMIT;
-use resource::profile::StorageCounters;
+use resource::{constants::traversal::CONSTANT_CONCEPT_LIMIT, profile::StorageCounters};
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        Checker
-        ,
-        FilterFn,
-        FilterMapUnchangedFn,
-        iterator::{SortedTupleIterator, TupleIterator}, LinksIterateMode, min_max_types, tuple::{
+        iterator::{SortedTupleIterator, TupleIterator, TupleSeekable},
+        min_max_types,
+        tuple::{
             links_to_tuple_player_relation_role, links_to_tuple_relation_player_role,
-            links_to_tuple_role_relation_player, LinksToTupleFn, TuplePositions,
-        }, VariableModes,
+            links_to_tuple_role_relation_player, tuple_player_relation_role_to_links_canonical,
+            tuple_relation_player_role_to_links_canonical, tuple_role_relation_player_to_links_canonical,
+            unsafe_compare_result_tuple, LinksToTupleFn, Tuple, TupleOrderingFn, TuplePositions, TupleResult,
+            TupleToLinksFn,
+        },
+        Checker, FilterFn, FilterMapUnchangedFn, LinksIterateMode, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
 };
-use crate::instruction::iterator::TupleSeekable;
-use crate::instruction::tuple::{Tuple, tuple_player_relation_role_to_links_canonical, tuple_relation_player_role_to_links_canonical, tuple_role_relation_player_to_links_canonical, TupleOrderingFn, TupleResult, TupleToLinksFn, unsafe_compare_result_tuple};
 
 pub(crate) struct LinksExecutor {
     links: ir::pattern::constraint::Links<ExecutorVariable>,
@@ -74,7 +70,6 @@ impl fmt::Debug for LinksExecutor {
     }
 }
 
-
 pub(crate) type LinksTupleIteratorSingle = LinksTupleIterator<LinksIterator>;
 pub(crate) type LinksTupleIteratorMerged = KMergeBy<LinksTupleIterator<LinksIterator>, TupleOrderingFn>;
 
@@ -90,7 +85,7 @@ pub(super) const EXTRACT_ROLE: LinksVariableValueExtractor =
     |(links, _)| VariableValue::Type(Type::RoleType(links.role_type()));
 
 pub(crate) type LinksOrderingFn = for<'a, 'b> fn(
-    (&'a Result<(Links, u64), Box<ConceptReadError>>, &'b Result<(Links, u64), Box<ConceptReadError>>)
+    (&'a Result<(Links, u64), Box<ConceptReadError>>, &'b Result<(Links, u64), Box<ConceptReadError>>),
 ) -> Ordering;
 
 impl LinksExecutor {
@@ -140,8 +135,11 @@ impl LinksExecutor {
         let relation_cache = if iterate_mode == LinksIterateMode::UnboundInverted {
             let mut cache = Vec::new();
             for type_ in relation_player_types.keys() {
-                let instances: Vec<Relation> =
-                    Itertools::try_collect(thing_manager.get_relations_in(snapshot, type_.as_relation_type(), StorageCounters::DISABLED))?;
+                let instances: Vec<Relation> = Itertools::try_collect(thing_manager.get_relations_in(
+                    snapshot,
+                    type_.as_relation_type(),
+                    StorageCounters::DISABLED,
+                ))?;
                 cache.extend(instances);
             }
             #[cfg(debug_assertions)]
@@ -196,7 +194,11 @@ impl LinksExecutor {
         match self.iterate_mode {
             LinksIterateMode::Unbound => {
                 // TODO: we could cache the range byte arrays computed inside the thing_manager, for this case
-                let iterator = thing_manager.get_links_by_relation_type_range(snapshot, &self.relation_type_range, storage_counters);
+                let iterator = thing_manager.get_links_by_relation_type_range(
+                    snapshot,
+                    &self.relation_type_range,
+                    storage_counters,
+                );
                 let as_tuples: LinksTupleIteratorSingle = LinksTupleIterator::new(
                     iterator,
                     filter_for_row,
@@ -272,7 +274,12 @@ impl LinksExecutor {
                 debug_assert!(row.len() > relation.as_usize());
                 let iterator = match row.get(relation) {
                     &VariableValue::Thing(Thing::Relation(relation)) => thing_manager
-                        .get_links_by_relation_and_player_type_range(snapshot, relation, &self.player_type_range, storage_counters),
+                        .get_links_by_relation_and_player_type_range(
+                            snapshot,
+                            relation,
+                            &self.player_type_range,
+                            storage_counters,
+                        ),
                     _ => unreachable!("Links relation must be a relation."),
                 };
                 let as_tuples = LinksTupleIterator::new(
@@ -296,7 +303,8 @@ impl LinksExecutor {
                 debug_assert!(row.len() > player.as_usize());
                 let relation = row.get(relation).as_thing().as_relation();
                 let player = row.get(player).as_thing().as_object();
-                let iterator = thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
+                let iterator =
+                    thing_manager.get_links_by_relation_and_player(snapshot, relation, player, storage_counters);
                 let as_tuples = LinksTupleIterator::new(
                     iterator,
                     filter_for_row,
@@ -336,9 +344,9 @@ pub(super) struct LinksTupleIterator<Iter: LendingIterator> {
 }
 
 impl<Iter> LinksTupleIterator<Iter>
-    where
-        Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
-            for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(Links, u64), Box<ConceptReadError>>>,
 {
     pub(super) fn new(
         inner: Iter,
@@ -347,20 +355,14 @@ impl<Iter> LinksTupleIterator<Iter>
         from_tuple_fn: TupleToLinksFn,
         fixed_bounds: FixedLinksBounds,
     ) -> Self {
-        Self {
-            inner: Peekable::new(inner),
-            filter_map,
-            to_tuple_fn,
-            from_tuple_fn,
-            fixed_bounds,
-        }
+        Self { inner: Peekable::new(inner), filter_map, to_tuple_fn, from_tuple_fn, fixed_bounds }
     }
 }
 
 impl<Iter> LendingIterator for LinksTupleIterator<Iter>
-    where
-        Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
-            for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+where
+    Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(Links, u64), Box<ConceptReadError>>>,
 {
     type Item<'a> = TupleResult<'static>;
 
@@ -377,8 +379,8 @@ impl<Iter> LendingIterator for LinksTupleIterator<Iter>
 
 impl<Iter> TupleSeekable for LinksTupleIterator<Iter>
 where
-    Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>> +
-        for<'a> LendingIterator<Item<'a>=Result<(Links, u64), Box<ConceptReadError>>>
+    Iter: for<'a> lending_iterator::Seekable<Result<(Links, u64), Box<ConceptReadError>>>
+        + for<'a> LendingIterator<Item<'a> = Result<(Links, u64), Box<ConceptReadError>>>,
 {
     fn seek(&mut self, target: &Tuple<'_>) -> Result<(), Box<ConceptReadError>> {
         let target_links = (self.from_tuple_fn)(&target, &self.fixed_bounds);

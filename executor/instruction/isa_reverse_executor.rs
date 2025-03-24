@@ -6,9 +6,7 @@
 
 use std::{cmp::Ordering, collections::BTreeMap, fmt, iter, ops::Bound, sync::Arc, vec};
 
-use itertools::Itertools;
-
-use answer::{Thing, Type, variable_value::VariableValue};
+use answer::{variable_value::VariableValue, Thing, Type};
 use compiler::{executable::match_::instructions::thing::IsaReverseInstruction, ExecutorVariable};
 use concept::{
     error::ConceptReadError,
@@ -21,16 +19,17 @@ use concept::{
 };
 use encoding::value::value::Value;
 use ir::pattern::constraint::{Isa, IsaKind};
+use itertools::Itertools;
 use lending_iterator::LendingIterator;
 use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
     instruction::{
-        BinaryIterateMode,
-        Checker,
-        isa_executor::{EXTRACT_THING, EXTRACT_TYPE, IsaFilterMapFn},
-        iterator::{SortedTupleIterator, TupleIterator, TupleSeekable}, tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, Tuple, TuplePositions, TupleResult}, type_from_row_or_annotations, VariableModes,
+        isa_executor::{IsaFilterMapFn, EXTRACT_THING, EXTRACT_TYPE},
+        iterator::{SortedTupleIterator, TupleIterator, TupleSeekable},
+        tuple::{isa_to_tuple_thing_type, isa_to_tuple_type_thing, Tuple, TuplePositions, TupleResult},
+        type_from_row_or_annotations, BinaryIterateMode, Checker, VariableModes,
     },
     pipeline::stage::ExecutionContext,
     row::MaybeOwnedRow,
@@ -95,8 +94,12 @@ impl IsaReverseExecutor {
             Ok(false) => None,
         });
 
-        let range =
-            self.checker.value_range_for(context, Some(row.as_reference()), self.isa.thing().as_variable().unwrap(), storage_counters.clone())?;
+        let range = self.checker.value_range_for(
+            context,
+            Some(row.as_reference()),
+            self.isa.thing().as_variable().unwrap(),
+            storage_counters.clone(),
+        )?;
 
         let snapshot = &**context.snapshot();
         let thing_manager = context.thing_manager();
@@ -168,7 +171,10 @@ pub(super) fn instances_of_types_chained(
             returned_types.into_iter().map({
                 let counters = storage_counters.clone();
                 move |subtype| {
-                    IsaReverseObjectIterator::new(thing_manager.get_objects_in(snapshot, subtype.as_object_type(), counters.clone()), type_)
+                    IsaReverseObjectIterator::new(
+                        thing_manager.get_objects_in(snapshot, subtype.as_object_type(), counters.clone()),
+                        type_,
+                    )
                 }
             })
         })
@@ -186,7 +192,12 @@ pub(super) fn instances_of_types_chained(
             returned_types.into_iter().map({
                 let counters = storage_counters.clone();
                 move |subtype| {
-                    let iter = thing_manager.get_attributes_in_range(snapshot, subtype.as_attribute_type(), range, counters.clone())?;
+                    let iter = thing_manager.get_attributes_in_range(
+                        snapshot,
+                        subtype.as_attribute_type(),
+                        range,
+                        counters.clone(),
+                    )?;
                     Ok::<_, Box<_>>(IsaReverseAttributeIterator::new(iter, type_))
                 }
             })
@@ -286,10 +297,9 @@ impl MultipleTypeIsaReverseIterator {
         target_type: Option<&VariableValue<'_>>,
         target_thing: Option<&VariableValue<'_>>,
     ) -> Result<(), Box<ConceptReadError>> {
-        
         // TODO!!!!
         todo!()
-        // 
+        //
         // let Some(target_type) = target_type else { return Ok(Some(Ordering::Greater)) };
         // let &VariableValue::Type(target_type) = target_type else {
         //     unreachable!("seeking to type {:?} which is not a `Type`", target_type)
@@ -367,7 +377,7 @@ impl IsaReverseObjectIterator {
         //     Some(Ordering::Equal) => (),
         //     Some(Ordering::Less) => unreachable!(),
         // }
-        // 
+        //
         // Ok(Some(Ordering::Equal))
         todo!()
     }
