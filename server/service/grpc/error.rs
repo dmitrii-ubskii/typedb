@@ -92,18 +92,11 @@ pub(crate) trait IntoProtocolErrorMessage {
 impl<T: TypeDBError + Sync> IntoProtocolErrorMessage for T {
     fn into_error_message(self) -> typedb_protocol::Error {
         let root_source = self.root_source_typedb_error();
-        let code = root_source.code();
-        let component = root_source.component();
-
-        let mut stack_trace = Vec::with_capacity(4); // definitely non-zero!
-        let mut error: &dyn TypeDBError = &self;
-        stack_trace.push(error.format_code_and_description());
-        while let Some(source) = error.source_typedb_error() {
-            error = source;
-            stack_trace.push(error.format_code_and_description());
+        typedb_protocol::Error {
+            error_code: root_source.code().to_string(),
+            domain: root_source.component().to_string(),
+            stack_trace: self.stack_trace(),
         }
-        stack_trace.reverse();
-        typedb_protocol::Error { error_code: code.to_string(), domain: component.to_string(), stack_trace }
     }
 }
 
@@ -115,6 +108,7 @@ impl IntoGRPCStatus for typedb_protocol::Error {
     fn into_status(self) -> Status {
         let mut details = ErrorDetails::with_error_info(self.error_code, self.domain, HashMap::new());
         details.set_debug_info(self.stack_trace, "");
+        // TODO: Should probably extend these Status codes somehow
         Status::with_error_details(Code::InvalidArgument, "Request generated error", details)
     }
 }

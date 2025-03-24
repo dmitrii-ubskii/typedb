@@ -14,7 +14,7 @@ use ir::pipeline::ParameterRegistry;
 use itertools::Itertools;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::service::concept::{
+use crate::service::grpc::concept::{
     encode_attribute, encode_attribute_type, encode_entity_type, encode_relation_type, encode_role_type, encode_value,
 };
 

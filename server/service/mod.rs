@@ -4,13 +4,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-mod concept;
-mod document;
-mod error;
-mod request_parser;
-mod response_builders;
-mod row;
-pub(crate) mod transaction_service;
-pub(crate) mod typedb_service;
+use error::typedb_error;
 
-pub(crate) type ConnectionID = uuid::Bytes;
+pub(crate) mod control_flow;
+pub(crate) mod grpc;
+pub(crate) mod http;
+mod transaction_service;
+
+typedb_error! {
+    ServiceError(component = "Server", prefix = "SRV") {
+        Unimplemented(1, "Not implemented: {description}", description: String),
+        OperationNotPermitted(2, "The user is not permitted to execute the operation"),
+        DatabaseDoesNotExist(3, "Database '{name}' does not exist.", name: String),
+        UserDoesNotExist(4, "User does not exist"),
+    }
+}

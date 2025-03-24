@@ -4,6 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+#![deny(unused_must_use)]
+#![deny(elided_lifetimes_in_paths)]
+
 use std::{borrow::Cow, convert::Infallible, fmt, str::FromStr, sync::Arc};
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -34,7 +37,7 @@ use test_utils::assert_matches;
 
 #[derive(Debug, Clone, Parameter)]
 #[param(name = "may_error", regex = "(|; fails|; fails with a message containing: \".*\")")]
-pub(crate) enum MayError {
+pub enum MayError {
     False,
     True(Option<String>),
 }
@@ -111,7 +114,7 @@ impl FromStr for MayError {
 
 #[derive(Debug, Clone, Parameter)]
 #[param(name = "typeql_may_error", regex = "(|; fails|; parsing fails|; fails with a message containing: \".*\")")]
-pub(crate) enum TypeQLMayError {
+pub enum TypeQLMayError {
     False,
     Parsing,
     Logic(Option<String>),
@@ -170,20 +173,20 @@ impl FromStr for TypeQLMayError {
 
 #[derive(Debug, Parameter)]
 #[param(name = "boolean", regex = "(true|false)")]
-pub(crate) enum Boolean {
+pub enum Boolean {
     False,
     True,
 }
 
+#[macro_export]
 macro_rules! check_boolean {
     ($boolean:ident, $expr:expr) => {
         match $boolean {
-            $crate::params::Boolean::True => assert!($expr),
-            $crate::params::Boolean::False => assert!(!$expr),
+            $crate::Boolean::True => assert!($expr),
+            $crate::Boolean::False => assert!(!$expr),
         }
     };
 }
-pub(crate) use check_boolean;
 
 impl FromStr for Boolean {
     type Err = String;
@@ -198,7 +201,7 @@ impl FromStr for Boolean {
 
 #[derive(Debug, Parameter)]
 #[param(name = "exists_or_doesnt", regex = "(exists|does not exist)")]
-pub(crate) enum ExistsOrDoesnt {
+pub enum ExistsOrDoesnt {
     Exists,
     DoesNotExist,
 }
@@ -234,7 +237,7 @@ impl FromStr for ExistsOrDoesnt {
 
 #[derive(Debug, Parameter)]
 #[param(name = "is_empty_or_not", regex = "(is empty|is not empty)")]
-pub(crate) enum IsEmptyOrNot {
+pub enum IsEmptyOrNot {
     IsEmpty,
     IsNotEmpty,
 }
@@ -265,7 +268,7 @@ impl FromStr for IsEmptyOrNot {
 
 #[derive(Debug, Parameter)]
 #[param(name = "contains_or_doesnt", regex = "(contain|contains|do not contain|does not contain)")]
-pub(crate) enum ContainsOrDoesnt {
+pub enum ContainsOrDoesnt {
     Contains,
     DoesNotContain,
 }
@@ -313,7 +316,7 @@ impl FromStr for ContainsOrDoesnt {
 
 #[derive(Debug, Parameter)]
 #[param(name = "type_label", regex = r"[A-Za-z0-9_:-]+")]
-pub(crate) struct Label {
+pub struct Label {
     label_string: String,
 }
 
@@ -341,7 +344,7 @@ impl FromStr for Label {
 
 #[derive(Debug, Parameter)]
 #[param(name = "kind", regex = r"(attribute|entity|relation)")]
-pub(crate) struct Kind {
+pub struct Kind {
     kind: TypeDBTypeKind,
 }
 
@@ -366,7 +369,7 @@ impl FromStr for Kind {
 
 #[derive(Debug, Parameter)]
 #[param(name = "object_kind", regex = r"(entity|relation|entities|relations)")]
-pub(crate) struct ObjectKind {
+pub struct ObjectKind {
     kind: TypeDBTypeKind,
 }
 
@@ -398,7 +401,7 @@ impl FromStr for ObjectKind {
 
 #[derive(Debug, Parameter)]
 #[param(name = "kind_extended", regex = r"(attribute|entity|relation|role|object)")]
-pub(crate) enum KindExtended {
+pub enum KindExtended {
     Attribute,
     Entity,
     Relation,
@@ -425,7 +428,7 @@ impl FromStr for KindExtended {
     name = "value_type",
     regex = "(boolean|integer|double|decimal|datetime(?:-tz)?|duration|string|[A-Za-z0-9_:-]+)"
 )]
-pub(crate) enum ValueType {
+pub enum ValueType {
     Boolean,
     Integer,
     Double,
@@ -480,7 +483,7 @@ impl FromStr for ValueType {
 
 #[derive(Debug, Default, Parameter, Clone)]
 #[param(name = "value", regex = ".*?")]
-pub(crate) struct Value {
+pub struct Value {
     raw_value: String,
 }
 
@@ -657,7 +660,7 @@ fn parse_subkey_annotation(subkey: &str) -> TypeDBAnnotation {
 
 #[derive(Debug, Parameter)]
 #[param(name = "annotation", regex = r"@[a-z]+(?:\(.+\))?")]
-pub(crate) struct Annotation {
+pub struct Annotation {
     raw_annotation: String,
 }
 
@@ -689,7 +692,7 @@ impl FromStr for Annotation {
 
 #[derive(Debug, Parameter)]
 #[param(name = "annotation_category", regex = r"@[a-z]+")]
-pub(crate) struct AnnotationCategory {
+pub struct AnnotationCategory {
     typedb_annotation_category: TypeDBAnnotationCategory,
 }
 
@@ -723,7 +726,7 @@ impl FromStr for AnnotationCategory {
 
 #[derive(Debug, Parameter)]
 #[param(name = "annotations", regex = r"@[a-z]+(?:\([^)]+\))?(?: +@[a-z]+(?:\([^)]+\))?)?")]
-pub(crate) struct Annotations {
+pub struct Annotations {
     typedb_annotations: Vec<TypeDBAnnotation>,
 }
 
@@ -757,7 +760,7 @@ impl FromStr for Annotations {
 
 #[derive(Debug, Parameter)]
 #[param(name = "constraint", regex = r"@[a-z]+(?:\(.+\))?")]
-pub(crate) struct Constraint {
+pub struct Constraint {
     raw_constraint: String,
 }
 
@@ -797,7 +800,7 @@ impl FromStr for Constraint {
 
 #[derive(Debug, Parameter)]
 #[param(name = "constraint_category", regex = r"@[a-z]+")]
-pub(crate) struct ConstraintCategory {
+pub struct ConstraintCategory {
     typedb_constraint_category: TypeDBConstraintCategory,
 }
 
@@ -856,7 +859,7 @@ impl FromStr for Vars {
 
 #[derive(Clone, Copy, Debug, Parameter)]
 #[param(name = "ordering", regex = "(unordered|ordered)")]
-pub(crate) enum Ordering {
+pub enum Ordering {
     Unordered,
     Ordered,
 }
@@ -883,7 +886,7 @@ impl FromStr for Ordering {
 
 #[derive(Clone, Copy, Debug, Parameter)]
 #[param(name = "optional", regex = "(|\\?)")]
-pub(crate) enum Optional {
+pub enum Optional {
     False,
     True,
 }

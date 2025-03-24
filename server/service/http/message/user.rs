@@ -1,0 +1,49 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use system::concepts::User;
+
+use crate::service::http::message::from_request_parts_impl;
+
+pub(crate) struct UserPath {
+    pub(crate) username: String,
+}
+
+from_request_parts_impl!(UserPath { username: String });
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateUserPayload {
+    pub(crate) password: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpdateUserPayload {
+    pub(crate) password: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UsersResponse {
+    users: Vec<UserResponse>,
+}
+
+pub(crate) fn encode_users(users: Vec<User>) -> UsersResponse {
+    UsersResponse { users: users.into_iter().map(|user| encode_user(&user)).collect_vec() }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UserResponse {
+    username: String,
+}
+
+pub(crate) fn encode_user(user: &User) -> UserResponse {
+    UserResponse { username: user.name.clone() }
+}

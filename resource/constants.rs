@@ -24,9 +24,9 @@ pub mod server {
 
     pub const GRPC_CONNECTION_KEEPALIVE: Duration = Duration::from_secs(2 * SECONDS_IN_HOUR);
 
-    pub const DEFAULT_TRANSACTION_TIMEOUT_MILLIS: u64 = Duration::from_secs(5 * SECONDS_IN_MINUTE).as_millis() as u64;
     pub const DEFAULT_PREFETCH_SIZE: u64 = 32;
     pub const DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS: u64 = Duration::from_secs(10).as_millis() as u64;
+    pub const DEFAULT_TRANSACTION_TIMEOUT_MILLIS: u64 = Duration::from_secs(5 * SECONDS_IN_MINUTE).as_millis() as u64;
     pub const DEFAULT_TRANSACTION_PARALLEL: bool = true;
 
     pub const PERF_COUNTERS_ENABLED: bool = true;
@@ -40,14 +40,22 @@ pub mod server {
         'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     ];
 
-    pub const AUTHENTICATOR_USERNAME_FIELD: &str = "username";
-    pub const AUTHENTICATOR_PASSWORD_FIELD: &str = "password";
-    pub const AUTHENTICATOR_CACHE_TTL: Duration = Duration::from_secs(3 * SECONDS_IN_HOUR);
-    pub const AUTHENTICATOR_CACHE_TTI: Duration = Duration::from_secs(1 * SECONDS_IN_HOUR);
+    pub const HTTP_USERNAME_FIELD: &str = "username";
+    pub const HTTP_PASSWORD_FIELD: &str = "password";
+    pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
+    pub const HTTP_BEARER_PREFIX: &str = "Bearer ";
+    pub const DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 4 * SECONDS_IN_HOUR;
+    pub const DEFAULT_AUTHENTICATION_TOKEN_TTL: Duration =
+        Duration::from_secs(DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS);
+
+    pub const CONTENT_TYPE_FIELD: &str = "content-type";
+    pub const CONTENT_TYPE_GRPC: &str = "application/grpc";
+    pub const CONTENT_TYPE_JSON: &str = "application/json";
 
     pub const DATABASE_METRICS_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * SECONDS_IN_MINUTE);
 
     pub const DEFAULT_ADDRESS: &str = "0.0.0.0:1729";
+    pub const DEFAULT_HTTP_ADDRESS: &str = "0.0.0.0:8000";
     pub const DEFAULT_USER_NAME: &str = "admin";
     pub const DEFAULT_USER_PASSWORD: &str = "password";
     pub const DEFAULT_DATA_DIR: &str = "data";

@@ -862,6 +862,7 @@ impl fmt::Display for LoadKind {
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 pub enum ActionKind {
     ConnectionOpen,
+    SignIn,
     ServersAll,
     UsersContains,
     UsersCreate,
@@ -889,6 +890,7 @@ impl ActionKind {
     fn all_empty_counts_map() -> HashMap<Self, ActionInfo> {
         HashMap::from([
             (Self::ConnectionOpen, ActionInfo::default()),
+            (Self::SignIn, ActionInfo::default()),
             (Self::ServersAll, ActionInfo::default()),
             (Self::UsersContains, ActionInfo::default()),
             (Self::UsersCreate, ActionInfo::default()),
@@ -915,6 +917,7 @@ impl ActionKind {
     pub fn to_posthog_event_name(&self) -> &'static str {
         match self {
             ActionKind::ConnectionOpen => "connection_opens",
+            ActionKind::SignIn => "sign_ins",
             ActionKind::ServersAll => "server_alls",
             ActionKind::UsersContains => "user_containses",
             ActionKind::UsersCreate => "user_creates",
@@ -943,6 +946,7 @@ impl fmt::Display for ActionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ActionKind::ConnectionOpen => write!(f, "CONNECTION_OPEN"),
+            ActionKind::SignIn => write!(f, "SIGN_IN"),
             ActionKind::ServersAll => write!(f, "SERVERS_ALL"),
             ActionKind::UsersContains => write!(f, "USERS_CONTAINS"),
             ActionKind::UsersCreate => write!(f, "USERS_CREATE"),

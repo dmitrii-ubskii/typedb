@@ -25,11 +25,12 @@ use executor::{
 use itertools::Itertools;
 use lending_iterator::LendingIterator;
 use macro_rules_attribute::apply;
+use params;
 use query::error::QueryError;
 use test_utils::assert_matches;
 
 use crate::{
-    generic_step, params,
+    generic_step,
     query_answer_context::{with_rows_answer, QueryAnswer},
     transaction_context::{
         with_read_tx, with_schema_tx, with_write_tx_deconstructed,

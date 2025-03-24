@@ -53,6 +53,7 @@ impl Reporter {
         data_directory: PathBuf,
         is_enabled: bool,
     ) -> Self {
+        println!("TODO: Remove me! REPORTER INITED");
         Self {
             deployment_id,
             diagnostics,

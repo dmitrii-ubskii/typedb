@@ -10,7 +10,7 @@ use concept::{error::ConceptReadError, thing::thing_manager::ThingManager, type_
 use executor::row::MaybeOwnedRow;
 use storage::snapshot::ReadableSnapshot;
 
-use crate::service::concept::{encode_thing_concept, encode_type_concept, encode_value};
+use crate::service::grpc::concept::{encode_thing_concept, encode_type_concept, encode_value};
 
 pub(crate) fn encode_row(
     row: MaybeOwnedRow<'_>,

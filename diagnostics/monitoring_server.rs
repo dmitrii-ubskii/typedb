@@ -23,6 +23,7 @@ pub struct MonitoringServer {
 
 impl MonitoringServer {
     pub fn new(diagnostics: Arc<Diagnostics>, port: u16) -> Self {
+        println!("TODO: Remove me! MONITORING INITED");
         Self { diagnostics, port }
     }
 

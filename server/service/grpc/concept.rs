@@ -98,6 +98,7 @@ pub(crate) fn encode_attribute(
         },
     })
 }
+
 pub(crate) fn encode_type_concept(
     type_: &Type,
     snapshot: &impl ReadableSnapshot,

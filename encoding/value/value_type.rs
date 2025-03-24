@@ -249,7 +249,7 @@ impl ValueTypeCategory {
         }
     }
 
-    const fn name(&self) -> &'static str {
+    pub const fn name(&self) -> &'static str {
         match self {
             ValueTypeCategory::Boolean => "boolean",
             ValueTypeCategory::Integer => "integer",
