@@ -21,10 +21,7 @@ use std::sync::{Arc, Mutex};
 use cucumber::{given, then, when};
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
-use server::{
-    parameters::config::Config,
-    server::{Server, ServerOpenError},
-};
+use server::{error::ServerOpenError, parameters::config::Config, server::Server};
 use test_utils::{create_tmp_dir, TempDir};
 use tokio::{sync::OnceCell, task::JoinHandle, time::sleep};
 
