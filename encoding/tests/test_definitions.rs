@@ -8,18 +8,18 @@
 
 use bytes::{byte_array::ByteArray, Bytes};
 use encoding::{
+    AsBytes,
     graph::{
         definition::{
             definition_key::DefinitionKey, definition_key_generator::DefinitionKeyGenerator,
-            r#struct::StructDefinition, DefinitionValueEncoding,
+            DefinitionValueEncoding, r#struct::StructDefinition,
         },
         type_::index::NameToStructDefinitionIndex,
     },
-    value::value_type::ValueType,
-    AsBytes, Keyable,
+    Keyable, value::value_type::ValueType,
 };
 use resource::constants::snapshot::BUFFER_VALUE_INLINE;
-use resource::profile::StorageCounters;
+use resource::profile::{CommitProfile, StorageCounters};
 use storage::snapshot::{CommittableSnapshot, ReadableSnapshot, WritableSnapshot};
 use test_utils_encoding::create_core_storage;
 
@@ -77,7 +77,7 @@ fn test_struct_definition() {
         let read_1_definition = get_struct_definition(&snapshot, &read_1_key);
         assert_eq!(struct_1_definition, read_1_definition);
     }
-    snapshot.commit(StorageCounters::DISABLED).unwrap();
+    snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
 
     // Read back commmitted
     {

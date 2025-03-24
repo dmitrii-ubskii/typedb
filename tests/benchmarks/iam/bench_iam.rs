@@ -37,6 +37,7 @@ fn load_schema_tql(database: Arc<Database<WALClient>>, schema_tql: &Path) {
         query_manager,
         database,
         transaction_options,
+        profile,
     } = tx;
     let mut inner_snapshot = Arc::into_inner(snapshot).unwrap();
     query_manager
@@ -57,6 +58,7 @@ fn load_schema_tql(database: Arc<Database<WALClient>>, schema_tql: &Path) {
         query_manager,
         database,
         transaction_options,
+        profile,
     );
     tx.commit().unwrap();
 }
@@ -76,6 +78,7 @@ fn load_data_tql(database: Arc<Database<WALClient>>, data_tql: &Path) {
         query_manager,
         database,
         transaction_options,
+        profile,
     } = tx;
     let write_pipeline = query_manager
         .prepare_write_pipeline(
@@ -96,6 +99,7 @@ fn load_data_tql(database: Arc<Database<WALClient>>, data_tql: &Path) {
         query_manager,
         database,
         transaction_options,
+        profile,
     );
     tx.commit().unwrap();
 }

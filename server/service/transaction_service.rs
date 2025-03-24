@@ -567,25 +567,30 @@ impl TransactionService {
         self.finish_queued_write_queries(InterruptType::TransactionCommitted).await?;
 
         let diagnostics_manager = self.diagnostics_manager.clone();
-        match self.transaction.take().unwrap() {
-            Transaction::Read(_) => {
-                Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status())
+        let (result, profile) = match self.transaction.take().unwrap() {
+            Transaction::Read(transaction) => {
+                let profile = transaction.profile;
+                (Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status()), profile)
             }
-            Transaction::Write(transaction) => spawn_blocking(move || {
-                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
-                transaction.commit().map_err(|err| {
-                    TransactionServiceError::DataCommitFailed { typedb_source: err }.into_error_message().into_status()
+            Transaction::Write(transaction) => {
+                spawn_blocking(move || {
+                    diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                    transaction.commit().map_err(|err| {
+                        TransactionServiceError::DataCommitFailed { typedb_source: err }.into_error_message().into_status()
+                    })
                 })
-            })
-            .await
-            .unwrap(),
+                    .await
+                    .unwrap()
+            },
             Transaction::Schema(transaction) => {
                 diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
                 transaction.commit().map_err(|typedb_source| {
                     TransactionServiceError::SchemaCommitFailed { typedb_source }.into_error_message().into_status()
                 })
             }
-        }
+        };
+
+        result
     }
 
     async fn handle_rollback(
@@ -849,6 +854,7 @@ impl TransactionService {
                 query_manager,
                 database,
                 transaction_options,
+                profile,
             } = schema_transaction;
             let mut snapshot = Arc::into_inner(snapshot).unwrap();
             let (snapshot, type_manager, thing_manager, query_manager, function_manager, result) =
@@ -874,6 +880,7 @@ impl TransactionService {
                 query_manager,
                 database,
                 transaction_options,
+                profile,
             );
             self.transaction = Some(Transaction::Schema(transaction));
 
@@ -965,6 +972,7 @@ impl TransactionService {
                     query_manager,
                     database,
                     transaction_options,
+                    profile,
                 } = schema_transaction;
 
                 let (snapshot, result) = Self::execute_write_query_in(
@@ -986,6 +994,7 @@ impl TransactionService {
                     query_manager,
                     database,
                     transaction_options,
+                    profile,
                 ));
                 (transaction, result)
             })),
@@ -998,6 +1007,7 @@ impl TransactionService {
                     query_manager,
                     database,
                     transaction_options,
+                    profile,
                 } = write_transaction;
 
                 let (snapshot, result) = Self::execute_write_query_in(
@@ -1019,6 +1029,7 @@ impl TransactionService {
                     query_manager,
                     database,
                     transaction_options,
+                    profile,
                 ));
                 (transaction, result)
             })),

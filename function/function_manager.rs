@@ -485,7 +485,7 @@ pub mod tests {
             FunctionID, FunctionSignature, FunctionSignatureIndex, HashMapFunctionSignatureIndex,
         },
     };
-    use resource::profile::StorageCounters;
+    use resource::profile::{CommitProfile, StorageCounters};
     use storage::{durability_client::WALClient, snapshot::CommittableSnapshot, MVCCStorage};
     use test_utils::{create_tmp_dir, init_logging, TempDir};
 
@@ -558,7 +558,7 @@ pub mod tests {
                     .as_str()
             );
             function_manager.finalise(&snapshot, &type_manager).unwrap();
-            snapshot.commit(StorageCounters::DISABLED).unwrap().unwrap()
+            snapshot.commit(&mut CommitProfile::DISABLED).unwrap().unwrap()
         };
 
         {
@@ -623,7 +623,7 @@ pub mod tests {
             },
         };
         use encoding::value::{label::Label, value_type::ValueType};
-        use resource::profile::StorageCounters;
+        use resource::profile::{CommitProfile, StorageCounters};
         use storage::{
             durability_client::WALClient,
             snapshot::{CommittableSnapshot, WritableSnapshot},
@@ -687,7 +687,7 @@ pub mod tests {
             cat.set_owns(&mut snapshot, type_manager, thing_manager, catname, Ordering::Unordered).unwrap();
             dog.set_owns(&mut snapshot, type_manager, thing_manager, dogname, Ordering::Unordered).unwrap();
 
-            snapshot.commit(StorageCounters::DISABLED).unwrap();
+            snapshot.commit(&mut CommitProfile::DISABLED).unwrap();
 
             (
                 (TypeAnnotation::Entity(animal), TypeAnnotation::Entity(cat), TypeAnnotation::Entity(dog)),
