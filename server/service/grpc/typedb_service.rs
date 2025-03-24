@@ -36,7 +36,7 @@ use crate::{
             error::{IntoGRPCStatus, IntoProtocolErrorMessage, ProtocolError},
             request_parser::{users_create_req, users_update_req},
             response_builders::{
-                authentication::sign_in_res,
+                authentication::token_create_res,
                 connection::connection_open_res,
                 database::database_delete_res,
                 database_manager::{database_all_res, database_contains_res, database_create_res, database_get_res},
@@ -98,11 +98,11 @@ impl TypeDBService {
         Uuid::new_v4().into_bytes()
     }
 
-    async fn process_sign_in(
+    async fn process_token_create(
         &self,
-        request: typedb_protocol::authentication::sign_in::Req,
+        request: typedb_protocol::authentication::token::create::Req,
     ) -> Result<String, AuthenticationError> {
-        let Some(typedb_protocol::authentication::sign_in::req::Credentials::Password(password_credentials)) =
+        let Some(typedb_protocol::authentication::token::create::req::Credentials::Password(password_credentials)) =
             request.credentials
         else {
             return Err(AuthenticationError::InvalidCredential {});
@@ -151,7 +151,7 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
                         .into_status());
                     };
                     let authentication_result = self
-                        .process_sign_in(authentication)
+                        .process_token_create(authentication)
                         .await
                         .map_err(|typedb_source| typedb_source.into_error_message().into_status())?;
 
@@ -166,7 +166,7 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
                         self.generate_connection_id(),
                         receive_time,
                         database_all_res(&self.address, self.database_manager.database_names()),
-                        sign_in_res(authentication_result),
+                        token_create_res(authentication_result),
                     )))
                 }
             },
@@ -174,16 +174,16 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
         .await
     }
 
-    async fn sign_in(
+    async fn authentication_token_create(
         &self,
-        request: Request<typedb_protocol::authentication::sign_in::Req>,
-    ) -> Result<Response<typedb_protocol::authentication::sign_in::Res>, Status> {
+        request: Request<typedb_protocol::authentication::token::create::Req>,
+    ) -> Result<Response<typedb_protocol::authentication::token::create::Res>, Status> {
         let message = request.into_inner();
-        println!("Got sign in request: {message:?}");
+        println!("Got sign in request: {message:?}"); // TODO: Remove
         run_with_diagnostics_async(self.diagnostics_manager.clone(), None::<&str>, ActionKind::SignIn, || async {
-            self.process_sign_in(message)
+            self.process_token_create(message)
                 .await
-                .map(|result| Response::new(sign_in_res(result)))
+                .map(|result| Response::new(token_create_res(result)))
                 .map_err(|typedb_source| typedb_source.into_error_message().into_status())
         })
         .await

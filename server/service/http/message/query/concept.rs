@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 
 use answer::{Thing, Type};
+use bytes::{util::HexBytesFormatter, Bytes};
 use concept::{
     error::ConceptReadError,
     thing::{attribute::Attribute, entity::Entity, relation::Relation, thing_manager::ThingManager, ThingAPI},
@@ -19,6 +20,7 @@ use encoding::value::{value::Value, value_type::ValueType, ValueEncodable};
 use error::unimplemented_feature;
 use serde::Serialize;
 use serde_json::json;
+use executor::write::WriteError::ConceptRead;
 use storage::snapshot::ReadableSnapshot;
 
 // TODO: Should probably be merged with JSON from behaviour/steps/query_answer_context.rs.
@@ -105,7 +107,7 @@ pub fn encode_entity(
     include_thing_types: bool,
 ) -> Result<EntityResponse, Box<ConceptReadError>> {
     Ok(EntityResponse {
-        iid: entity.iid().to_string(),
+        iid: encode_iid(entity.iid()),
         entity_type: if include_thing_types {
             Some(encode_entity_type(&entity.type_(), snapshot, type_manager)?)
         } else {
@@ -121,7 +123,7 @@ pub fn encode_relation(
     include_thing_types: bool,
 ) -> Result<RelationResponse, Box<ConceptReadError>> {
     Ok(RelationResponse {
-        iid: relation.iid().to_string(),
+        iid: encode_iid(relation.iid()),
         relation_type: if include_thing_types {
             Some(encode_relation_type(&relation.type_(), snapshot, type_manager)?)
         } else {
@@ -138,7 +140,7 @@ pub fn encode_attribute(
     include_thing_types: bool,
 ) -> Result<AttributeResponse, Box<ConceptReadError>> {
     Ok(AttributeResponse {
-        iid: attribute.iid().to_string(),
+        iid: encode_iid(attribute.iid()),
         value: Some(encode_value(attribute.get_value(snapshot, thing_manager)?)),
         attribute_type: if include_thing_types {
             Some(encode_attribute_type(&attribute.type_(), snapshot, type_manager)?)
@@ -146,6 +148,10 @@ pub fn encode_attribute(
             None
         },
     })
+}
+
+fn encode_iid<const ARRAY_INLINE_SIZE: usize>(iid: Bytes<'_, ARRAY_INLINE_SIZE>) -> String {
+    HexBytesFormatter::owned(Vec::from(iid)).format_iid()
 }
 
 pub fn encode_type_concept(

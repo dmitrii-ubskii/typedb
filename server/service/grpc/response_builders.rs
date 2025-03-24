@@ -13,7 +13,7 @@ pub(crate) mod connection {
         connection_id: ConnectionID,
         receive_time: Instant,
         databases_all_res: typedb_protocol::database_manager::all::Res,
-        sign_in_res: typedb_protocol::authentication::sign_in::Res,
+        sign_in_res: typedb_protocol::authentication::token::create::Res,
     ) -> typedb_protocol::connection::open::Res {
         let processing_millis = Instant::now().duration_since(receive_time).as_millis();
         typedb_protocol::connection::open::Res {
@@ -26,8 +26,8 @@ pub(crate) mod connection {
 }
 
 pub(crate) mod authentication {
-    pub(crate) fn sign_in_res(token: String) -> typedb_protocol::authentication::sign_in::Res {
-        typedb_protocol::authentication::sign_in::Res { token }
+    pub(crate) fn token_create_res(token: String) -> typedb_protocol::authentication::token::create::Res {
+        typedb_protocol::authentication::token::create::Res { token }
     }
 }
 
