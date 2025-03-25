@@ -197,8 +197,6 @@ impl TypeDBService {
 
     pub(crate) fn create_unprotected_router<T>(service: Arc<TypeDBService>) -> Router<T> {
         Router::new()
-            .route("/", get(Self::health))
-            .route("/:version", get(Self::health))
             .route("/health", get(Self::health))
             .route("/:version/health", get(Self::health))
             .route("/:version/signin", post(Self::signin))
