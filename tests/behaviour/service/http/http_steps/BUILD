@@ -25,6 +25,7 @@ rust_library(
         "@crates//:hyper-rustls",
         "@crates//:itertools",
         "@crates//:regex",
+        "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:smol",
         "@crates//:tokio",

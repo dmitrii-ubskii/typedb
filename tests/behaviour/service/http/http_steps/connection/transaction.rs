@@ -24,93 +24,88 @@ use futures::{future::join_all, FutureExt};
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
 
-use crate::{generic_step, util::iter_table, Context};
+use crate::{
+    generic_step,
+    message::{transactions_close, transactions_commit, transactions_open, transactions_rollback},
+    util::iter_table,
+    Context, HttpContext,
+};
 
-// async fn open_transaction_for_database(
-//     driver: &Option<TypeDBDriver>,
-//     database_name: impl AsRef<str>,
-//     transaction_type: TransactionType,
-// ) -> TypeDBResult<Transaction> {
-//     driver.as_ref().unwrap().transaction(database_name, transaction_type).await
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "connection open {transaction_type} transaction for database: {word}{may_error}")]
-// pub async fn connection_open_transaction_for_database(
-//     context: &mut Context,
-//     type_: params::TransactionType,
-//     database_name: String,
-//     may_error: params::MayError,
-// ) {
-//     context.cleanup_transactions().await;
-//     may_error.check(context.push_transaction(
-//         open_transaction_for_database(&context.driver, &database_name, type_.transaction_type).await,
-//     ));
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "connection open transaction(s) for database: {word}, of type:")]
-// async fn connection_open_transactions_for_database(context: &mut Context, database_name: String, step: &Step) {
-//     for type_ in iter_table(step) {
-//         let transaction_type = type_.parse::<params::TransactionType>().unwrap().transaction_type;
-//         context
-//             .push_transaction(open_transaction_for_database(&context.driver, &database_name, transaction_type).await)
-//             .unwrap();
-//     }
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "connection open transaction(s) in parallel for database: {word}, of type:")]
-// pub async fn connection_open_transactions_in_parallel(context: &mut Context, database_name: String, step: &Step) {
-//     let transactions: VecDeque<Transaction> = join_all(iter_table(step).map(|type_| {
-//         let transaction_type = type_.parse::<params::TransactionType>().unwrap().transaction_type;
-//         open_transaction_for_database(&context.driver, &database_name, transaction_type)
-//     }))
-//     .await
-//     .into_iter()
-//     .map(|result| result.unwrap())
-//     .collect();
-//     context.set_transactions(transactions).await;
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transaction is open: {boolean}")]
-// #[step(expr = "transactions( in parallel) are open: {boolean}")]
-// pub async fn transaction_is_open(context: &mut Context, is_open: params::Boolean) {
-//     let transaction = context.transaction_opt();
-//     check_boolean!(is_open, transaction.is_some() && transaction.unwrap().is_open());
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transaction has type: {transaction_type}")]
-// pub async fn transaction_has_type(context: &mut Context, type_: params::TransactionType) {
-//     assert_eq!(context.transaction().type_(), type_.transaction_type);
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transactions( in parallel) have type:")]
-// pub async fn transactions_have_type(context: &mut Context, step: &Step) {
-//     let mut current_transaction = context.transactions.iter();
-//     for type_ in iter_table(step) {
-//         let transaction_type = type_.parse::<params::TransactionType>().unwrap().transaction_type;
-//         assert_eq!(current_transaction.next().unwrap().type_(), transaction_type);
-//     }
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transaction commits{may_error}")]
-// pub async fn transaction_commits(context: &mut Context, may_error: params::MayError) {
-//     may_error.check(context.take_transaction().commit().await);
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transaction closes")]
-// pub async fn transaction_closes(context: &mut Context) {
-//     context.take_transaction().force_close();
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "transaction rollbacks{may_error}")]
-// pub async fn transaction_rollbacks(context: &mut Context, may_error: params::MayError) {
-//     may_error.check(context.transaction().rollback().await);
-// }
+#[apply(generic_step)]
+#[step(expr = "connection open {word} transaction for database: {word}{may_error}")]
+pub async fn connection_open_transaction_for_database(
+    context: &mut Context,
+    transaction_type: String,
+    database_name: String,
+    may_error: params::MayError,
+) {
+    context.cleanup_transactions().await;
+    may_error.check(
+        context.push_transaction(transactions_open(&context.http_context, &database_name, &transaction_type).await),
+    );
+}
+
+#[apply(generic_step)]
+#[step(expr = "connection open transaction(s) for database: {word}, of type:")]
+async fn connection_open_transactions_for_database(context: &mut Context, database_name: String, step: &Step) {
+    for transaction_type in iter_table(step) {
+        context
+            .push_transaction(transactions_open(&context.http_context, &database_name, &transaction_type).await)
+            .unwrap();
+    }
+}
+
+#[apply(generic_step)]
+#[step(expr = "connection open transaction(s) in parallel for database: {word}, of type:")]
+pub async fn connection_open_transactions_in_parallel(context: &mut Context, database_name: String, step: &Step) {
+    let transactions: VecDeque<String> = join_all(
+        iter_table(step)
+            .map(|transaction_type| transactions_open(&context.http_context, &database_name, transaction_type)),
+    )
+    .await
+    .into_iter()
+    .map(|result| result.unwrap().transaction_id.to_string())
+    .collect();
+    context.set_transactions(transactions).await;
+}
+
+#[apply(generic_step)]
+#[step(expr = "transaction is open: {boolean}")]
+#[step(expr = "transactions( in parallel) are open: {boolean}")]
+pub async fn transaction_is_open(context: &mut Context, is_open: params::Boolean) {
+    // no op: cannot check in http
+}
+
+#[apply(generic_step)]
+#[step(expr = "transaction has type: {word}")]
+#[step(expr = "transactions( in parallel) have type:")]
+pub async fn transaction_has_type(_context: &mut Context, _transaction_type: String) {
+    // no op: cannot check in http
+}
+
+#[apply(generic_step)]
+#[step(expr = "transactions( in parallel) have type:")]
+pub async fn transactions_have_type(_context: &mut Context) {
+    // no op: cannot check in http
+}
+
+#[apply(generic_step)]
+#[step(expr = "transaction commits{may_error}")]
+pub async fn transaction_commits(context: &mut Context, may_error: params::MayError) {
+    let transaction = context.take_transaction();
+    may_error.check(transactions_commit(&context.http_context, &transaction).await);
+}
+
+#[apply(generic_step)]
+#[step(expr = "transaction closes")]
+pub async fn transaction_closes(context: &mut Context) {
+    let transaction = context.take_transaction();
+    transactions_close(&context.http_context, &transaction).await.expect("Expected transaction close")
+}
+
+#[apply(generic_step)]
+#[step(expr = "transaction rollbacks{may_error}")]
+pub async fn transaction_rollbacks(context: &mut Context, may_error: params::MayError) {
+    let transaction = context.transaction();
+    may_error.check(transactions_rollback(&context.http_context, &transaction).await);
+}

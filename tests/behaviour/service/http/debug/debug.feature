@@ -8,13 +8,32 @@ Feature: Debugging Space
   # Do not commit any changes to this file.
 
   # TODO: Remove this
+
   Background:
-    When typedb starts
+    Given typedb starts
+    Given connection opens with default authentication
+    Given connection is open: true
+    Given connection has 0 databases
 
+  Scenario: one database, one <type> transaction
+    Given connection opens with default authentication
+#    When connection create database: typedb
+#    Given connection open <type> transaction for database: typedb
+#    Then transaction is open: true
+#    Then transaction has type: <type>
+#    Examples:
+#      | type   |
+#      | read   |
+#      | write  |
+#      | schema |
 
-  Scenario: fkamkflawlkfmklaw
-    When typedb starts
-
-
-  Scenario: fkamkflawlkfmklaw222
-    When typedb starts
+  Scenario: one database, one committed <type> transaction is closed
+    Given connection opens with default authentication
+#    When connection create database: typedb
+#    Given connection open <type> transaction for database: typedb
+#    Then transaction commits
+#    Then transaction is open: false
+#    Examples:
+#      | type   |
+#      | write  |
+#      | schema |

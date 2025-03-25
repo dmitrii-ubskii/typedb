@@ -12,4 +12,4 @@ mod authentication;
 pub mod error;
 pub mod parameters;
 pub mod server;
-mod service;
+pub mod service;

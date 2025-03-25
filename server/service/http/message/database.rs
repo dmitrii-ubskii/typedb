@@ -15,20 +15,20 @@ pub(crate) struct DatabasePath {
 
 from_request_parts_impl!(DatabasePath { database_name: String });
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DatabasesResponse {
-    databases: Vec<DatabaseResponse>,
+    pub databases: Vec<DatabaseResponse>,
 }
 
 pub(crate) fn encode_databases(database_names: Vec<String>) -> DatabasesResponse {
     DatabasesResponse { databases: database_names.into_iter().map(|name| encode_database(name)).collect_vec() }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DatabaseResponse {
-    name: String,
+    pub name: String,
 }
 
 pub(crate) fn encode_database(name: String) -> DatabaseResponse {

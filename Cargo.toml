@@ -184,11 +184,19 @@ features = {}
 
 [[test]]
 	path = "tests/behaviour/service/http/driver.rs"
-	name = "test_driver"
+	name = "test_http_driver"
+
+[[test]]
+	path = "tests/behaviour/service/http/connection/database.rs"
+	name = "test_http_database"
+
+[[test]]
+	path = "tests/behaviour/service/http/connection/transaction.rs"
+	name = "test_http_transaction"
 
 [[test]]
 	path = "tests/behaviour/service/http/user.rs"
-	name = "test_user"
+	name = "test_http_user"
 
 [[test]]
 	path = "tests/behaviour/service/http/debug/debug.rs"

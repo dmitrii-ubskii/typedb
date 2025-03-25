@@ -53,12 +53,32 @@ pub struct Server {
 }
 
 impl Server {
-    pub async fn create(
+    pub async fn new(
         config: Config,
         logo: &'static str,
         distribution: &'static str,
         version: &'static str,
         deployment_id: Option<String>,
+    ) -> Result<Self, ServerOpenError> {
+        let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+        Self::new_with_external_shutdown(
+            config,
+            distribution,
+            version,
+            deployment_id,
+            shutdown_sender,
+            shutdown_receiver,
+        )
+        .await
+    }
+
+    pub async fn new_with_external_shutdown(
+        config: Config,
+        distribution: &'static str,
+        version: &'static str,
+        deployment_id: Option<String>,
+        shutdown_sender: tokio::sync::watch::Sender<()>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Result<Self, ServerOpenError> {
         let storage_directory = &config.storage.data;
         let server_config = &config.server;
@@ -94,8 +114,6 @@ impl Server {
         let token_manager = Arc::new(TokenManager::new(server_config.authentication.token_expiration_seconds));
 
         let grpc_server_address = Self::resolve_address(server_config.address.clone()).await;
-
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
 
         let grpc_service = grpc::typedb_service::TypeDBService::new(
             grpc_server_address,

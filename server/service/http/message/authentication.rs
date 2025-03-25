@@ -15,9 +15,9 @@ use crate::{authentication::Accessor, service::http::error::HTTPServiceError};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct SigninPayload {
-    pub(crate) username: String,
-    pub(crate) password: String,
+pub struct SigninPayload {
+    pub username: String,
+    pub password: String,
 }
 
 #[async_trait]

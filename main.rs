@@ -22,7 +22,7 @@ fn main() {
     initialise_logging_global();
     may_initialise_error_reporting(&config);
     create_tokio_runtime().block_on(async {
-        let server = Server::create(config, ASCII_LOGO, DISTRIBUTION, VERSION, None).await.unwrap();
+        let server = Server::new(config, ASCII_LOGO, DISTRIBUTION, VERSION, None).await.unwrap();
         match server.serve().await {
             Ok(_) => println!("Exited."),
             Err(err) => println!("Exited with error: {:?}", err),

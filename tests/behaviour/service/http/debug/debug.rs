@@ -9,6 +9,7 @@
 use http_steps::Context;
 
 #[tokio::test]
+// #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn test() {
     assert!(Context::test("tests/behaviour/service/http/debug/debug.feature").await);
 }

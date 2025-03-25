@@ -4,13 +4,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-pub(crate) mod authentication;
+pub mod authentication;
 pub(crate) mod body;
-pub(crate) mod database;
+pub mod database;
 pub(crate) mod header;
-pub(crate) mod query;
-pub(crate) mod transaction;
-pub(crate) mod user;
+pub mod query;
+pub mod transaction;
+pub mod user;
 pub(crate) mod version;
 
 macro_rules! stringify_kebab_case {

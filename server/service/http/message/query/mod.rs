@@ -7,22 +7,22 @@ use serde::Deserialize;
 
 use crate::service::http::message::transaction::TransactionOpenPayload;
 
-pub(crate) mod concept;
-pub(crate) mod document;
-pub(crate) mod row;
+pub mod concept;
+pub mod document;
+pub mod row;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct TransactionQueryPayload {
-    pub(crate) query: String,
+pub struct TransactionQueryPayload {
+    pub query: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct QueryPayload {
-    pub(crate) query: String,
-    pub(crate) commit: Option<bool>,
+pub struct QueryPayload {
+    pub query: String,
+    pub commit: Option<bool>,
 
     #[serde(flatten)]
-    pub(crate) transaction_open_payload: TransactionOpenPayload,
+    pub transaction_open_payload: TransactionOpenPayload,
 }

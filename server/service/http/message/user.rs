@@ -28,20 +28,20 @@ pub(crate) struct UpdateUserPayload {
     pub(crate) password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UsersResponse {
-    users: Vec<UserResponse>,
+    pub users: Vec<UserResponse>,
 }
 
 pub(crate) fn encode_users(users: Vec<User>) -> UsersResponse {
     UsersResponse { users: users.into_iter().map(|user| encode_user(&user)).collect_vec() }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UserResponse {
-    username: String,
+    pub username: String,
 }
 
 pub(crate) fn encode_user(user: &User) -> UserResponse {

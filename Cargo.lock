@@ -2018,6 +2018,7 @@ dependencies = [
  "options",
  "params",
  "regex",
+ "serde",
  "serde_json",
  "server",
  "smol",

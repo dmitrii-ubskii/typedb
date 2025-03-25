@@ -8,7 +8,7 @@ use error::typedb_error;
 
 pub(crate) mod control_flow;
 pub(crate) mod grpc;
-pub(crate) mod http;
+pub mod http;
 mod transaction_service;
 
 typedb_error! {

@@ -7,6 +7,7 @@
 use cucumber::gherkin::Step;
 use database::transaction::{DataCommitError, SchemaCommitError, TransactionRead, TransactionSchema, TransactionWrite};
 use futures::future::join_all;
+use itertools::Either;
 use macro_rules_attribute::apply;
 use options::TransactionOptions;
 use params::{self, check_boolean};
@@ -117,7 +118,7 @@ pub async fn transaction_commits(context: &mut Context, may_error: params::MayEr
             ));
         }
         ActiveTransaction::Write(tx) => {
-            if let Some(error) = may_error.check(tx.commit()) {
+            if let Some(Either::Right(error)) = may_error.check(tx.commit()) {
                 match error {
                     DataCommitError::ConceptWriteErrors { write_errors: errors, .. } => {
                         for error in errors {
@@ -134,7 +135,7 @@ pub async fn transaction_commits(context: &mut Context, may_error: params::MayEr
             }
         }
         ActiveTransaction::Schema(tx) => {
-            if let Some(error) = may_error.check(tx.commit()) {
+            if let Some(Either::Right(error)) = may_error.check(tx.commit()) {
                 match error {
                     SchemaCommitError::ConceptWriteErrors { write_errors: errors, .. } => {
                         for error in errors {

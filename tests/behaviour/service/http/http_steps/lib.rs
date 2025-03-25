@@ -15,6 +15,7 @@ use std::{
     iter, mem,
     path::{Path, PathBuf},
     str::FromStr,
+    time::Instant,
 };
 
 use cucumber::{gherkin::Feature, StatsWriter, World};
@@ -22,15 +23,19 @@ use futures::{
     future::{try_join_all, Either},
     stream::{self, StreamExt},
 };
-use hyper::{client::HttpConnector, Client};
+use hyper::{client::HttpConnector, http, Client};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use itertools::Itertools;
 use options::TransactionOptions;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    task::JoinHandle,
+    time::{sleep, Duration},
+};
 
 use crate::params::QueryAnswerType;
 
 mod connection;
+mod message;
 mod params;
 mod query;
 mod util;
@@ -77,11 +82,17 @@ impl<I: AsRef<Path>> cucumber::Parser<I> for SingletonParser {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct HttpContext {
+    pub http_client: Client<HttpConnector>,
+    pub auth_token: Option<String>,
+}
+
 #[derive(World)]
 pub struct Context {
     pub tls_root_ca: PathBuf,
     pub transaction_options: TransactionOptions,
-    pub http_client: Client<HttpConnector>,
+    pub http_context: HttpContext,
     pub transaction_ids: VecDeque<String>,
     pub answer: Option<String>,
     pub answer_type: Option<String>,
@@ -90,6 +101,8 @@ pub struct Context {
     pub collected_documents: Option<Vec<serde_json::Value>>,
     pub concurrent_answers: Vec<String>,
     // pub concurrent_rows_streams: Option<Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>>>,
+    pub shutdown_sender: Option<tokio::sync::watch::Sender<()>>,
+    pub handler: Option<(TempDir, JoinHandle<Result<(), ServerOpenError>>)>,
 }
 
 impl fmt::Debug for Context {
@@ -114,11 +127,17 @@ impl fmt::Debug for Context {
 
 impl Context {
     const DEFAULT_ADDRESS: &'static str = "127.0.0.1:8000";
+    const HTTP_PROTOCOL: &'static str = "http";
+    const HTTPS_PROTOCOL: &'static str = "https";
+    const DEFAULT_API_VERSION: &'static str = "v1";
     const DEFAULT_DATABASE: &'static str = "test";
     const ADMIN_USERNAME: &'static str = "admin";
     const ADMIN_PASSWORD: &'static str = "password";
     const STEP_REATTEMPT_SLEEP: Duration = Duration::from_millis(250);
     const STEP_REATTEMPT_LIMIT: u32 = 20;
+
+    const SERVER_START_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+    const SERVER_MAX_START_TIME: Duration = Duration::from_secs(10);
 
     pub async fn test<I: AsRef<Path>>(glob: I) -> bool {
         let default_panic = std::panic::take_hook();
@@ -127,7 +146,10 @@ impl Context {
             std::process::exit(1);
         }));
 
-        !Self::cucumber::<I>()
+        let (shutdown_sender, server) = start_typedb().await;
+        Self::wait_server_start().await;
+
+        let result = !Self::cucumber::<I>()
             .repeat_failed()
             .fail_on_skipped()
             .max_concurrent_scenarios(Some(1))
@@ -148,7 +170,34 @@ impl Context {
                     && !sc.tags.iter().any(Self::is_ignore_tag)
             })
             .await
-            .execution_has_failed()
+            .execution_has_failed();
+
+        shutdown_sender.send(()).expect("Expected shutdown signal to be sent from tests");
+        server.join().expect("Expected server's join").expect("Expected server's successful stop");
+        result
+    }
+
+    async fn wait_server_start() {
+        let starting_since = Instant::now();
+        let http_client = create_http_client();
+        loop {
+            let result = check_health(http_client.clone()).await;
+            if result.is_ok() {
+                break;
+            }
+            if Instant::now().duration_since(starting_since) > Self::SERVER_MAX_START_TIME {
+                panic!("Server has not started in {:?}. Aborting tests!", Self::SERVER_MAX_START_TIME);
+            }
+            tokio::time::sleep(Self::SERVER_START_CHECK_INTERVAL).await;
+        }
+    }
+
+    pub fn default_versioned_endpoint() -> String {
+        Self::versioned_endpoint(Self::HTTP_PROTOCOL, Self::DEFAULT_ADDRESS, Self::DEFAULT_API_VERSION)
+    }
+
+    pub fn versioned_endpoint(protocol: &str, address: &str, api_version: &str) -> String {
+        format!("{}://{}/{}", protocol, address, api_version)
     }
 
     fn is_ignore_tag(t: &String) -> bool {
@@ -164,54 +213,25 @@ impl Context {
         self.cleanup_concurrent_answers().await;
     }
 
-    pub async fn all_databases(&self) -> HashSet<String> {
-        // TODO: Get databases
-        // self.driver
-        //     .as_ref()
-        //     .unwrap()
-        //     .databases()
-        //     .all()
-        //     .await
-        //     .unwrap()
-        //     .into_iter()
-        //     .map(|db| db.name().to_owned())
-        //     .collect::<HashSet<_>>()
-        HashSet::new()
-    }
-
     pub async fn cleanup_databases(&mut self) {
-        // TODO: Get databases, for each delete
-        // try_join_all(self.driver.as_ref().unwrap().databases().all().await.unwrap().into_iter().map(|db| db.delete()))
-        //     .await
-        //     .unwrap();
+        for database in databases(&self.http_context).await.unwrap().databases {
+            databases_delete(&self.http_context, &database.name).await.unwrap();
+        }
     }
 
     pub async fn cleanup_transactions(&mut self) {
-        while let Some(transaction) = self.try_take_transaction() {
-            // TODO: Close transactions
-            // transaction.force_close();
+        while let Some(transaction_id) = self.try_take_transaction() {
+            transactions_close(&self.http_context, &transaction_id).await.unwrap();
         }
     }
 
     pub async fn cleanup_users(&mut self) {
-        // TODO: Implement
-        // try_join_all(
-        //     self.driver
-        //         .as_ref()
-        //         .unwrap()
-        //         .users()
-        //         .all()
-        //         .await
-        //         .unwrap()
-        //         .into_iter()
-        //         .filter(|user| user.name != Context::ADMIN_USERNAME)
-        //         .map(|user| user.delete()),
-        // )
-        // .await
-        // .expect("Expected users cleanup");
-
-        // TODO: Return
-        // self.driver.as_ref().unwrap().users().set_password(Context::ADMIN_USERNAME, Context::ADMIN_PASSWORD).await.unwrap();
+        for user in users(&self.http_context).await.unwrap().users {
+            if user.username != Context::ADMIN_USERNAME {
+                users_delete(&self.http_context, &user.username).await.unwrap();
+            }
+        }
+        users_update(&self.http_context, Context::ADMIN_USERNAME, Context::ADMIN_PASSWORD).await.unwrap();
     }
 
     pub async fn cleanup_answers(&mut self) {
@@ -245,9 +265,9 @@ impl Context {
 
     pub fn push_transaction(
         &mut self,
-        transaction: Result<String, HttpBehaviourTestError>,
+        transaction: Result<TransactionResponse, HttpBehaviourTestError>,
     ) -> Result<(), HttpBehaviourTestError> {
-        self.transaction_ids.push_back(transaction?);
+        self.transaction_ids.push_back(transaction?.transaction_id.to_string());
         Ok(())
     }
 
@@ -364,7 +384,7 @@ impl Default for Context {
         Self {
             tls_root_ca,
             transaction_options,
-            http_client: create_http_client(),
+            http_context: HttpContext { http_client: create_http_client(), auth_token: None },
             transaction_ids: VecDeque::new(),
             answer: None,
             answer_type: None,
@@ -373,13 +393,9 @@ impl Default for Context {
             collected_documents: None,
             concurrent_answers: Vec::new(),
             // concurrent_rows_streams: None,
+            shutdown_sender: None,
+            handler: None,
         }
-    }
-}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        println!("TODO: Implement! Cleanup the server");
     }
 }
 
@@ -399,18 +415,26 @@ fn create_https_client() -> Client<HttpsConnector<HttpConnector>> {
 
 macro_rules! in_background {
     ($context:ident, |$background:ident| $expr:expr) => {
-        let $background = $context.create_http_client().await.unwrap();
+        let mut $background = crate::HttpContext { http_client: crate::create_http_client(), auth_token: None };
+        let token = crate::connection::authenticate_default(&$background).await;
+        $background.auth_token = Some(token);
         $expr
-        $background.force_close().unwrap();
     };
 }
 pub(crate) use in_background;
+use server::{error::ServerOpenError, service::http::message::transaction::TransactionResponse};
+use test_utils::TempDir;
 
-#[derive(Debug, Clone)]
+use crate::{connection::start_typedb, message::check_health};
+use crate::message::{databases, databases_delete, transactions_close, users, users_delete, users_update};
+
+#[derive(Debug)]
 pub enum HttpBehaviourTestError {
     Transaction,
     InvalidConceptConversion,
     InvalidValueRetrieval(String),
+    HttpError(http::Error),
+    HyperError(hyper::Error),
 }
 
 impl fmt::Display for HttpBehaviourTestError {
@@ -419,6 +443,8 @@ impl fmt::Display for HttpBehaviourTestError {
             Self::Transaction => write!(f, "Transaction error."),
             Self::InvalidConceptConversion => write!(f, "Invalid concept conversion."),
             Self::InvalidValueRetrieval(type_) => write!(f, "Could not retrieve a '{}' value.", type_),
+            Self::HttpError(source) => write!(f, "Http error: {source}"),
+            Self::HyperError(source) => write!(f, "Hyper error: {source}"),
         }
     }
 }
@@ -429,6 +455,8 @@ impl Error for HttpBehaviourTestError {
             Self::Transaction => None,
             Self::InvalidConceptConversion => None,
             Self::InvalidValueRetrieval(_) => None,
+            Self::HttpError(error) => Some(error),
+            Self::HyperError(error) => Some(error),
         }
     }
 }

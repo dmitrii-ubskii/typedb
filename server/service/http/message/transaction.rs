@@ -88,10 +88,10 @@ impl Into<TransactionOptions> for TransactionOptionsPayload {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TransactionResponse {
-    transaction_id: Uuid,
+    pub transaction_id: Uuid,
 }
 
 pub(crate) fn encode_transaction(transaction_id: Uuid) -> TransactionResponse {

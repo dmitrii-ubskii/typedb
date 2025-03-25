@@ -18,9 +18,9 @@ use concept::{
 };
 use encoding::value::{value::Value, value_type::ValueType, ValueEncodable};
 use error::unimplemented_feature;
+use executor::write::WriteError::ConceptRead;
 use serde::Serialize;
 use serde_json::json;
-use executor::write::WriteError::ConceptRead;
 use storage::snapshot::ReadableSnapshot;
 
 // TODO: Should probably be merged with JSON from behaviour/steps/query_answer_context.rs.

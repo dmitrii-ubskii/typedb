@@ -34,6 +34,11 @@ features = {}
 		version = "1.3.0"
 		default-features = false
 
+	[dependencies.serde]
+		features = ["alloc", "default", "derive", "rc", "serde_derive", "std"]
+		version = "1.0.219"
+		default-features = false
+
 	[dependencies.cucumber]
 		features = ["default", "macros"]
 		version = "0.19.1"
