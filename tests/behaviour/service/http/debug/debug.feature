@@ -32,7 +32,7 @@ Feature: Debugging Space
       """
     When get answers of typeql read query
       """
-      match $p sub person;
+      match let $value-var = "John"; $attribute-var isa name;
       """
 #    Then answer type is: ok
 #    Then answer type is not: concept rows

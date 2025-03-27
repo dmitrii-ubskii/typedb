@@ -79,7 +79,7 @@ serializable_response! {
     pub struct AttributeResponse {
         kind = "attribute",
         pub iid: String => "iid",
-        pub value: Option<ValueResponse> => "value",
+        pub value: ValueResponse => "value", // TODO: Flatten it
         pub type_: Option<AttributeTypeResponse> => "type",
     }
 }
@@ -88,6 +88,7 @@ serializable_response! {
     pub struct ValueResponse {
         kind = "value",
         pub value: serde_json::Value => "value",
+        pub value_type: String => "valueType",
     }
 }
 
@@ -189,7 +190,7 @@ pub fn encode_attribute(
 ) -> Result<AttributeResponse, Box<ConceptReadError>> {
     Ok(AttributeResponse {
         iid: encode_iid(attribute.iid()),
-        value: Some(encode_value(attribute.get_value(snapshot, thing_manager)?)),
+        value: encode_value(attribute.get_value(snapshot, thing_manager)?),
         type_: if include_thing_types {
             Some(encode_attribute_type(&attribute.type_(), snapshot, type_manager)?)
         } else {
@@ -265,6 +266,7 @@ pub fn encode_role_type(
 }
 
 pub fn encode_value(value: Value<'_>) -> ValueResponse {
+    let value_type = value.value_type().to_string();
     let value = match value {
         Value::Boolean(bool) => json!(bool),
         Value::Integer(integer) => json!(integer),
@@ -278,7 +280,7 @@ pub fn encode_value(value: Value<'_>) -> ValueResponse {
         }
         Value::Struct(_) => unimplemented_feature!(Structs),
     };
-    ValueResponse { value }
+    ValueResponse { value, value_type }
 }
 
 pub fn encode_value_type(

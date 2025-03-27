@@ -161,6 +161,7 @@ impl fmt::Debug for ValueType {
 
 impl fmt::Display for ValueType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: Don't we want to display structs differently?
         write!(f, "{}", self.category().name())
     }
 }

@@ -205,13 +205,20 @@ pub async fn transactions_query(
         "query": query,
     });
     let response = send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await?;
+    println!("Response: {response}");
     Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 
-pub async fn query(context: &HttpContext, transaction_type: &str, query: &str) -> Result<(), HttpBehaviourTestError> {
-    // let url = format!("{}/query", Context::default_versioned_endpoint());
-    // send_request(context, Method::POST, &url, Some(typeql)).await?;
-    Ok(())
+pub async fn query(context: &HttpContext, database_name: &str, transaction_type: &str, query: &str) -> Result<QueryAnswerResponse, HttpBehaviourTestError> {
+    let url = format!("{}/query", Context::default_versioned_endpoint());
+    let json_body = json!({
+        "databaseName": database_name,
+        "transactionType": transaction_type,
+        "query": query,
+    });
+    // TODO: Add other params?
+    let response = send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await?;
+    Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 
 fn encode_path_variable(var: &str) -> String {
