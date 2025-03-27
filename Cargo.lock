@@ -2024,6 +2024,7 @@ dependencies = [
  "smol",
  "test_utils",
  "tokio",
+ "url",
  "uuid",
 ]
 

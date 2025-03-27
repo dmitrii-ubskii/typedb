@@ -9,31 +9,17 @@ Feature: Debugging Space
 
   # TODO: Remove this
 
-  Background:
+  Scenario: User's name is retrievable only by admin
     Given typedb starts
-    Given connection opens with default authentication
-    Given connection is open: true
-    Given connection has 0 databases
+    Given connection opens with username 'admin', password 'password'
+    When create user with username 'user', password 'password'
+    When create user with username 'user2', password 'password'
+    Then get user(user) get name: user
+    Then get user(user2) get name: user2
+    Then get user(admin) get name: admin
+    When connection closes
 
-  Scenario: one database, one <type> transaction
-    Given connection opens with default authentication
-#    When connection create database: typedb
-#    Given connection open <type> transaction for database: typedb
-#    Then transaction is open: true
-#    Then transaction has type: <type>
-#    Examples:
-#      | type   |
-#      | read   |
-#      | write  |
-#      | schema |
-
-  Scenario: one database, one committed <type> transaction is closed
-    Given connection opens with default authentication
-#    When connection create database: typedb
-#    Given connection open <type> transaction for database: typedb
-#    Then transaction commits
-#    Then transaction is open: false
-#    Examples:
-#      | type   |
-#      | write  |
-#      | schema |
+    When connection opens with username 'user', password 'password'
+    Then get user(user) get name: user
+    Then get user: user2; fails with a message containing: "The user is not permitted to execute the operation"
+    Then get user: admin; fails with a message containing: "The user is not permitted to execute the operation"

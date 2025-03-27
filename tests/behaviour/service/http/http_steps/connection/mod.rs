@@ -95,7 +95,6 @@ fn change_port(address: &str, new_port: &str) -> String {
 
 #[apply(generic_step)]
 #[step("typedb starts")]
-#[step("connection closes")]
 #[step("connection is open: true")]
 #[step("connection is open: false")]
 pub async fn connection_ignore(_: &mut Context) {}
@@ -180,6 +179,6 @@ async fn connection_has_count_users(context: &mut Context, count: usize) {
 
 #[apply(generic_step)]
 #[step(expr = r"connection closes{may_error}")]
-async fn driver_closes(context: &mut Context, may_error: params::MayError) {
+async fn connection_closes(context: &mut Context, may_error: params::MayError) {
     context.cleanup_transactions().await;
 }

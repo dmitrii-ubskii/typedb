@@ -50,6 +50,7 @@ use crate::{
             transaction_service::{QueryResponse, TransactionResponder, TransactionResponse, TransactionService},
         },
         transaction_service::{QueryType, TRANSACTION_REQUEST_BUFFER_SIZE},
+        ServiceError,
     },
 };
 
@@ -293,27 +294,29 @@ impl TypeDBService {
         StatusCode::NOT_IMPLEMENTED
     }
 
-    // TODO: remove diagnsotics_async where not async!
     async fn users(
         _version: ProtocolVersion,
         State(service): State<Arc<TypeDBService>>,
         Accessor(accessor): Accessor,
     ) -> impl IntoResponse {
-        run_with_diagnostics_async(service.diagnostics_manager.clone(), None::<&str>, ActionKind::UsersAll, || async {
+        run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersAll, || {
             if !PermissionManager::exec_user_all_permitted(accessor.as_str()) {
                 return Err(HTTPServiceError::operation_not_permitted());
             }
             Ok(JsonBody(encode_users(service.user_manager.all())))
         })
-        .await
     }
 
     async fn users_get(
         _version: ProtocolVersion,
         State(service): State<Arc<TypeDBService>>,
+        Accessor(accessor): Accessor,
         user_path: UserPath,
     ) -> impl IntoResponse {
         run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersContains, || {
+            if !PermissionManager::exec_user_get_permitted(accessor.as_str(), &user_path.username) {
+                return Err(HTTPServiceError::operation_not_permitted());
+            }
             service
                 .user_manager
                 .get(&user_path.username)
@@ -330,23 +333,17 @@ impl TypeDBService {
         user_path: UserPath,
         JsonBody(payload): JsonBody<CreateUserPayload>,
     ) -> impl IntoResponse {
-        run_with_diagnostics_async(
-            service.diagnostics_manager.clone(),
-            None::<&str>,
-            ActionKind::UsersCreate,
-            || async {
-                if !PermissionManager::exec_user_create_permitted(accessor.as_str()) {
-                    return Err(HTTPServiceError::operation_not_permitted());
-                }
-                let user = User { name: user_path.username };
-                let credential = Credential::new_password(payload.password.as_str());
-                service
-                    .user_manager
-                    .create(&user, &credential)
-                    .map_err(|typedb_source| HTTPServiceError::UserCreate { typedb_source })
-            },
-        )
-        .await
+        run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersCreate, || {
+            if !PermissionManager::exec_user_create_permitted(accessor.as_str()) {
+                return Err(HTTPServiceError::operation_not_permitted());
+            }
+            let user = User { name: user_path.username };
+            let credential = Credential::new_password(payload.password.as_str());
+            service
+                .user_manager
+                .create(&user, &credential)
+                .map_err(|typedb_source| HTTPServiceError::UserCreate { typedb_source })
+        })
     }
 
     async fn users_update(

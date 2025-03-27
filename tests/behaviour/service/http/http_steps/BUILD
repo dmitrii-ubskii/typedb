@@ -30,6 +30,7 @@ rust_library(
         "@crates//:smol",
         "@crates//:tokio",
         "@crates//:uuid",
+        "@crates//:url",
         "@crates//:macro_rules_attribute",
     ],
 )

@@ -23,16 +23,32 @@ use futures::{
     future::{try_join_all, Either},
     stream::{self, StreamExt},
 };
-use hyper::{client::HttpConnector, http, Client};
+use hyper::{client::HttpConnector, http, Client, StatusCode};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use itertools::Itertools;
 use options::TransactionOptions;
+use server::{error::ServerOpenError, service::http::message::transaction::TransactionResponse};
+use test_utils::TempDir;
 use tokio::{
     task::JoinHandle,
     time::{sleep, Duration},
 };
 
-use crate::params::QueryAnswerType;
+use crate::{
+    connection::start_typedb,
+    message::{check_health, databases, databases_delete, transactions_close, users, users_delete, users_update},
+    params::QueryAnswerType,
+};
+
+macro_rules! in_background {
+    ($context:ident, |$background:ident| $expr:expr) => {
+        let mut $background = crate::HttpContext { http_client: crate::create_http_client(), auth_token: None };
+        let token = crate::message::authenticate_default(&$background).await;
+        $background.auth_token = Some(token);
+        $expr
+    };
+}
+pub(crate) use in_background;
 
 mod connection;
 mod message;
@@ -214,9 +230,11 @@ impl Context {
     }
 
     pub async fn cleanup_databases(&mut self) {
-        for database in databases(&self.http_context).await.unwrap().databases {
-            databases_delete(&self.http_context, &database.name).await.unwrap();
-        }
+        in_background!(context, |background| {
+            for database in databases(&background).await.unwrap().databases {
+                databases_delete(&background, &database.name).await.unwrap();
+            }
+        });
     }
 
     pub async fn cleanup_transactions(&mut self) {
@@ -226,12 +244,14 @@ impl Context {
     }
 
     pub async fn cleanup_users(&mut self) {
-        for user in users(&self.http_context).await.unwrap().users {
-            if user.username != Context::ADMIN_USERNAME {
-                users_delete(&self.http_context, &user.username).await.unwrap();
+        in_background!(context, |background| {
+            for user in users(&background).await.unwrap().users {
+                if user.username != Context::ADMIN_USERNAME {
+                    users_delete(&background, &user.username).await.unwrap();
+                }
             }
-        }
-        users_update(&self.http_context, Context::ADMIN_USERNAME, Context::ADMIN_PASSWORD).await.unwrap();
+            users_update(&background, Context::ADMIN_USERNAME, Context::ADMIN_PASSWORD).await.unwrap();
+        });
     }
 
     pub async fn cleanup_answers(&mut self) {
@@ -413,21 +433,6 @@ fn create_https_client() -> Client<HttpsConnector<HttpConnector>> {
     Client::builder().build::<_, hyper::Body>(https)
 }
 
-macro_rules! in_background {
-    ($context:ident, |$background:ident| $expr:expr) => {
-        let mut $background = crate::HttpContext { http_client: crate::create_http_client(), auth_token: None };
-        let token = crate::connection::authenticate_default(&$background).await;
-        $background.auth_token = Some(token);
-        $expr
-    };
-}
-pub(crate) use in_background;
-use server::{error::ServerOpenError, service::http::message::transaction::TransactionResponse};
-use test_utils::TempDir;
-
-use crate::{connection::start_typedb, message::check_health};
-use crate::message::{databases, databases_delete, transactions_close, users, users_delete, users_update};
-
 #[derive(Debug)]
 pub enum HttpBehaviourTestError {
     Transaction,
@@ -435,6 +440,7 @@ pub enum HttpBehaviourTestError {
     InvalidValueRetrieval(String),
     HttpError(http::Error),
     HyperError(hyper::Error),
+    StatusError { code: StatusCode, message: String },
 }
 
 impl fmt::Display for HttpBehaviourTestError {
@@ -445,6 +451,7 @@ impl fmt::Display for HttpBehaviourTestError {
             Self::InvalidValueRetrieval(type_) => write!(f, "Could not retrieve a '{}' value.", type_),
             Self::HttpError(source) => write!(f, "Http error: {source}"),
             Self::HyperError(source) => write!(f, "Hyper error: {source}"),
+            Self::StatusError { code, message } => write!(f, "Status Error {}: {}", code.as_u16(), message),
         }
     }
 }
@@ -457,6 +464,7 @@ impl Error for HttpBehaviourTestError {
             Self::InvalidValueRetrieval(_) => None,
             Self::HttpError(error) => Some(error),
             Self::HyperError(error) => Some(error),
+            Self::StatusError { .. } => None,
         }
     }
 }

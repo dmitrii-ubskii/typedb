@@ -72,13 +72,12 @@ pub async fn connection_open_transactions_in_parallel(context: &mut Context, dat
 #[apply(generic_step)]
 #[step(expr = "transaction is open: {boolean}")]
 #[step(expr = "transactions( in parallel) are open: {boolean}")]
-pub async fn transaction_is_open(context: &mut Context, is_open: params::Boolean) {
+pub async fn transaction_is_open(_context: &mut Context, _is_open: params::Boolean) {
     // no op: cannot check in http
 }
 
 #[apply(generic_step)]
 #[step(expr = "transaction has type: {word}")]
-#[step(expr = "transactions( in parallel) have type:")]
 pub async fn transaction_has_type(_context: &mut Context, _transaction_type: String) {
     // no op: cannot check in http
 }
