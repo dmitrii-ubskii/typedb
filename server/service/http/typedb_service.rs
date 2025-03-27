@@ -47,10 +47,10 @@ use crate::{
                 version::ProtocolVersion,
             },
             transaction_service,
-            transaction_service::{QueryResponse, TransactionResponder, TransactionResponse, TransactionService},
+            transaction_service::{QueryAnswer, TransactionResponder, TransactionResponse, TransactionService},
         },
-        transaction_service::{QueryType, TRANSACTION_REQUEST_BUFFER_SIZE},
-        ServiceError,
+        transaction_service::TRANSACTION_REQUEST_BUFFER_SIZE,
+        QueryType,
     },
 };
 
@@ -163,7 +163,7 @@ impl TypeDBService {
         }
     }
 
-    fn try_get_query_response(transaction_response: TransactionResponse) -> Result<QueryResponse, HTTPServiceError> {
+    fn try_get_query_response(transaction_response: TransactionResponse) -> Result<QueryAnswer, HTTPServiceError> {
         match transaction_response {
             TransactionResponse::Query(query_response) => Ok(query_response),
             TransactionResponse::Err(typedb_source) => Err(HTTPServiceError::Transaction { typedb_source }),

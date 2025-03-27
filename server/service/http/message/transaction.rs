@@ -27,7 +27,7 @@ use crate::service::{
         database::{encode_database, DatabaseResponse},
         from_request_parts_impl,
     },
-    transaction_service::TransactionType,
+    TransactionType,
 };
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -89,7 +89,7 @@ impl Into<TransactionOptions> for TransactionOptionsPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionResponse {
     pub transaction_id: Uuid,
 }

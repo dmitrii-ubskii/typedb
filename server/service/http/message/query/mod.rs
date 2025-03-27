@@ -3,9 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-use serde::Deserialize;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
-use crate::service::http::message::transaction::TransactionOpenPayload;
+use crate::service::{http::message::transaction::TransactionOpenPayload, AnswerType, QueryType};
 
 pub mod concept;
 pub mod document;
@@ -25,4 +26,27 @@ pub struct QueryPayload {
 
     #[serde(flatten)]
     pub transaction_open_payload: TransactionOpenPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryAnswerResponse {
+    pub answer_type: AnswerType,
+    pub query_type: QueryType,
+    pub answers: Option<Vec<serde_json::Value>>,
+}
+
+pub(crate) fn encode_query_ok_answer(query_type: QueryType) -> QueryAnswerResponse {
+    QueryAnswerResponse { answer_type: AnswerType::Ok, query_type, answers: None }
+}
+
+pub(crate) fn encode_query_rows_answer(query_type: QueryType, rows: Vec<serde_json::Value>) -> QueryAnswerResponse {
+    QueryAnswerResponse { answer_type: AnswerType::ConceptRows, query_type, answers: Some(rows) }
+}
+
+pub(crate) fn encode_query_documents_answer(
+    query_type: QueryType,
+    documents: Vec<serde_json::Value>,
+) -> QueryAnswerResponse {
+    QueryAnswerResponse { answer_type: AnswerType::ConceptDocuments, query_type, answers: Some(documents) }
 }

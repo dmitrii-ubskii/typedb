@@ -49,6 +49,7 @@ macro_rules! in_background {
     };
 }
 pub(crate) use in_background;
+use server::service::{http::message::query::QueryAnswerResponse, AnswerType, QueryType};
 
 mod connection;
 mod message;
@@ -110,9 +111,9 @@ pub struct Context {
     pub transaction_options: TransactionOptions,
     pub http_context: HttpContext,
     pub transaction_ids: VecDeque<String>,
-    pub answer: Option<String>,
-    pub answer_type: Option<String>,
-    pub answer_query_type: Option<String>,
+    pub answer: Option<QueryAnswerResponse>,
+    pub answer_type: Option<AnswerType>,
+    pub answer_query_type: Option<QueryType>,
     // pub collected_rows: Option<Vec<ConceptRow>>,
     pub collected_documents: Option<Vec<serde_json::Value>>,
     pub concurrent_answers: Vec<String>,
@@ -296,7 +297,10 @@ impl Context {
         self.transaction_ids = transactions;
     }
 
-    pub fn set_answer(&mut self, answer: Result<String, HttpBehaviourTestError>) -> Result<(), HttpBehaviourTestError> {
+    pub fn set_answer(
+        &mut self,
+        answer: Result<QueryAnswerResponse, HttpBehaviourTestError>,
+    ) -> Result<(), HttpBehaviourTestError> {
         let answer = answer?;
         // self.answer_query_type = Some(answer.get_query_type());
         // self.answer_type = Some(match &answer {
@@ -344,19 +348,16 @@ impl Context {
     //         Some(self.answer.take().unwrap().into_documents().map(|result| result.unwrap()).collect::<Vec<_>>().await);
     // }
 
-    pub async fn get_answer(&self) -> Option<&String> {
+    pub async fn get_answer(&self) -> Option<&QueryAnswerResponse> {
         self.answer.as_ref()
     }
 
-    pub async fn get_answer_query_type(&self) -> Option<&String> {
+    pub async fn get_answer_query_type(&self) -> Option<&QueryType> {
         self.answer_query_type.as_ref()
     }
 
-    pub async fn get_answer_type(&self) -> Option<QueryAnswerType> {
-        self.answer_type
-            .clone()
-            .map(|str| QueryAnswerType::from_str(str.as_str()).expect("Expected conversion to query answer type"))
-        // TODO: ???
+    pub async fn get_answer_type(&self) -> Option<&AnswerType> {
+        self.answer_type.as_ref()
     }
 
     // pub async fn try_get_collected_rows(&mut self) -> Option<&Vec<ConceptRow>> {

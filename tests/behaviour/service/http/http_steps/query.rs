@@ -25,11 +25,8 @@ use itertools::Itertools;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
 
-use crate::{assert_err, generic_step, Context, HttpBehaviourTestError};
+use crate::{assert_err, generic_step, message::transactions_query, Context, HttpBehaviourTestError};
 
-// async fn run_query(transaction: &Transaction, query: impl AsRef<str>) -> TypeDBResult<QueryAnswer> {
-//     transaction.query(query).await
-// }
 //
 // fn get_collected_column_names(concept_row: &ConceptRow) -> Vec<String> {
 //     concept_row.get_column_names().into_iter().cloned().collect()
@@ -156,24 +153,26 @@ use crate::{assert_err, generic_step, Context, HttpBehaviourTestError};
 //     }
 // }
 //
-// #[apply(generic_step)]
-// #[step(expr = "typeql schema query{may_error}")]
-// #[step(expr = "typeql write query{may_error}")]
-// #[step(expr = "typeql read query{may_error}")]
-// pub async fn typeql_query(context: &mut Context, may_error: params::MayError, step: &Step) {
-//     context.cleanup_answers().await;
-//     may_error.check(run_query(context.transaction(), step.docstring().unwrap()).await);
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "get answers of typeql schema query")]
-// #[step(expr = "get answers of typeql write query")]
-// #[step(expr = "get answers of typeql read query")]
-// pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
-//     context.cleanup_answers().await;
-//     context.set_answer(run_query(context.transaction(), step.docstring().unwrap()).await).unwrap();
-// }
-//
+#[apply(generic_step)]
+#[step(expr = "typeql schema query{may_error}")]
+#[step(expr = "typeql write query{may_error}")]
+#[step(expr = "typeql read query{may_error}")]
+pub async fn typeql_query(context: &mut Context, may_error: params::MayError, step: &Step) {
+    context.cleanup_answers().await;
+    may_error.check(transactions_query(&context.http_context, context.transaction(), step.docstring().unwrap()).await);
+}
+
+#[apply(generic_step)]
+#[step(expr = "get answers of typeql schema query")]
+#[step(expr = "get answers of typeql write query")]
+#[step(expr = "get answers of typeql read query")]
+pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
+    context.cleanup_answers().await;
+    context
+        .set_answer(transactions_query(&context.http_context, context.transaction(), step.docstring().unwrap()).await)
+        .unwrap();
+}
+
 // #[apply(generic_step)]
 // #[step(expr = r"concurrently get answers of typeql schema query {int} times")]
 // #[step(expr = r"concurrently get answers of typeql write query {int} times")]

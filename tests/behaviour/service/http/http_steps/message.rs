@@ -11,6 +11,7 @@ use hyper::{
 use serde_json::json;
 use server::service::http::message::{
     database::{DatabaseResponse, DatabasesResponse},
+    query::QueryAnswerResponse,
     transaction::TransactionResponse,
     user::{UserResponse, UsersResponse},
 };
@@ -198,7 +199,7 @@ pub async fn transactions_query(
     context: &HttpContext,
     transaction_id: &str,
     query: &str,
-) -> Result<serde_json::Value, HttpBehaviourTestError> {
+) -> Result<QueryAnswerResponse, HttpBehaviourTestError> {
     let url = format!("{}/transactions/{}/query", Context::default_versioned_endpoint(), transaction_id);
     let json_body = json!({
         "query": query,

@@ -16,7 +16,7 @@ pub(crate) struct DatabasePath {
 from_request_parts_impl!(DatabasePath { database_name: String });
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct DatabasesResponse {
     pub databases: Vec<DatabaseResponse>,
 }
@@ -26,7 +26,7 @@ pub(crate) fn encode_databases(database_names: Vec<String>) -> DatabasesResponse
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct DatabaseResponse {
     pub name: String,
 }

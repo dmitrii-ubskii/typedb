@@ -19,7 +19,7 @@ use concept::{
 use encoding::value::{value::Value, value_type::ValueType, ValueEncodable};
 use error::unimplemented_feature;
 use executor::write::WriteError::ConceptRead;
-use serde::Serialize;
+use serde::{ser::SerializeStruct, Serialize, Serializer};
 use serde_json::json;
 use storage::snapshot::ReadableSnapshot;
 
@@ -27,49 +27,97 @@ use storage::snapshot::ReadableSnapshot;
 // Now, it's easier to have symmetry between two services, and we don't have the capacity to merge
 // these (BDDs will check if this code is correct)
 
-#[derive(Serialize)]
-pub struct EntityResponse {
-    iid: String,
-    entity_type: Option<EntityTypeResponse>,
+macro_rules! count_fields {
+    () => { 0 };
+    ($head:ident $(, $tail:ident)*) => { 1 + count_fields!($($tail),*) };
 }
 
-#[derive(Serialize)]
-pub struct RelationResponse {
-    iid: String,
-    relation_type: Option<RelationTypeResponse>,
+macro_rules! serializable_response {
+    (
+        $vis:vis struct $name:ident {
+            kind = $kind:expr,
+            $( $field_vis:vis $field:ident : $ty:ty => $json_key:literal ),* $(,)?
+        }
+    ) => {
+        #[derive(Debug, serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        $vis struct $name {
+            $( $field_vis $field : $ty ),*
+        }
+
+        impl serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                let mut state = serializer.serialize_struct(stringify!($name), 1 + count_fields!($($field),*))?;
+                state.serialize_field("kind", $kind)?;
+                $( state.serialize_field($json_key, &self.$field)?; )*
+                state.end()
+            }
+        }
+    };
 }
 
-#[derive(Serialize)]
-pub struct AttributeResponse {
-    iid: String,
-    value: Option<ValueResponse>,
-    attribute_type: Option<AttributeTypeResponse>,
+serializable_response! {
+    pub struct EntityResponse {
+        kind = "entity",
+        pub iid: String => "iid",
+        pub type_: Option<EntityTypeResponse> => "type",
+    }
 }
 
-#[derive(Serialize)]
-pub struct ValueResponse {
-    value: serde_json::Value,
+serializable_response! {
+    pub struct RelationResponse {
+        kind = "relation",
+        pub iid: String => "iid",
+        pub type_: Option<RelationTypeResponse> => "type",
+    }
 }
 
-#[derive(Serialize)]
-pub struct EntityTypeResponse {
-    label: String,
+serializable_response! {
+    pub struct AttributeResponse {
+        kind = "attribute",
+        pub iid: String => "iid",
+        pub value: Option<ValueResponse> => "value",
+        pub type_: Option<AttributeTypeResponse> => "type",
+    }
 }
 
-#[derive(Serialize)]
-pub struct RelationTypeResponse {
-    label: String,
+serializable_response! {
+    pub struct ValueResponse {
+        kind = "value",
+        pub value: serde_json::Value => "value",
+    }
 }
 
-#[derive(Serialize)]
-pub struct AttributeTypeResponse {
-    label: String,
-    value_type: Option<String>,
+serializable_response! {
+    pub struct EntityTypeResponse {
+        kind = "entityType",
+        pub label: String => "label",
+    }
 }
 
-#[derive(Serialize)]
-pub struct RoleTypeResponse {
-    label: String,
+serializable_response! {
+    pub struct RelationTypeResponse {
+        kind = "relationType",
+        pub label: String => "label",
+    }
+}
+
+serializable_response! {
+    pub struct AttributeTypeResponse {
+        kind = "attributeType",
+        pub label: String => "label",
+        pub value_type: Option<String> => "valueType",
+    }
+}
+
+serializable_response! {
+    pub struct RoleTypeResponse {
+        kind = "roleType",
+        pub label: String => "label",
+    }
 }
 
 pub fn encode_thing_concept(
@@ -108,7 +156,7 @@ pub fn encode_entity(
 ) -> Result<EntityResponse, Box<ConceptReadError>> {
     Ok(EntityResponse {
         iid: encode_iid(entity.iid()),
-        entity_type: if include_thing_types {
+        type_: if include_thing_types {
             Some(encode_entity_type(&entity.type_(), snapshot, type_manager)?)
         } else {
             None
@@ -124,7 +172,7 @@ pub fn encode_relation(
 ) -> Result<RelationResponse, Box<ConceptReadError>> {
     Ok(RelationResponse {
         iid: encode_iid(relation.iid()),
-        relation_type: if include_thing_types {
+        type_: if include_thing_types {
             Some(encode_relation_type(&relation.type_(), snapshot, type_manager)?)
         } else {
             None
@@ -142,7 +190,7 @@ pub fn encode_attribute(
     Ok(AttributeResponse {
         iid: encode_iid(attribute.iid()),
         value: Some(encode_value(attribute.get_value(snapshot, thing_manager)?)),
-        attribute_type: if include_thing_types {
+        type_: if include_thing_types {
             Some(encode_attribute_type(&attribute.type_(), snapshot, type_manager)?)
         } else {
             None

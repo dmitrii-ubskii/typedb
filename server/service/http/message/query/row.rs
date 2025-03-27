@@ -16,11 +16,6 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::service::http::message::query::concept::{encode_thing_concept, encode_type_concept, encode_value};
 
-#[derive(Serialize)]
-pub struct RowEntryResponse {
-    value_type: String,
-}
-
 pub fn encode_row(
     row: MaybeOwnedRow<'_>,
     columns: &[(String, VariablePosition)],

@@ -8,7 +8,7 @@ use axum::{
     extract::FromRequestParts,
     response::{IntoResponse, Response},
 };
-use http::{request::Parts, StatusCode};
+use http::request::Parts;
 use serde::Deserialize;
 
 use crate::{authentication::Accessor, service::http::error::HTTPServiceError};

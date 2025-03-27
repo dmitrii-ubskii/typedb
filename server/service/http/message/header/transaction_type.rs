@@ -8,19 +8,13 @@ use std::{fmt, iter};
 use axum_extra::headers::{Error as HeadersError, Header};
 use http::{HeaderName, HeaderValue};
 
-use crate::service::http::message::header::{
-    constants::{APPLICATION_JSON, DATABASE_HEADER, READ, SCHEMA, TEXT_PLAIN, TRANSACTION_TYPE_HEADER, WRITE},
-    content_type::ContentType,
-    decode_single,
+use crate::service::{
+    http::message::header::{
+        constants::{READ, SCHEMA, TRANSACTION_TYPE_HEADER, WRITE},
+        decode_single,
+    },
+    TransactionType,
 };
-
-// TODO: Merge with serivce/transaction_type
-#[derive(Debug, Clone, Copy, Hash, Ord, PartialOrd, PartialEq, Eq)]
-pub enum TransactionType {
-    Schema,
-    Write,
-    Read,
-}
 
 impl Header for TransactionType {
     fn name() -> &'static HeaderName {

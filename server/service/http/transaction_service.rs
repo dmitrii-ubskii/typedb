@@ -87,14 +87,17 @@ use uuid::Uuid;
 use crate::service::{
     http::{
         error::HTTPServiceError,
-        message::query::{document::encode_document, row::encode_row},
+        message::query::{
+            document::encode_document, encode_query_documents_answer, encode_query_ok_answer, encode_query_rows_answer,
+            row::encode_row,
+        },
     },
     transaction_service::{
         execute_schema_query, execute_write_query_in, execute_write_query_in_schema, execute_write_query_in_write,
-        is_write_pipeline, prepare_read_query_in, with_readable_transaction, QueryType, StreamQueryOutputDescriptor,
-        Transaction, TransactionServiceError, TransactionType, WriteQueryBatchAnswer, WriteQueryDocumentsAnswer,
-        TRANSACTION_REQUEST_BUFFER_SIZE,
+        is_write_pipeline, prepare_read_query_in, with_readable_transaction, StreamQueryOutputDescriptor, Transaction,
+        TransactionServiceError, WriteQueryBatchAnswer, WriteQueryDocumentsAnswer, TRANSACTION_REQUEST_BUFFER_SIZE,
     },
+    QueryType, TransactionType,
 };
 
 macro_rules! respond_error_and_return_break {
@@ -138,7 +141,7 @@ impl Debug for TransactionResponder {
     }
 }
 
-fn respond_query_response(responder: TransactionResponder, response: QueryResponse) -> Result<(), TransactionResponse> {
+fn respond_query_response(responder: TransactionResponder, response: QueryAnswer) -> Result<(), TransactionResponse> {
     respond_transaction_response(responder, TransactionResponse::Query(response))
 }
 
@@ -182,7 +185,7 @@ pub(crate) struct TransactionService {
 #[derive(Debug)]
 pub(crate) enum TransactionResponse {
     Ok,
-    Query(QueryResponse),
+    Query(QueryAnswer),
     Err(TransactionServiceError),
 }
 
@@ -197,29 +200,29 @@ impl IntoResponse for TransactionResponse {
 }
 
 #[derive(Debug)]
-pub(crate) enum QueryResponse {
+pub(crate) enum QueryAnswer {
     ResOk(QueryType),
     ResRows((QueryType, Vec<serde_json::Value>)),
     ResDocuments((QueryType, Vec<serde_json::Value>)),
 }
 
-impl QueryResponse {
+impl QueryAnswer {
     pub(crate) fn query_type(&self) -> QueryType {
         match self {
-            QueryResponse::ResOk(query_type) => *query_type,
-            QueryResponse::ResRows((query_type, _)) => *query_type,
-            QueryResponse::ResDocuments((query_type, _)) => *query_type,
+            QueryAnswer::ResOk(query_type) => *query_type,
+            QueryAnswer::ResRows((query_type, _)) => *query_type,
+            QueryAnswer::ResDocuments((query_type, _)) => *query_type,
         }
     }
 }
 
-impl IntoResponse for QueryResponse {
+impl IntoResponse for QueryAnswer {
     fn into_response(self) -> Response {
         match self {
-            QueryResponse::ResOk(query_type) => Json(json!({ "query_type": query_type })),
-            QueryResponse::ResRows((query_type, rows)) => Json(json!({ "query_type": query_type, "data": rows })),
-            QueryResponse::ResDocuments((query_type, documents)) => {
-                Json(json!({ "query_type": query_type, "data": documents }))
+            QueryAnswer::ResOk(query_type) => Json(json!(encode_query_ok_answer(query_type))),
+            QueryAnswer::ResRows((query_type, rows)) => Json(json!(encode_query_rows_answer(query_type, rows))),
+            QueryAnswer::ResDocuments((query_type, documents)) => {
+                Json(json!(encode_query_documents_answer(query_type, documents)))
             }
         }
         .into_response()
@@ -828,7 +831,7 @@ impl TransactionService {
                 }
             }
         }
-        match respond_query_response(responder, QueryResponse::ResRows((QueryType::Write, result))) {
+        match respond_query_response(responder, QueryAnswer::ResRows((QueryType::Write, result))) {
             Ok(_) => Continue(()),
             Err(_) => Break(()),
         }
@@ -863,7 +866,7 @@ impl TransactionService {
                 }
             }
         }
-        match respond_query_response(responder, QueryResponse::ResDocuments((QueryType::Write, result))) {
+        match respond_query_response(responder, QueryAnswer::ResDocuments((QueryType::Write, result))) {
             Ok(_) => Continue(()),
             Err(_) => Break(()),
         }
@@ -961,7 +964,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionResponse::Query(QueryResponse::ResDocuments((QueryType::Read, result)))
+                TransactionResponse::Query(QueryAnswer::ResDocuments((QueryType::Read, result)))
             );
             context.profile
         } else {
@@ -1006,7 +1009,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionResponse::Query(QueryResponse::ResRows((QueryType::Read, result)))
+                TransactionResponse::Query(QueryAnswer::ResRows((QueryType::Read, result)))
             );
             context.profile
         };

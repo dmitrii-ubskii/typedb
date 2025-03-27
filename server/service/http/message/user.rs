@@ -29,7 +29,7 @@ pub(crate) struct UpdateUserPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct UsersResponse {
     pub users: Vec<UserResponse>,
 }
@@ -39,7 +39,7 @@ pub(crate) fn encode_users(users: Vec<User>) -> UsersResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub username: String,
 }
