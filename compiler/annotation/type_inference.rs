@@ -1594,5 +1594,6 @@ pub mod tests {
         };
 
         assert_eq!(expected_graph, graph);
+        compile_error!("I want to prune out all VertexAnnotations that don't match the variable's categories.")
     }
 }
