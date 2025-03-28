@@ -209,7 +209,12 @@ pub async fn transactions_query(
     Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 
-pub async fn query(context: &HttpContext, database_name: &str, transaction_type: &str, query: &str) -> Result<QueryAnswerResponse, HttpBehaviourTestError> {
+pub async fn query(
+    context: &HttpContext,
+    database_name: &str,
+    transaction_type: &str,
+    query: &str,
+) -> Result<QueryAnswerResponse, HttpBehaviourTestError> {
     let url = format!("{}/query", Context::default_versioned_endpoint());
     let json_body = json!({
         "databaseName": database_name,

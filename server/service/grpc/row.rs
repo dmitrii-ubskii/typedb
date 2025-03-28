@@ -35,6 +35,8 @@ pub(crate) fn encode_row_entry(
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
 ) -> Result<typedb_protocol::row_entry::Entry, Box<ConceptReadError>> {
+    // TODO: Expose as query options
+    let include_instance_types = true;
     match variable_value {
         VariableValue::Empty => Ok(typedb_protocol::row_entry::Entry::Empty(typedb_protocol::row_entry::Empty {})),
         VariableValue::Type(type_) => {
@@ -45,13 +47,19 @@ pub(crate) fn encode_row_entry(
             snapshot,
             type_manager,
             thing_manager,
-            true,
+            include_instance_types,
         )?)),
         VariableValue::Value(value) => Ok(typedb_protocol::row_entry::Entry::Value(encode_value(value.as_reference()))),
         VariableValue::ThingList(thing_list) => {
             let mut encoded = Vec::with_capacity(thing_list.len());
             for thing in thing_list.iter() {
-                encoded.push(encode_thing_concept(thing, snapshot, type_manager, thing_manager, true)?);
+                encoded.push(encode_thing_concept(
+                    thing,
+                    snapshot,
+                    type_manager,
+                    thing_manager,
+                    include_instance_types,
+                )?);
             }
             Ok(typedb_protocol::row_entry::Entry::ConceptList(typedb_protocol::row_entry::ConceptList {
                 concepts: encoded,

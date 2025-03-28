@@ -48,5 +48,5 @@ pub(crate) fn encode_query_documents_answer(
     query_type: QueryType,
     documents: Vec<serde_json::Value>,
 ) -> QueryAnswerResponse {
-    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptDocuments,answers: Some(documents) }
+    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptDocuments, answers: Some(documents) }
 }

@@ -79,7 +79,8 @@ serializable_response! {
     pub struct AttributeResponse {
         kind = "attribute",
         pub iid: String => "iid",
-        pub value: ValueResponse => "value", // TODO: Flatten it
+        pub value: serde_json::Value => "value",
+        pub value_type: String => "valueType",
         pub type_: Option<AttributeTypeResponse> => "type",
     }
 }
@@ -126,15 +127,15 @@ pub fn encode_thing_concept(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
-    include_thing_types: bool,
+    include_instance_types: bool,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
     let response = match thing {
         Thing::Entity(entity) => {
-            serde_json::to_value(encode_entity(entity, snapshot, type_manager, include_thing_types)?)
+            serde_json::to_value(encode_entity(entity, snapshot, type_manager, include_instance_types)?)
                 .expect("Expected json value conversion")
         }
         Thing::Relation(relation) => {
-            serde_json::to_value(encode_relation(relation, snapshot, type_manager, include_thing_types)?)
+            serde_json::to_value(encode_relation(relation, snapshot, type_manager, include_instance_types)?)
                 .expect("Expected json value conversion")
         }
         Thing::Attribute(attribute) => serde_json::to_value(encode_attribute(
@@ -142,7 +143,7 @@ pub fn encode_thing_concept(
             snapshot,
             type_manager,
             thing_manager,
-            include_thing_types,
+            include_instance_types,
         )?)
         .expect("Expected json value conversion"),
     };
@@ -153,11 +154,11 @@ pub fn encode_entity(
     entity: &Entity,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    include_thing_types: bool,
+    include_instance_types: bool,
 ) -> Result<EntityResponse, Box<ConceptReadError>> {
     Ok(EntityResponse {
         iid: encode_iid(entity.iid()),
-        type_: if include_thing_types {
+        type_: if include_instance_types {
             Some(encode_entity_type(&entity.type_(), snapshot, type_manager)?)
         } else {
             None
@@ -169,11 +170,11 @@ pub fn encode_relation(
     relation: &Relation,
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
-    include_thing_types: bool,
+    include_instance_types: bool,
 ) -> Result<RelationResponse, Box<ConceptReadError>> {
     Ok(RelationResponse {
         iid: encode_iid(relation.iid()),
-        type_: if include_thing_types {
+        type_: if include_instance_types {
             Some(encode_relation_type(&relation.type_(), snapshot, type_manager)?)
         } else {
             None
@@ -186,12 +187,14 @@ pub fn encode_attribute(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
-    include_thing_types: bool,
+    include_instance_types: bool,
 ) -> Result<AttributeResponse, Box<ConceptReadError>> {
+    let value = attribute.get_value(snapshot, thing_manager)?;
     Ok(AttributeResponse {
         iid: encode_iid(attribute.iid()),
-        value: encode_value(attribute.get_value(snapshot, thing_manager)?),
-        type_: if include_thing_types {
+        value_type: encode_value_value_type(&value),
+        value: encode_value_value(value),
+        type_: if include_instance_types {
             Some(encode_attribute_type(&attribute.type_(), snapshot, type_manager)?)
         } else {
             None
@@ -266,8 +269,16 @@ pub fn encode_role_type(
 }
 
 pub fn encode_value(value: Value<'_>) -> ValueResponse {
-    let value_type = value.value_type().to_string();
-    let value = match value {
+    let value_type = encode_value_value_type(&value);
+    ValueResponse { value: encode_value_value(value), value_type }
+}
+
+pub fn encode_value_value_type(value: &Value<'_>) -> String {
+    value.value_type().to_string()
+}
+
+pub fn encode_value_value(value: Value<'_>) -> serde_json::Value {
+    match value {
         Value::Boolean(bool) => json!(bool),
         Value::Integer(integer) => json!(integer),
         Value::Double(double) => json!(double),
@@ -279,8 +290,7 @@ pub fn encode_value(value: Value<'_>) -> ValueResponse {
             json!(value.to_string())
         }
         Value::Struct(_) => unimplemented_feature!(Structs),
-    };
-    ValueResponse { value, value_type }
+    }
 }
 
 pub fn encode_value_type(

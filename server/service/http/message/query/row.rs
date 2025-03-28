@@ -39,17 +39,25 @@ pub fn encode_row_entry(
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
+    // TODO: Expose as query options
+    let include_instance_types = true;
     match variable_value {
         VariableValue::Empty => Ok(json!(serde_json::Value::Null)),
         VariableValue::Type(type_) => Ok(json!(encode_type_concept(type_, snapshot, type_manager)?)),
         VariableValue::Thing(thing) => {
-            Ok(json!(encode_thing_concept(thing, snapshot, type_manager, thing_manager, true)?))
+            Ok(json!(encode_thing_concept(thing, snapshot, type_manager, thing_manager, include_instance_types)?))
         }
         VariableValue::Value(value) => Ok(json!(encode_value(value.as_reference()))),
         VariableValue::ThingList(thing_list) => {
             let mut encoded = Vec::with_capacity(thing_list.len());
             for thing in thing_list.iter() {
-                encoded.push(encode_thing_concept(thing, snapshot, type_manager, thing_manager, true)?);
+                encoded.push(encode_thing_concept(
+                    thing,
+                    snapshot,
+                    type_manager,
+                    thing_manager,
+                    include_instance_types,
+                )?);
             }
             Ok(json!(encoded))
         }

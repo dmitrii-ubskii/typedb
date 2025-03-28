@@ -37,9 +37,9 @@ fn encode_node(
     parameters: &ParameterRegistry,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
     match node {
-        DocumentNode::List(list) => Ok(json!(encode_list(list, snapshot, type_manager, thing_manager, parameters,)?)),
-        DocumentNode::Map(map) => Ok(json!(encode_map(map, snapshot, type_manager, thing_manager, parameters,)?)),
-        DocumentNode::Leaf(leaf) => Ok(json!(encode_leaf(leaf, snapshot, type_manager, thing_manager,)?)),
+        DocumentNode::List(list) => Ok(json!(encode_list(list, snapshot, type_manager, thing_manager, parameters)?)),
+        DocumentNode::Map(map) => Ok(json!(encode_map(map, snapshot, type_manager, thing_manager, parameters)?)),
+        DocumentNode::Leaf(leaf) => Ok(json!(encode_leaf(leaf, snapshot, type_manager, thing_manager)?)),
     }
 }
 
@@ -98,16 +98,16 @@ fn encode_leaf(
         DocumentLeaf::Empty => Ok(serde_json::Value::Null),
         DocumentLeaf::Concept(concept) => Ok(json!(match concept {
             Concept::Type(Type::Entity(entity_type)) => {
-                json!(encode_entity_type(&entity_type, snapshot, type_manager,)?)
+                json!(encode_entity_type(&entity_type, snapshot, type_manager)?)
             }
             Concept::Type(Type::Relation(relation_type)) => {
-                json!(encode_relation_type(&relation_type, snapshot, type_manager,)?)
+                json!(encode_relation_type(&relation_type, snapshot, type_manager)?)
             }
             Concept::Type(Type::Attribute(attribute_type)) => {
-                json!(encode_attribute_type(&attribute_type, snapshot, type_manager,)?)
+                json!(encode_attribute_type(&attribute_type, snapshot, type_manager)?)
             }
             Concept::Type(Type::RoleType(role_type)) => {
-                json!(encode_role_type(&role_type, snapshot, type_manager,)?)
+                json!(encode_role_type(&role_type, snapshot, type_manager)?)
             }
             Concept::Thing(Thing::Entity(entity)) => {
                 unreachable!()
@@ -116,7 +116,7 @@ fn encode_leaf(
                 unreachable!()
             }
             Concept::Thing(Thing::Attribute(attribute)) => {
-                json!(encode_attribute(&attribute, snapshot, type_manager, thing_manager, false,)?)
+                json!(encode_attribute(&attribute, snapshot, type_manager, thing_manager, false)?)
             }
             Concept::Value(value) => {
                 json!(encode_value(value))
