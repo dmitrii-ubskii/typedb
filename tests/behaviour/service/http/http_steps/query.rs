@@ -24,34 +24,29 @@ use futures::{future::join_all, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
+use server::service::{http::message::query::QueryAnswerResponse, AnswerType, QueryType};
 
-use crate::{assert_err, generic_step, message::transactions_query, Context, HttpBehaviourTestError};
+use crate::{
+    assert_err, generic_step,
+    message::transactions_query,
+    params::{IsByVarIndex, IsOrNot, QueryAnswerType},
+    util::iter_table,
+    Context, HttpBehaviourTestError,
+};
 
-//
-// fn get_collected_column_names(concept_row: &ConceptRow) -> Vec<String> {
-//     concept_row.get_column_names().into_iter().cloned().collect()
-// }
-//
-// async fn get_answer_rows_var(
-//     context: &mut Context,
-//     index: usize,
-//     is_by_var_index: params::IsByVarIndex,
-//     var: params::Var,
-// ) -> TypeDBResult<Option<&Concept>> {
-//     let concept_row = context.get_collected_answer_row_index(index).await;
-//     match is_by_var_index {
-//         params::IsByVarIndex::Is => {
-//             let collected_column_names = get_collected_column_names(concept_row);
-//             let position = collected_column_names.iter().find_position(|name| name == &&var.name).map(|(pos, _)| pos);
-//             match position {
-//                 None => Err(ConceptError::UnavailableRowVariable { variable: var.name.to_string() }.into()),
-//                 Some(position) => concept_row.get_index(position),
-//             }
-//         }
-//         params::IsByVarIndex::IsNot => concept_row.get(&var.name),
-//     }
-// }
-//
+fn get_answers_column_names(answer: &serde_json::Value) -> Vec<String> {
+    if let serde_json::Value::Object(answers) = answer {
+        answers.keys().cloned().collect()
+    } else {
+        panic!("No object answers")
+    }
+}
+
+async fn get_answer_rows_var(context: &mut Context, index: usize, var: params::Var) -> Option<&serde_json::Value> {
+    let concept_row = context.get_collected_answer_row_index(index);
+    concept_row.get(&var.name)
+}
+
 // fn check_concept_is_type(concept: &Concept, is_type: params::Boolean) {
 //     let concept_category = concept.get_category();
 //     let actual_is_type = concept_category == ConceptCategory::EntityType
@@ -119,19 +114,19 @@ use crate::{assert_err, generic_step, message::transactions_query, Context, Http
 //     check_boolean!(is_value, concept.is_value());
 // }
 //
-// fn check_concept_is_kind(concept: &Concept, concept_kind: params::ConceptKind, is_kind: params::Boolean) {
+// fn check_concept_is_kind(concept: &Concept, concept_kind: ConceptKind, is_kind: params::Boolean) {
 //     match concept_kind {
-//         params::ConceptKind::Concept => (),
-//         params::ConceptKind::Type => check_concept_is_type(concept, is_kind),
-//         params::ConceptKind::Instance => check_concept_is_instance(concept, is_kind),
-//         params::ConceptKind::EntityType => check_concept_is_entity_type(concept, is_kind),
-//         params::ConceptKind::RelationType => check_concept_is_relation_type(concept, is_kind),
-//         params::ConceptKind::AttributeType => check_concept_is_attribute_type(concept, is_kind),
-//         params::ConceptKind::RoleType => check_concept_is_role_type(concept, is_kind),
-//         params::ConceptKind::Entity => check_concept_is_entity(concept, is_kind),
-//         params::ConceptKind::Relation => check_concept_is_relation(concept, is_kind),
-//         params::ConceptKind::Attribute => check_concept_is_attribute(concept, is_kind),
-//         params::ConceptKind::Value => check_concept_is_value(concept, is_kind),
+//         ConceptKind::Concept => (),
+//         ConceptKind::Type => check_concept_is_type(concept, is_kind),
+//         ConceptKind::Instance => check_concept_is_instance(concept, is_kind),
+//         ConceptKind::EntityType => check_concept_is_entity_type(concept, is_kind),
+//         ConceptKind::RelationType => check_concept_is_relation_type(concept, is_kind),
+//         ConceptKind::AttributeType => check_concept_is_attribute_type(concept, is_kind),
+//         ConceptKind::RoleType => check_concept_is_role_type(concept, is_kind),
+//         ConceptKind::Entity => check_concept_is_entity(concept, is_kind),
+//         ConceptKind::Relation => check_concept_is_relation(concept, is_kind),
+//         ConceptKind::Attribute => check_concept_is_attribute(concept, is_kind),
+//         ConceptKind::Value => check_concept_is_value(concept, is_kind),
 //     }
 // }
 //
@@ -189,69 +184,58 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 //
 //     context.set_concurrent_answers(answers);
 // }
-//
-// #[apply(generic_step)]
-// #[step(expr = "answer type {is_or_not}: {query_answer_type}")]
-// pub async fn answer_type_is(
-//     context: &mut Context,
-//     is_or_not: params::IsOrNot,
-//     query_answer_type: params::QueryAnswerType,
-// ) {
-//     match query_answer_type {
-//         params::QueryAnswerType::Ok => is_or_not.check(context.answer.as_ref().unwrap().is_ok()),
-//         params::QueryAnswerType::ConceptRows => is_or_not.check(context.answer.as_ref().unwrap().is_row_stream()),
-//         params::QueryAnswerType::ConceptDocuments => {
-//             is_or_not.check(context.answer.as_ref().unwrap().is_document_stream())
-//         }
-//     }
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = "answer unwraps as {query_answer_type}{may_error}")]
-// pub async fn answer_unwraps_as(
-//     context: &mut Context,
-//     query_answer_type: params::QueryAnswerType,
-//     may_error: params::MayError,
-// ) {
-//     let expect = !may_error.expects_error();
-//     match context.answer.as_ref().unwrap() {
-//         QueryAnswer::Ok(_) => {
-//             assert_eq!(
-//                 expect,
-//                 matches!(query_answer_type, params::QueryAnswerType::Ok),
-//                 "Expected {expect} {query_answer_type}"
-//             )
-//         }
-//         QueryAnswer::ConceptRowStream(_, _) => {
-//             assert_eq!(
-//                 expect,
-//                 matches!(query_answer_type, params::QueryAnswerType::ConceptRows),
-//                 "Expected {expect} {query_answer_type}"
-//             )
-//         }
-//         QueryAnswer::ConceptDocumentStream(_, _) => {
-//             assert_eq!(
-//                 expect,
-//                 matches!(query_answer_type, params::QueryAnswerType::ConceptDocuments),
-//                 "Expected {expect} {query_answer_type}"
-//             )
-//         }
-//     }
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = r"answer size is: {int}")]
-// pub async fn answer_size_is(context: &mut Context, size: usize) {
-//     let actual_size = match context.try_get_collected_rows().await {
-//         None => match context.try_get_collected_documents().await {
-//             None => panic!("No collected answer to check its size"),
-//             Some(documents) => documents.len(),
-//         },
-//         Some(rows) => rows.len(),
-//     };
-//     assert_eq!(actual_size, size, "Expected {size} answers, got {actual_size}");
-// }
-//
+
+#[apply(generic_step)]
+#[step(expr = "answer type {is_or_not}: {query_answer_type}")]
+pub async fn answer_type_is(context: &mut Context, is_or_not: IsOrNot, query_answer_type: QueryAnswerType) {
+    match query_answer_type {
+        QueryAnswerType::Ok => is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::Ok)),
+        QueryAnswerType::ConceptRows => {
+            is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::ConceptRows))
+        }
+        QueryAnswerType::ConceptDocuments => {
+            is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::ConceptDocuments))
+        }
+    }
+}
+
+#[apply(generic_step)]
+#[step(expr = "answer unwraps as {query_answer_type}{may_error}")]
+pub async fn answer_unwraps_as(context: &mut Context, query_answer_type: QueryAnswerType, may_error: params::MayError) {
+    let expect = !may_error.expects_error();
+    let response = context.answer.as_ref().unwrap();
+    match response.answer_type {
+        AnswerType::Ok => {
+            assert_eq!(
+                expect,
+                matches!(query_answer_type, QueryAnswerType::Ok),
+                "Expected {expect} {query_answer_type}"
+            )
+        }
+        AnswerType::ConceptRows => {
+            assert_eq!(
+                expect,
+                matches!(query_answer_type, QueryAnswerType::ConceptRows),
+                "Expected {expect} {query_answer_type}"
+            )
+        }
+        AnswerType::ConceptDocuments => {
+            assert_eq!(
+                expect,
+                matches!(query_answer_type, QueryAnswerType::ConceptDocuments),
+                "Expected {expect} {query_answer_type}"
+            )
+        }
+    }
+}
+
+#[apply(generic_step)]
+#[step(expr = r"answer size is: {int}")]
+pub async fn answer_size_is(context: &mut Context, size: usize) {
+    let actual_size = context.answer.as_ref().unwrap().answers.as_ref().unwrap().len();
+    assert_eq!(actual_size, size, "Expected {size} answers, got {actual_size}");
+}
+
 // #[apply(generic_step)]
 // #[step(expr = "concurrently process {int} row(s) from answers{may_error}")]
 // pub async fn concurrently_process_rows_from_answers(context: &mut Context, count: usize, may_error: params::MayError) {
@@ -282,45 +266,47 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 //
 //     join_all(jobs).await;
 // }
-//
-// #[apply(generic_step)]
-// #[step(expr = r"answer column names are:")]
-// pub async fn answer_column_names_are(context: &mut Context, step: &Step) {
-//     let actual_column_names: Vec<String> =
-//         get_collected_column_names(context.get_collected_answer_row_index(0).await).into_iter().sorted().collect();
-//     let expected_column_names: Vec<String> = iter_table(step).sorted().map(|s| s.to_string()).collect();
-//     assert_eq!(actual_column_names, expected_column_names);
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = r"answer query type {is_or_not}: {query_type}")]
-// pub async fn answer_query_type_is(context: &mut Context, is_or_not: params::IsOrNot, query_type: params::QueryType) {
-//     let real_query_type = context.get_answer_query_type().await.unwrap();
-//     is_or_not.compare(real_query_type, query_type.query_type);
-// }
-//
-// #[apply(generic_step)]
-// #[step(expr = r"answer get row\({int}\) query type {is_or_not}: {query_type}")]
-// pub async fn answer_get_row_query_type_is(
-//     context: &mut Context,
-//     index: usize,
-//     is_or_not: params::IsOrNot,
-//     query_type: params::QueryType,
-// ) {
-//     let real_query_type = context.get_collected_answer_row_index(index).await.get_query_type();
-//     is_or_not.compare(real_query_type, query_type.query_type);
-// }
-//
+
+#[apply(generic_step)]
+#[step(expr = r"answer column names are:")]
+pub async fn answer_column_names_are(context: &mut Context, step: &Step) {
+    let actual_column_names: Vec<String> =
+        get_answers_column_names(context.get_collected_answer_row_index(0)).into_iter().sorted().collect();
+    let expected_column_names: Vec<String> = iter_table(step).sorted().map(|s| s.to_string()).collect();
+    assert_eq!(actual_column_names, expected_column_names);
+}
+
+#[apply(generic_step)]
+#[step(expr = r"answer query type {is_or_not}: {query_type}")]
+pub async fn answer_query_type_is(context: &mut Context, is_or_not: IsOrNot, query_type: crate::params::QueryType) {
+    let real_query_type = context.get_answer_query_type().unwrap();
+    is_or_not.compare(real_query_type, query_type.into());
+}
+
+#[apply(generic_step)]
+#[step(expr = r"answer get row\({int}\) query type {is_or_not}: {query_type}")]
+pub async fn answer_get_row_query_type_is(
+    context: &mut Context,
+    index: usize,
+    is_or_not: IsOrNot,
+    query_type: crate::params::QueryType,
+) {
+    // no-op
+}
+
 // #[apply(generic_step)]
 // #[step(expr = r"answer get row\({int}\) get variable{is_by_var_index}\({var}\){may_error}")]
 // pub async fn answer_get_row_get_variable(
 //     context: &mut Context,
 //     index: usize,
-//     is_by_var_index: params::IsByVarIndex,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     may_error: params::MayError,
 // ) {
-//     may_error.check(get_answer_rows_var(context, index, is_by_var_index, var).await);
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     may_error.check(get_answer_rows_var(context, index, var).await);
 // }
 //
 // #[apply(generic_step)]
@@ -328,11 +314,14 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_empty(
 //     context: &mut Context,
 //     index: usize,
-//     is_by_var_index: params::IsByVarIndex,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
-//     is_or_not.compare(get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap(), None);
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     is_or_not.compare(get_answer_rows_var(context, index, var), None);
 // }
 //
 // #[apply(generic_step)]
@@ -353,7 +342,7 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 //     context: &mut Context,
 //     index: usize,
 //     variable_index: usize,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
 //     let concept_row = context.get_collected_answer_row_index(index).await;
 //     is_or_not.compare(concept_row.get_index(variable_index).unwrap(), None);
@@ -364,12 +353,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_as(
 //     context: &mut Context,
 //     index: usize,
-//     is_by_var_index: params::IsByVarIndex,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     kind: params::ConceptKind,
+//     kind: ConceptKind,
 //     may_error: params::MayError,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     may_error.check((|| {
 //         kind.matches_concept(concept).then(|| ()).ok_or(BehaviourTestOptionalError::InvalidConceptConversion)
 //     })());
@@ -380,13 +372,16 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_kind(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     checked_kind: params::ConceptKind,
+//     checked_kind: ConceptKind,
 //     is_kind: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     // Can be sometimes redundant (e.g. get type(p) is type: true), but is a way to emulate unwrapping
 //     // in other languages!
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
@@ -400,13 +395,16 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_type_is_kind(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     checked_kind: params::ConceptKind,
+//     checked_kind: ConceptKind,
 //     is_kind: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     let type_ = concept_get_type(concept);
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_concept_is_kind(&type_, checked_kind, is_kind);
@@ -417,12 +415,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_label_is_none(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     is_or_not.check_none(&concept.try_get_label());
 // }
@@ -432,12 +433,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_label(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     label: String,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     assert_eq!(label.as_str(), concept.try_get_label().unwrap());
 // }
@@ -447,12 +451,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_label(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     label: String,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     assert_eq!(label.as_str(), concept.get_label());
 // }
@@ -462,12 +469,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_type_get_label(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     label: String,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     let type_ = concept_get_type(concept);
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     assert_eq!(label.as_str(), type_.get_label());
@@ -478,12 +488,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_iid_exists(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     contains_or_doesnt: params::ContainsOrDoesnt,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     contains_or_doesnt.check(&concept.try_get_iid(), &format!("iid for concept {}", concept.get_label()));
 // }
@@ -493,13 +506,16 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_iid_is_none(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
 //     // Basically the same as non-try version in Rust, but can differ in other drivers
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     is_or_not.check_none(&concept.try_get_iid());
 // }
@@ -511,12 +527,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_value_type_is_none(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     is_or_not.check_none(&concept.try_get_value_type());
 // }
@@ -527,12 +546,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_value_type(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     value_type: String,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     assert_eq!(value_type.as_str(), concept.try_get_value_label().unwrap_or("none"));
 //     assert_eq!(
@@ -546,12 +568,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_type_get_value_type(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     value_type: String,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     let type_ = concept_get_type(concept);
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     assert_eq!(value_type.as_str(), type_.try_get_value_label().unwrap_or("none"));
@@ -566,12 +591,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_value_is_none(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     is_or_not.check_none(&concept.try_get_value());
 // }
@@ -584,13 +612,16 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_value(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 //     value: params::Value,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     let actual_value = concept.try_get_value().expect("Value is expected");
 //     let value_type = actual_value.get_type();
@@ -612,15 +643,18 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_value_get_specific_value(
 //     context: &mut Context,
 //     index: usize,
-//     is_by_var_index: params::IsByVarIndex,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 //     value: params::Value,
 // ) {
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
 //     answer_get_row_get_variable_get_value(
 //         context,
 //         index,
-//         params::ConceptKind::Value,
+//         ConceptKind::Value,
 //         is_by_var_index,
 //         var,
 //         is_or_not,
@@ -635,14 +669,17 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_value_of_type(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     value_type: params::ValueType,
 //     may_error: params::MayError,
 // ) {
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
 //     use BehaviourTestOptionalError::InvalidValueRetrieval;
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     let type_name = value_type.value_type.name().to_string();
 //     may_error.check(match value_type.value_type {
@@ -666,13 +703,16 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_try_get_specific_value_is_none(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     value_type: params::ValueType,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     is_or_not.check_none(&concept.try_get_value());
 // }
@@ -687,14 +727,17 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_get_specific_value(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     value_type: params::ValueType,
-//     is_or_not: params::IsOrNot,
+//     is_or_not: IsOrNot,
 //     value: params::Value,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     let actual_value = concept.try_get_value().expect("Value is expected");
 //     let expected_value = value.into_typedb(value_type.value_type.clone());
@@ -778,12 +821,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_boolean(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_boolean: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_boolean, concept.is_boolean());
 // }
@@ -793,12 +839,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_integer(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_integer: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_integer, concept.is_integer());
 // }
@@ -808,12 +857,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_decimal(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_decimal: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_decimal, concept.is_decimal());
 // }
@@ -823,12 +875,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_double(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_double: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_double, concept.is_double());
 // }
@@ -838,12 +893,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_string(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_string: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_string, concept.is_string());
 // }
@@ -853,12 +911,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_date(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_date: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_date, concept.is_date());
 // }
@@ -868,12 +929,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_datetime(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_datetime: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_datetime, concept.is_datetime());
 // }
@@ -883,12 +947,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_datetime_tz(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_datetime_tz: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_datetime_tz, concept.is_datetime_tz());
 // }
@@ -898,12 +965,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_duration(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_duration: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_duration, concept.is_duration());
 // }
@@ -913,12 +983,15 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 // pub async fn answer_get_row_get_variable_is_struct(
 //     context: &mut Context,
 //     index: usize,
-//     var_kind: params::ConceptKind,
-//     is_by_var_index: params::IsByVarIndex,
+//     var_kind: ConceptKind,
+//     is_by_var_index: IsByVarIndex,
 //     var: params::Var,
 //     is_struct: params::Boolean,
 // ) {
-//     let concept = get_answer_rows_var(context, index, is_by_var_index, var).await.unwrap().unwrap();
+//     if matches!(is_by_var_index, IsByVarIndex::Is) {
+//         return; // http does not have indices
+//     }
+//     let concept = get_answer_rows_var(context, index, var).await.unwrap().unwrap();
 //     check_concept_is_kind(concept, var_kind, params::Boolean::True);
 //     check_boolean!(is_struct, concept.is_struct());
 // }

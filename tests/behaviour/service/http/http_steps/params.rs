@@ -19,7 +19,6 @@
 
 use std::{borrow::Borrow, convert::Infallible, fmt, str::FromStr};
 
-use chrono::{FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use cucumber::Parameter;
 
 #[derive(Clone, Debug, Default, Parameter)]
@@ -137,31 +136,71 @@ impl fmt::Display for QueryAnswerType {
     }
 }
 
-// #[derive(Debug, Parameter)]
-// #[param(
-//     name = "concept_kind",
-//     regex = "(concept|variable|type|instance|entity type|relation type|attribute type|role type|entity|relation|attribute|value)"
-// )]
-// pub(crate) enum ConceptKind {
-//     Concept,
-//     Type,
-//     Instance,
-//     EntityType,
-//     RelationType,
-//     AttributeType,
-//     RoleType,
-//     Entity,
-//     Relation,
-//     Attribute,
-//     Value,
-// }
-//
+#[derive(Debug, Clone, Copy, Parameter)]
+#[param(name = "query_type", regex = "(read|write|schema)")]
+pub(crate) enum QueryType {
+    Read,
+    Write,
+    Schema,
+}
+
+impl FromStr for QueryType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "read" => Self::Read,
+            "write" => Self::Write,
+            "schema" => Self::Schema,
+            invalid => return Err(format!("Invalid `QueryType`: {invalid}")),
+        })
+    }
+}
+
+impl fmt::Display for QueryType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueryType::Read => write!(f, "Read"),
+            QueryType::Write => write!(f, "Write"),
+            QueryType::Schema => write!(f, "Schema"),
+        }
+    }
+}
+
+impl Into<server::service::QueryType> for QueryType {
+    fn into(self) -> server::service::QueryType {
+        match self {
+            QueryType::Read => server::service::QueryType::Read,
+            QueryType::Write => server::service::QueryType::Write,
+            QueryType::Schema => server::service::QueryType::Schema,
+        }
+    }
+}
+
+#[derive(Debug, Parameter)]
+#[param(
+    name = "concept_kind",
+    regex = "(concept|variable|type|instance|entity type|relation type|attribute type|role type|entity|relation|attribute|value)"
+)]
+pub(crate) enum ConceptKind {
+    Concept,
+    Type,
+    Instance,
+    EntityType,
+    RelationType,
+    AttributeType,
+    RoleType,
+    Entity,
+    Relation,
+    Attribute,
+    Value,
+}
+
 // impl ConceptKind {
 //     pub(crate) fn matches_concept(&self, concept: &Concept) -> bool {
 //         match self {
 //             ConceptKind::Concept => true,
 //             ConceptKind::Type => match concept {
-//                 Concept::EntityType(_)
+//                 params::Concept::EntityType(_)
 //                 | Concept::RelationType(_)
 //                 | Concept::AttributeType(_)
 //                 | Concept::RoleType(_) => true,
@@ -182,41 +221,41 @@ impl fmt::Display for QueryAnswerType {
 //         }
 //     }
 // }
-//
-// impl FromStr for ConceptKind {
-//     type Err = String;
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         Ok(match s {
-//             "concept" | "variable" => Self::Concept,
-//             "type" => Self::Type,
-//             "instance" => Self::Instance,
-//             "entity type" => Self::EntityType,
-//             "relation type" => Self::RelationType,
-//             "attribute type" => Self::AttributeType,
-//             "role type" => Self::RoleType,
-//             "entity" => Self::Entity,
-//             "relation" => Self::Relation,
-//             "attribute" => Self::Attribute,
-//             "value" => Self::Value,
-//             invalid => return Err(format!("Invalid `ConceptKind`: {invalid}")),
-//         })
-//     }
-// }
-//
-// impl fmt::Display for ConceptKind {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Self::Concept => write!(f, "Concept"),
-//             Self::Type => write!(f, "Type"),
-//             Self::Instance => write!(f, "Instance"),
-//             Self::EntityType => write!(f, "EntityType"),
-//             Self::RelationType => write!(f, "RelationType"),
-//             Self::AttributeType => write!(f, "AttributeType"),
-//             Self::RoleType => write!(f, "RoleType"),
-//             Self::Entity => write!(f, "Entity"),
-//             Self::Relation => write!(f, "Relation"),
-//             Self::Attribute => write!(f, "Attribute"),
-//             Self::Value => write!(f, "Value"),
-//         }
-//     }
-// }
+
+impl FromStr for ConceptKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "concept" | "variable" => Self::Concept,
+            "type" => Self::Type,
+            "instance" => Self::Instance,
+            "entity type" => Self::EntityType,
+            "relation type" => Self::RelationType,
+            "attribute type" => Self::AttributeType,
+            "role type" => Self::RoleType,
+            "entity" => Self::Entity,
+            "relation" => Self::Relation,
+            "attribute" => Self::Attribute,
+            "value" => Self::Value,
+            invalid => return Err(format!("Invalid `ConceptKind`: {invalid}")),
+        })
+    }
+}
+
+impl fmt::Display for ConceptKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Concept => write!(f, "Concept"),
+            Self::Type => write!(f, "Type"),
+            Self::Instance => write!(f, "Instance"),
+            Self::EntityType => write!(f, "EntityType"),
+            Self::RelationType => write!(f, "RelationType"),
+            Self::AttributeType => write!(f, "AttributeType"),
+            Self::RoleType => write!(f, "RoleType"),
+            Self::Entity => write!(f, "Entity"),
+            Self::Relation => write!(f, "Relation"),
+            Self::Attribute => write!(f, "Attribute"),
+            Self::Value => write!(f, "Value"),
+        }
+    }
+}

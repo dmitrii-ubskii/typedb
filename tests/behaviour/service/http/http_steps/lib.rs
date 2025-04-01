@@ -112,9 +112,7 @@ pub struct Context {
     pub http_context: HttpContext,
     pub transaction_ids: VecDeque<String>,
     pub answer: Option<QueryAnswerResponse>,
-    pub answer_type: Option<AnswerType>,
-    pub answer_query_type: Option<QueryType>,
-    // pub collected_rows: Option<Vec<ConceptRow>>,
+    // pub collected_rows: Option<Vec<serde_json::Value>>,
     pub collected_documents: Option<Vec<serde_json::Value>>,
     pub concurrent_answers: Vec<String>,
     // pub concurrent_rows_streams: Option<Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>>>,
@@ -129,8 +127,6 @@ impl fmt::Debug for Context {
             .field("transaction_options", &self.transaction_options)
             .field("transactions", &self.transaction_ids)
             .field("answer", &self.answer)
-            .field("answer_type", &self.answer_type)
-            .field("answer_query_type", &self.answer_query_type)
             // .field("collected_rows", &self.collected_rows)
             .field("collected_documents", &self.collected_documents)
             .field("concurrent_answers", &self.concurrent_answers)
@@ -257,8 +253,6 @@ impl Context {
 
     pub async fn cleanup_answers(&mut self) {
         self.answer = None;
-        self.answer_type = None;
-        self.answer_query_type = None;
         // self.collected_rows = None;
         self.collected_documents = None;
     }
@@ -348,16 +342,16 @@ impl Context {
     //         Some(self.answer.take().unwrap().into_documents().map(|result| result.unwrap()).collect::<Vec<_>>().await);
     // }
 
-    pub async fn get_answer(&self) -> Option<&QueryAnswerResponse> {
+    pub fn get_answer(&self) -> Option<&QueryAnswerResponse> {
         self.answer.as_ref()
     }
 
-    pub async fn get_answer_query_type(&self) -> Option<&QueryType> {
-        self.answer_query_type.as_ref()
+    pub fn get_answer_query_type(&self) -> Option<QueryType> {
+        self.answer.as_ref().map(|answer| answer.query_type)
     }
 
-    pub async fn get_answer_type(&self) -> Option<&AnswerType> {
-        self.answer_type.as_ref()
+    pub fn get_answer_type(&self) -> Option<AnswerType> {
+        self.answer.as_ref().map(|answer| answer.answer_type)
     }
 
     // pub async fn try_get_collected_rows(&mut self) -> Option<&Vec<ConceptRow>> {
@@ -378,11 +372,10 @@ impl Context {
     //     self.try_get_collected_documents().await.unwrap()
     // }
 
-    // pub async fn get_collected_answer_row_index(&mut self, index: usize) -> &ConceptRow {
-    //     self.unwrap_answer_if_needed().await;
-    //     self.collected_rows.as_ref().unwrap().get(index).unwrap()
-    // }
-    //
+    pub fn get_collected_answer_row_index(&mut self, index: usize) -> &serde_json::Value {
+        self.answer.as_ref().unwrap().answers.as_ref().unwrap().get(index).unwrap()
+    }
+
     // pub async fn try_get_concurrent_rows_streams(
     //     &mut self,
     // ) -> Option<&mut Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>>> {
@@ -408,8 +401,6 @@ impl Default for Context {
             http_context: HttpContext { http_client: create_http_client(), auth_token: None },
             transaction_ids: VecDeque::new(),
             answer: None,
-            answer_type: None,
-            answer_query_type: None,
             // collected_rows: None,
             collected_documents: None,
             concurrent_answers: Vec::new(),
@@ -442,6 +433,7 @@ pub enum HttpBehaviourTestError {
     HttpError(http::Error),
     HyperError(hyper::Error),
     StatusError { code: StatusCode, message: String },
+    UnavailableRowVariable { variable: String },
 }
 
 impl fmt::Display for HttpBehaviourTestError {
@@ -453,6 +445,7 @@ impl fmt::Display for HttpBehaviourTestError {
             Self::HttpError(source) => write!(f, "Http error: {source}"),
             Self::HyperError(source) => write!(f, "Hyper error: {source}"),
             Self::StatusError { code, message } => write!(f, "Status Error {}: {}", code.as_u16(), message),
+            Self::UnavailableRowVariable { variable } => write!(f, "Unavailable row variable '{}'", variable),
         }
     }
 }
@@ -466,6 +459,7 @@ impl Error for HttpBehaviourTestError {
             Self::HttpError(error) => Some(error),
             Self::HyperError(error) => Some(error),
             Self::StatusError { .. } => None,
+            Self::UnavailableRowVariable { .. } => None,
         }
     }
 }

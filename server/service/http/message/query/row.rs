@@ -22,12 +22,14 @@ pub fn encode_row(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    include_instance_types: bool,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
     // TODO: multiplicity?
     let mut encoded_row = HashMap::with_capacity(columns.len());
     for (variable, position) in columns {
         let variable_value = row.get(*position);
-        let row_entry = encode_row_entry(variable_value, snapshot, type_manager, thing_manager)?;
+        let row_entry =
+            encode_row_entry(variable_value, snapshot, type_manager, thing_manager, include_instance_types)?;
         encoded_row.insert(variable, row_entry);
     }
     Ok(json!(encoded_row))
@@ -38,9 +40,8 @@ pub fn encode_row_entry(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    include_instance_types: bool,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
-    // TODO: Expose as query options
-    let include_instance_types = true;
     match variable_value {
         VariableValue::Empty => Ok(json!(serde_json::Value::Null)),
         VariableValue::Type(type_) => Ok(json!(encode_type_concept(type_, snapshot, type_manager)?)),

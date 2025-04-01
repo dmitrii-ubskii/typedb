@@ -18,12 +18,14 @@ pub(crate) fn encode_row(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    include_instance_types: bool,
 ) -> Result<typedb_protocol::ConceptRow, Box<ConceptReadError>> {
     // TODO: multiplicity?
     let mut encoded_row = Vec::with_capacity(columns.len());
     for (_, position) in columns {
         let variable_value = row.get(*position);
-        let row_entry = encode_row_entry(variable_value, snapshot, type_manager, thing_manager)?;
+        let row_entry =
+            encode_row_entry(variable_value, snapshot, type_manager, thing_manager, include_instance_types)?;
         encoded_row.push(typedb_protocol::RowEntry { entry: Some(row_entry) });
     }
     Ok(typedb_protocol::ConceptRow { row: encoded_row })
@@ -34,9 +36,8 @@ pub(crate) fn encode_row_entry(
     snapshot: &impl ReadableSnapshot,
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
+    include_instance_types: bool,
 ) -> Result<typedb_protocol::row_entry::Entry, Box<ConceptReadError>> {
-    // TODO: Expose as query options
-    let include_instance_types = true;
     match variable_value {
         VariableValue::Empty => Ok(typedb_protocol::row_entry::Entry::Empty(typedb_protocol::row_entry::Empty {})),
         VariableValue::Type(type_) => {

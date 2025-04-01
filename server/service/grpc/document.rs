@@ -12,6 +12,7 @@ use encoding::graph::type_::Kind;
 use executor::document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode};
 use ir::pipeline::ParameterRegistry;
 use itertools::Itertools;
+use resource::constants::server::DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::service::grpc::concept::{
@@ -166,7 +167,7 @@ fn encode_leaf(
                         snapshot,
                         type_manager,
                         thing_manager,
-                        false,
+                        DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH, // TODO: May it be affected by QueryOptions?
                     )?)
                 }
                 Concept::Value(value) => {

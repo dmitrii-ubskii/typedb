@@ -12,6 +12,7 @@ use encoding::graph::type_::Kind;
 use executor::document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode};
 use ir::pipeline::ParameterRegistry;
 use itertools::Itertools;
+use resource::constants::server::DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH;
 use serde_json::json;
 use storage::snapshot::ReadableSnapshot;
 
@@ -94,6 +95,7 @@ fn encode_leaf(
     type_manager: &TypeManager,
     thing_manager: &ThingManager,
 ) -> Result<serde_json::Value, Box<ConceptReadError>> {
+    let include_instance_types = DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH; // TODO: May it be affected by QueryOptions?
     match leaf {
         DocumentLeaf::Empty => Ok(serde_json::Value::Null),
         DocumentLeaf::Concept(concept) => Ok(json!(match concept {
@@ -116,7 +118,7 @@ fn encode_leaf(
                 unreachable!()
             }
             Concept::Thing(Thing::Attribute(attribute)) => {
-                json!(encode_attribute(&attribute, snapshot, type_manager, thing_manager, false)?)
+                json!(encode_attribute(&attribute, snapshot, type_manager, thing_manager, include_instance_types)?)
             }
             Concept::Value(value) => {
                 json!(encode_value(value))

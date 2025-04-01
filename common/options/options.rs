@@ -24,3 +24,14 @@ impl Default for TransactionOptions {
         }
     }
 }
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct QueryOptions {
+    pub include_instance_types: bool,
+}
+
+impl Default for QueryOptions {
+    fn default() -> Self {
+        Self { include_instance_types: true }
+    }
+}

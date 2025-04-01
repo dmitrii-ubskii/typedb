@@ -4,6 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 use itertools::Itertools;
+use options::{QueryOptions, TransactionOptions};
+use resource::constants::server::{
+    DEFAULT_INCLUDE_INSTANCE_TYPES, DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS, DEFAULT_TRANSACTION_PARALLEL,
+    DEFAULT_TRANSACTION_TIMEOUT_MILLIS,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::service::{http::message::transaction::TransactionOpenPayload, AnswerType, QueryType};
@@ -14,13 +19,27 @@ pub mod row;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct QueryOptionsPayload {
+    pub include_instance_types: Option<bool>,
+}
+
+impl Into<QueryOptions> for QueryOptionsPayload {
+    fn into(self) -> QueryOptions {
+        QueryOptions { include_instance_types: self.include_instance_types.unwrap_or(DEFAULT_INCLUDE_INSTANCE_TYPES) }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TransactionQueryPayload {
+    pub query_options: Option<QueryOptionsPayload>,
     pub query: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QueryPayload {
+    pub query_options: Option<QueryOptionsPayload>,
     pub query: String,
     pub commit: Option<bool>,
 
