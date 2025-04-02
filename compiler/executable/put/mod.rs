@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use answer::variable::Variable;
 
@@ -14,6 +14,8 @@ use crate::{
     },
     VariablePosition,
 };
+use crate::executable::insert::instructions::ConnectionInstruction;
+use crate::executable::insert::TypeSource;
 
 #[derive(Debug)]
 pub struct PutExecutable {
@@ -42,5 +44,28 @@ impl PutExecutable {
 
     pub fn output_width(&self) -> usize {
         self.insert.output_width()
+    }
+
+    pub fn referenced_input_positions(&self) -> HashSet<VariablePosition> {
+        let mut positions = HashSet::with_capacity(self.insert.connection_instructions.len() * 3 + self.insert.concept_instructions.len());
+        self.insert.connection_instructions.iter().for_each(|c| match c {
+            ConnectionInstruction::Has(has) => positions.extend([has.owner.0, has.attribute.0].into_iter()),
+            ConnectionInstruction::Links(links) => {
+                positions.extend([links.relation.0, links.player.0].into_iter());
+                if let TypeSource::InputVariable(p) = &links.role {
+                    positions.insert(VariablePosition::new(p.position));
+                }
+            },
+        });
+        self.insert.concept_instructions.iter().for_each(|c| {
+            if let TypeSource::InputVariable(p) = &c.inserted_type() {
+                positions.insert(VariablePosition::new(p.position));
+            }
+        });
+        positions
+    }
+
+    pub fn inserted_positions(&self) -> Vec<VariablePosition> {
+        self.insert.concept_instructions.iter().map(|c| c.inserted_position().0).collect()
     }
 }

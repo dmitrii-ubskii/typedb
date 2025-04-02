@@ -4,7 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashSet;
 use std::sync::Arc;
+use answer::variable_value::VariableValue;
 
 use compiler::{
     executable::{function::ExecutableFunctionRegistry, insert::VariableSource, put::PutExecutable},
@@ -25,6 +27,7 @@ use crate::{
     row::MaybeOwnedRow,
     ExecutionInterrupt,
 };
+use crate::row::Row;
 
 pub struct PutStageExecutor<PreviousStage> {
     executable: Arc<PutExecutable>,
@@ -104,8 +107,8 @@ fn into_iterator_impl<Snapshot: WritableSnapshot + 'static>(
             .map_err(|typedb_source| Box::new(PipelineExecutionError::ReadPatternExecution { typedb_source }))?;
 
         if size_before == output_batch.len() {
-            must_insert.extend((0..input_row.multiplicity()).map(|_| true));
-            crate::pipeline::insert::append_row_for_insert_mapped(
+            must_insert.push(true);
+            append_row_for_put_mapped(
                 &mut output_batch,
                 input_row.as_reference(),
                 &input_output_mapping,
@@ -115,7 +118,7 @@ fn into_iterator_impl<Snapshot: WritableSnapshot + 'static>(
     drop(previous_iterator);
     debug_assert_eq!(output_batch.len(), must_insert.len());
     // once the previous iterator is complete, this must be the exclusive owner of Arc's, so we can get mut:
-    perform_inserts(context, interrupt, executable, &mut output_batch, &must_insert)?;
+    perform_put_inserts(context, interrupt, executable, &mut output_batch, &must_insert)?;
 
     Ok(WrittenRowsIterator::new(output_batch))
 }
@@ -142,34 +145,81 @@ fn match_iterator_for_row<Snapshot: ReadableSnapshot + 'static>(
     .peekable())
 }
 
-fn perform_inserts<Snapshot: WritableSnapshot>(
+pub(crate) fn append_row_for_put_mapped(
+    output_batch: &mut Batch,
+    row: MaybeOwnedRow<'_>,
+    mapping: &Vec<(VariablePosition, VariablePosition)>,
+) {
+    // Unlike insert, put does an at-most-once insert per pattern.
+    //  So we just write the row with its multiplicity intact.
+    output_batch.append(|mut appended| {
+        appended.copy_mapped(row.as_reference(), mapping.iter().copied());
+    })
+}
+
+fn perform_put_inserts<Snapshot: WritableSnapshot>(
     context: &mut ExecutionContext<Snapshot>,
     interrupt: &mut ExecutionInterrupt,
     executable: &PutExecutable,
     output_batch: &mut Batch,
     must_insert: &[bool],
 ) -> Result<(), Box<PipelineExecutionError>> {
+    #[cfg(debug_assertions)]
+    let mut dbg__seen_before = HashSet::new();
+
+    // Get sorted indices
+    let referenced_positions= executable.referenced_input_positions().into_iter().collect::<Vec<_>>();
+    let inserted_positions = executable.inserted_positions();
+    let sort_by = referenced_positions.iter().map(|v| (v.as_usize(), true)).collect::<Vec<_>>();
+    let sorted_indices = output_batch.indices_sorted_by(context, &sort_by);
+
+    let mut last_seen = None;
+    let mut last_inserted = vec![VariableValue::Empty; inserted_positions.len()];
+    let mut reused_current_inputs = Vec::with_capacity(referenced_positions.len());
+
     let snapshot_mut = Arc::get_mut(&mut context.snapshot).unwrap();
     let stage_profile = context.profile.profile_stage(|| String::from("PutInsert"), executable.executable_id);
-    for index in 0..output_batch.len() {
+    let mut processed_rows = 0;
+    for index in sorted_indices {
         // TODO: parallelise -- though this requires our snapshots support parallel writes!
         let mut row = output_batch.get_row_mut(index);
         if must_insert[index] {
-            crate::pipeline::insert::execute_insert(
-                &executable.insert,
-                snapshot_mut,
-                &context.thing_manager,
-                &context.parameters,
-                &mut row,
-                &stage_profile,
-            )
-            .map_err(|typedb_source| Box::new(PipelineExecutionError::WriteError { typedb_source }))?;
+            read_slice(&mut reused_current_inputs, &row, &referenced_positions);
+            if Some(&reused_current_inputs) == last_seen.as_ref()  {
+                debug_assert!(dbg__seen_before.contains(&reused_current_inputs));
+                inserted_positions.iter().zip(last_inserted.iter()).for_each(|(position, value)| {
+                    row.set(*position, value.clone());
+                });
+            } else {
+                debug_assert!(dbg__seen_before.insert(reused_current_inputs.clone()) == true);
+                crate::pipeline::insert::execute_insert(
+                    &executable.insert,
+                    snapshot_mut,
+                    &context.thing_manager,
+                    &context.parameters,
+                    &mut row,
+                    &stage_profile,
+                ).map_err(|typedb_source| Box::new(PipelineExecutionError::WriteError { typedb_source }))?;
+                read_slice(&mut last_inserted, &row, &inserted_positions);
+                last_seen.get_or_insert_with(|| Vec::with_capacity(referenced_positions.len()));
+                last_seen.as_mut().unwrap().clear();
+                last_seen.as_mut().unwrap().extend_from_slice(&reused_current_inputs);
+
+            }
         }
-        if index % 100 == 0 {
+
+        processed_rows += 1;
+        if processed_rows % 100 == 0 {
             if let Some(interrupt) = interrupt.check() {
                 return Err(Box::new(PipelineExecutionError::Interrupted { interrupt }));
             }
         }
     }
     Ok(())
+}
+
+
+fn read_slice<'batch>(read_into: &mut Vec<VariableValue<'static>>, from: &Row<'_>, indices: &[VariablePosition]) {
+    read_into.clear();
+    indices.iter().for_each(|i| read_into.push(from.get(*i).clone()))
 }
