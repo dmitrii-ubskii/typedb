@@ -703,7 +703,7 @@ impl TransactionService {
                     let (transaction, result) = execute_schema_query(schema_transaction, query, source_query).await;
                     self.transaction = Some(Transaction::Schema(transaction));
                     match result {
-                        Ok(_) => return Ok(TransactionResponse::Query(QueryResponse::ResOk(QueryType::Schema))),
+                        Ok(_) => return Ok(TransactionResponse::Query(QueryAnswer::ResOk(QueryType::Schema))),
                         Err(err) => return Err(TransactionServiceError::TxnAbortSchemaQueryFailed { typedb_source: *err }),
                     }
                 }

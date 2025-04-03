@@ -16,10 +16,7 @@ use concurrency::IntervalRunner;
 use database::database_manager::DatabaseManager;
 use diagnostics::{diagnostics_manager::DiagnosticsManager, Diagnostics};
 use rand::seq::SliceRandom;
-use resource::constants::server::{
-    DATABASE_METRICS_UPDATE_INTERVAL, GRPC_CONNECTION_KEEPALIVE, SERVER_ID_ALPHABET, SERVER_ID_FILE_NAME,
-    SERVER_ID_LENGTH,
-};
+use resource::constants::server::{ASCII_LOGO, DATABASE_METRICS_UPDATE_INTERVAL, GRPC_CONNECTION_KEEPALIVE, SERVER_ID_ALPHABET, SERVER_ID_FILE_NAME, SERVER_ID_LENGTH};
 use system::initialise_system_database;
 use tokio::net::lookup_host;
 use tonic::transport::{Certificate, Identity, ServerTlsConfig};
@@ -63,6 +60,7 @@ impl Server {
         let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
         Self::new_with_external_shutdown(
             config,
+            logo,
             distribution,
             version,
             deployment_id,
@@ -74,6 +72,7 @@ impl Server {
 
     pub async fn new_with_external_shutdown(
         config: Config,
+        logo: &'static str,
         distribution: &'static str,
         version: &'static str,
         deployment_id: Option<String>,
@@ -258,7 +257,7 @@ impl Server {
     }
 
     pub async fn serve(mut self) -> Result<(), ServerOpenError> {
-        Self::print_hello(self.distribution, self.version, self.config.is_development_mode);
+        Self::print_hello(ASCII_LOGO, self.distribution, self.version, self.config.is_development_mode);
 
         // TODO: It has been introduced by the rustls dependency (for some reason, we didn't need it before).
         // Leave this call for now, but be aware that it can cause issues on different machines.

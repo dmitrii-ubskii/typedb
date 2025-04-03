@@ -50,6 +50,7 @@ pub(crate) async fn start_typedb(
         let server_future = async {
             let server = Server::new_with_external_shutdown(
                 config,
+                "logo",
                 DISTRIBUTION,
                 VERSION,
                 None,

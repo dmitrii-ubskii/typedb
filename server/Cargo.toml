@@ -118,29 +118,6 @@
 		features = []
 		default-features = false
 
-<<<<<<< HEAD
-	[dependencies.answer]
-		path = "../answer"
-		features = []
-		default-features = false
-
-	[dependencies.clap]
-		features = ["color", "default", "derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"]
-		version = "4.5.35"
-		default-features = false
-
-	[dependencies.bytes]
-		path = "../common/bytes"
-		features = []
-		default-features = false
-
-	[dependencies.axum-server]
-		features = ["arc-swap", "default", "rustls", "rustls-pemfile", "rustls-pki-types", "tls-rustls", "tls-rustls-no-provider", "tokio-rustls"]
-		version = "0.7.2"
-		default-features = false
-
-=======
->>>>>>> 51262cc98 (Add default CORS. Add JSON responses for Errors and SignIn operation. Progress on BBDs)
 	[dependencies.axum-extra]
 		features = ["default", "multipart", "tracing", "typed-header"]
 		version = "0.9.6"
