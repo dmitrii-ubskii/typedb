@@ -39,7 +39,7 @@ macro_rules! serializable_response {
             $( $field_vis:vis $field:ident : $ty:ty => $json_key:literal ),* $(,)?
         }
     ) => {
-        #[derive(Debug, serde::Deserialize)]
+        #[derive(Debug, Clone, serde::Deserialize)]
         #[serde(rename_all = "camelCase")]
         $vis struct $name {
             $( $field_vis $field : $ty ),*

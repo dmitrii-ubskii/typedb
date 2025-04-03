@@ -8,10 +8,17 @@ use hyper::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Body, Client, Method, Request, Uri,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 use server::service::http::message::{
+    authentication::TokenResponse,
     database::{DatabaseResponse, DatabasesResponse},
-    query::QueryAnswerResponse,
+    query::{
+        concept::{
+            AttributeResponse, AttributeTypeResponse, EntityResponse, EntityTypeResponse, RelationResponse,
+            RelationTypeResponse, RoleTypeResponse, ValueResponse,
+        },
+        QueryAnswerResponse,
+    },
     transaction::TransactionResponse,
     user::{UserResponse, UsersResponse},
 };
@@ -67,7 +74,7 @@ pub async fn check_health(http_client: Client<HttpConnector>) -> Result<String, 
     Ok(String::from_utf8_lossy(&body_bytes).to_string())
 }
 
-pub async fn authenticate_default(context: &HttpContext) -> String {
+pub async fn authenticate_default(context: &HttpContext) -> TokenResponse {
     authenticate(
         context,
         Context::default_versioned_endpoint().as_str(),
@@ -83,13 +90,14 @@ pub async fn authenticate(
     endpoint: &str,
     username: &str,
     password: &str,
-) -> Result<String, HttpBehaviourTestError> {
+) -> Result<TokenResponse, HttpBehaviourTestError> {
     let url = format!("{}/signin", endpoint);
     let json_body = json!({
         "username": username,
         "password": password,
     });
-    send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await
+    let response = send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await?;
+    Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 
 pub async fn databases(context: &HttpContext) -> Result<DatabasesResponse, HttpBehaviourTestError> {
@@ -228,4 +236,105 @@ pub async fn query(
 
 fn encode_path_variable(var: &str) -> String {
     form_urlencoded::byte_serialize(var.as_bytes()).collect()
+}
+
+#[derive(Debug)]
+pub enum ConceptResponse {
+    EntityType(EntityTypeResponse),
+    RelationType(RelationTypeResponse),
+    AttributeType(AttributeTypeResponse),
+    RoleType(RoleTypeResponse),
+    Entity(EntityResponse),
+    Relation(RelationResponse),
+    Attribute(AttributeResponse),
+    Value(ValueResponse),
+}
+
+impl ConceptResponse {
+    pub fn is_type(&self) -> bool {
+        match self {
+            ConceptResponse::EntityType(_)
+            | ConceptResponse::RelationType(_)
+            | ConceptResponse::AttributeType(_)
+            | ConceptResponse::RoleType(_) => true,
+            ConceptResponse::Entity(_)
+            | ConceptResponse::Relation(_)
+            | ConceptResponse::Attribute(_)
+            | ConceptResponse::Value(_) => false,
+        }
+    }
+
+    pub fn is_instance(&self) -> bool {
+        match self {
+            ConceptResponse::EntityType(_)
+            | ConceptResponse::RelationType(_)
+            | ConceptResponse::AttributeType(_)
+            | ConceptResponse::RoleType(_)
+            | ConceptResponse::Value(_) => false,
+            ConceptResponse::Entity(_) | ConceptResponse::Relation(_) | ConceptResponse::Attribute(_) => true,
+        }
+    }
+
+    pub fn get_label(&self) -> &str {
+        match self {
+            ConceptResponse::EntityType(entity_type) => &entity_type.label,
+            ConceptResponse::RelationType(relation_type) => &relation_type.label,
+            ConceptResponse::AttributeType(attribute_type) => &attribute_type.label,
+            ConceptResponse::RoleType(role_type) => &role_type.label,
+            other => panic!("Kind '{other:?}' does not labels"),
+        }
+    }
+
+    pub fn try_get_label(&self) -> Option<&str> {
+        match self {
+            ConceptResponse::EntityType(entity_type) => Some(entity_type.label.as_str()),
+            ConceptResponse::RelationType(relation_type) => Some(relation_type.label.as_str()),
+            ConceptResponse::AttributeType(attribute_type) => Some(attribute_type.label.as_str()),
+            ConceptResponse::RoleType(role_type) => Some(role_type.label.as_str()),
+            other => None,
+        }
+    }
+
+    pub fn get_value_type(&self) -> Option<&String> {
+        match self {
+            ConceptResponse::AttributeType(attribute_type) => attribute_type.value_type.as_ref(),
+            ConceptResponse::Attribute(attribute) => Some(&attribute.value_type),
+            ConceptResponse::Value(value) => Some(&value.value_type),
+            other => panic!("Kind '{other:?}' does not value types"),
+        }
+    }
+
+    pub fn get_value(&self) -> &ValueResponse {
+        match self {
+            ConceptResponse::Value(value) => value,
+            other => panic!("Kind '{other:?}' does not values"),
+        }
+    }
+
+    pub fn try_get_value(&self) -> Option<&ValueResponse> {
+        match self {
+            ConceptResponse::Value(value) => Some(value),
+            other => None,
+        }
+    }
+}
+
+impl From<serde_json::Value> for ConceptResponse {
+    fn from(value: serde_json::Value) -> Self {
+        match value.get("kind").expect("Expected kind in the answer").as_str().expect("Expected str") {
+            "entityType" => ConceptResponse::EntityType(serde_json::from_value(value).expect("Invalid EntityType")),
+            "relationType" => {
+                ConceptResponse::RelationType(serde_json::from_value(value).expect("Invalid RelationType"))
+            }
+            "attributeType" => {
+                ConceptResponse::AttributeType(serde_json::from_value(value).expect("Invalid AttributeType"))
+            }
+            "roleType" => ConceptResponse::RoleType(serde_json::from_value(value).expect("Invalid RoleType")),
+            "entity" => ConceptResponse::Entity(serde_json::from_value(value).expect("Invalid Entity")),
+            "relation" => ConceptResponse::Relation(serde_json::from_value(value).expect("Invalid Relation")),
+            "attribute" => ConceptResponse::Attribute(serde_json::from_value(value).expect("Invalid Attribute")),
+            "value" => ConceptResponse::Value(serde_json::from_value(value).expect("Invalid Value")),
+            other => panic!("Cannot convert kind '{other:?}' to a ConceptResponse"),
+        }
+    }
 }

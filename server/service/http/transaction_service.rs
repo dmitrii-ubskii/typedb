@@ -704,7 +704,9 @@ impl TransactionService {
                     self.transaction = Some(Transaction::Schema(transaction));
                     match result {
                         Ok(_) => return Ok(TransactionResponse::Query(QueryAnswer::ResOk(QueryType::Schema))),
-                        Err(err) => return Err(TransactionServiceError::TxnAbortSchemaQueryFailed { typedb_source: *err }),
+                        Err(err) => {
+                            return Err(TransactionServiceError::TxnAbortSchemaQueryFailed { typedb_source: *err })
+                        }
                     }
                 }
                 transaction => self.transaction = Some(transaction),

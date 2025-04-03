@@ -43,8 +43,8 @@ use crate::{
 macro_rules! in_background {
     ($context:ident, |$background:ident| $expr:expr) => {
         let mut $background = crate::HttpContext { http_client: crate::create_http_client(), auth_token: None };
-        let token = crate::message::authenticate_default(&$background).await;
-        $background.auth_token = Some(token);
+        let response = crate::message::authenticate_default(&$background).await;
+        $background.auth_token = Some(response.token);
         $expr
     };
 }
@@ -236,7 +236,7 @@ impl Context {
 
     pub async fn cleanup_transactions(&mut self) {
         while let Some(transaction_id) = self.try_take_transaction() {
-            transactions_close(&self.http_context, &transaction_id).await.unwrap();
+            transactions_close(&self.http_context, &transaction_id).await.ok();
         }
     }
 

@@ -119,6 +119,10 @@ pub enum TypeQLMayError {
 }
 
 impl TypeQLMayError {
+    pub fn check<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
+        self.as_may_error().check(res)
+    }
+
     pub fn check_parsing<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
         self.as_may_error_parsing().check(res)
     }
@@ -146,6 +150,14 @@ impl TypeQLMayError {
         match self {
             TypeQLMayError::Logic(message) => MayError::True(message.clone()),
             | TypeQLMayError::False | TypeQLMayError::Parsing => MayError::False,
+        }
+    }
+
+    pub fn as_may_error(&self) -> MayError {
+        match self {
+            TypeQLMayError::False => MayError::False,
+            TypeQLMayError::Parsing => MayError::True(None),
+            TypeQLMayError::Logic(message) => MayError::True(message.clone()),
         }
     }
 }
@@ -432,8 +444,8 @@ pub enum ValueType {
     Double,
     Decimal,
     Date,
-    DateTime,
-    DateTimeTZ,
+    Datetime,
+    DatetimeTZ,
     Duration,
     String,
     Struct(Label),
@@ -447,8 +459,8 @@ impl ValueType {
             ValueType::Double => TypeDBValueType::Double,
             ValueType::Decimal => TypeDBValueType::Decimal,
             ValueType::Date => TypeDBValueType::Date,
-            ValueType::DateTime => TypeDBValueType::DateTime,
-            ValueType::DateTimeTZ => TypeDBValueType::DateTimeTZ,
+            ValueType::Datetime => TypeDBValueType::DateTime,
+            ValueType::DatetimeTZ => TypeDBValueType::DateTimeTZ,
             ValueType::Duration => TypeDBValueType::Duration,
             ValueType::String => TypeDBValueType::String,
             ValueType::Struct(label) => TypeDBValueType::Struct(
@@ -457,6 +469,21 @@ impl ValueType {
                     .unwrap()
                     .unwrap(),
             ),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            ValueType::Boolean => "boolean",
+            ValueType::Integer => "integer",
+            ValueType::Double => "double",
+            ValueType::Decimal => "decimal",
+            ValueType::Date => "decimal",
+            ValueType::Datetime => "decimal",
+            ValueType::DatetimeTZ => "decimal",
+            ValueType::Duration => "decimal",
+            ValueType::String => "decimal",
+            ValueType::Struct(value) => &value.label_string,
         }
     }
 }
@@ -470,8 +497,8 @@ impl FromStr for ValueType {
             "double" => Self::Double,
             "decimal" => Self::Decimal,
             "date" => Self::Date,
-            "datetime" => Self::DateTime,
-            "datetime-tz" => Self::DateTimeTZ,
+            "datetime" => Self::Datetime,
+            "datetime-tz" => Self::DatetimeTZ,
             "duration" => Self::Duration,
             "string" => Self::String,
             _ => Self::Struct(Label { label_string: s.to_string() }),
@@ -499,6 +526,10 @@ impl Value {
     const DATE_FORMAT: &'static str = "%Y-%m-%d";
 
     const FRACTIONAL_ZEROES: usize = 19;
+
+    pub fn as_str(&self) -> &str {
+        &self.raw_value
+    }
 
     pub fn into_typedb(self, value_type: TypeDBValueType) -> TypeDBValue<'static> {
         match value_type {

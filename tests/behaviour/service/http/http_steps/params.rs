@@ -8,6 +8,8 @@ use std::{borrow::Borrow, convert::Infallible, fmt, str::FromStr};
 
 use cucumber::Parameter;
 
+use crate::message::ConceptResponse;
+
 #[derive(Clone, Debug, Default, Parameter)]
 #[param(name = "var", regex = r".*")]
 pub struct Var {
@@ -182,32 +184,32 @@ pub(crate) enum ConceptKind {
     Value,
 }
 
-// impl ConceptKind {
-//     pub(crate) fn matches_concept(&self, concept: &Concept) -> bool {
-//         match self {
-//             ConceptKind::Concept => true,
-//             ConceptKind::Type => match concept {
-//                 params::Concept::EntityType(_)
-//                 | Concept::RelationType(_)
-//                 | Concept::AttributeType(_)
-//                 | Concept::RoleType(_) => true,
-//                 _ => false,
-//             },
-//             ConceptKind::Instance => match concept {
-//                 Concept::Entity(_) | Concept::Relation(_) | Concept::Attribute(_) => true,
-//                 _ => false,
-//             },
-//             ConceptKind::EntityType => matches!(concept, Concept::EntityType(_)),
-//             ConceptKind::RelationType => matches!(concept, Concept::RelationType(_)),
-//             ConceptKind::AttributeType => matches!(concept, Concept::AttributeType(_)),
-//             ConceptKind::RoleType => matches!(concept, Concept::RoleType(_)),
-//             ConceptKind::Entity => matches!(concept, Concept::Entity(_)),
-//             ConceptKind::Relation => matches!(concept, Concept::Relation(_)),
-//             ConceptKind::Attribute => matches!(concept, Concept::Attribute(_)),
-//             ConceptKind::Value => matches!(concept, Concept::Value(_)),
-//         }
-//     }
-// }
+impl ConceptKind {
+    pub(crate) fn matches_concept(&self, concept: &ConceptResponse) -> bool {
+        match self {
+            ConceptKind::Concept => true,
+            ConceptKind::Type => match concept {
+                ConceptResponse::EntityType(_)
+                | ConceptResponse::RelationType(_)
+                | ConceptResponse::AttributeType(_)
+                | ConceptResponse::RoleType(_) => true,
+                _ => false,
+            },
+            ConceptKind::Instance => match concept {
+                ConceptResponse::Entity(_) | ConceptResponse::Relation(_) | ConceptResponse::Attribute(_) => true,
+                _ => false,
+            },
+            ConceptKind::EntityType => matches!(concept, ConceptResponse::EntityType(_)),
+            ConceptKind::RelationType => matches!(concept, ConceptResponse::RelationType(_)),
+            ConceptKind::AttributeType => matches!(concept, ConceptResponse::AttributeType(_)),
+            ConceptKind::RoleType => matches!(concept, ConceptResponse::RoleType(_)),
+            ConceptKind::Entity => matches!(concept, ConceptResponse::Entity(_)),
+            ConceptKind::Relation => matches!(concept, ConceptResponse::Relation(_)),
+            ConceptKind::Attribute => matches!(concept, ConceptResponse::Attribute(_)),
+            ConceptKind::Value => matches!(concept, ConceptResponse::Value(_)),
+        }
+    }
+}
 
 impl FromStr for ConceptKind {
     type Err = String;

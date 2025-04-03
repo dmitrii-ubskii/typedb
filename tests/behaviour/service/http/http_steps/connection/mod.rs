@@ -90,7 +90,7 @@ pub async fn connection_ignore(_: &mut Context) {}
 #[apply(generic_step)]
 #[step("connection opens with default authentication")]
 pub async fn connection_opens_with_default_authentication(context: &mut Context) {
-    context.http_context.auth_token = Some(authenticate_default(&context.http_context).await);
+    context.http_context.auth_token = Some(authenticate_default(&context.http_context).await.token);
 }
 
 #[apply(generic_step)]
@@ -101,7 +101,7 @@ async fn connection_opens_with_authentication(
     password: String,
     may_error: params::MayError,
 ) {
-    if let Some(Either::Left(token)) = may_error.check(
+    if let Some(Either::Left(response)) = may_error.check(
         authenticate(
             &context.http_context,
             Context::default_versioned_endpoint().as_str(),
@@ -110,7 +110,7 @@ async fn connection_opens_with_authentication(
         )
         .await,
     ) {
-        context.http_context.auth_token = Some(token);
+        context.http_context.auth_token = Some(response.token);
     }
 }
 

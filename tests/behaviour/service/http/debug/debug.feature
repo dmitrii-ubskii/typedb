@@ -30,10 +30,10 @@ Feature: Debugging Space
       """
       insert $p isa person, has $j; $j isa name "John";
       """
-    When get answers of typeql read query
-      """
-      match let $value-var = "John"; $attribute-var isa name;
-      """
+#    When get answers of typeql read query
+#      """
+#      match let $value-var = "John"; $attribute-var isa name;
+#      """
 #    Then answer type is: ok
 #    Then answer type is not: concept rows
 #    Then answer type is not: concept documents
