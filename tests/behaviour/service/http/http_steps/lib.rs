@@ -296,50 +296,12 @@ impl Context {
         answer: Result<QueryAnswerResponse, HttpBehaviourTestError>,
     ) -> Result<(), HttpBehaviourTestError> {
         let answer = answer?;
-        // self.answer_query_type = Some(answer.get_query_type());
-        // self.answer_type = Some(match &answer {
-        //     QueryAnswer::Ok(_) => QueryAnswerType::Ok,
-        //     QueryAnswer::ConceptRowStream(_, _) => QueryAnswerType::ConceptRows,
-        //     QueryAnswer::ConceptDocumentStream(_, _) => QueryAnswerType::ConceptDocuments,
-        // });
         self.answer = Some(answer);
-        // TODO: Do something
         Ok(())
     }
 
     // pub fn set_concurrent_answers(&mut self, answers: Vec<QueryAnswer>) {
     //     self.concurrent_answers = answers;
-    // }
-
-    // pub async fn unwrap_answer_if_needed(&mut self) {
-    //     if self.collected_rows.is_none() && self.collected_documents.is_none() {
-    //         match self.answer_type.expect("Nothing to unwrap: no answer") {
-    //             QueryAnswerType::Ok => panic!("Nothing to unwrap: cannot unwrap Ok"),
-    //             QueryAnswerType::ConceptRows => self.unwrap_answer_into_rows().await,
-    //             QueryAnswerType::ConceptDocuments => self.unwrap_answer_into_documents().await,
-    //         }
-    //     }
-    // }
-
-    // pub async fn unwrap_concurrent_answers_into_rows_streams_if_neeed(&mut self) {
-    //     if self.concurrent_rows_streams.is_none() {
-    //         self.unwrap_concurrent_answers_into_rows_streams().await
-    //     }
-    // }
-
-    // pub async fn unwrap_answer_into_rows(&mut self) {
-    //     self.collected_rows =
-    //         Some(self.answer.take().unwrap().into_rows().map(|result| result.unwrap()).collect::<Vec<_>>().await);
-    // }
-
-    // pub async fn unwrap_concurrent_answers_into_rows_streams(&mut self) {
-    //     self.concurrent_rows_streams =
-    //         Some(self.concurrent_answers.drain(..).map(|answer| answer.into_rows()).collect());
-    // }
-
-    // pub async fn unwrap_answer_into_documents(&mut self) {
-    //     self.collected_documents =
-    //         Some(self.answer.take().unwrap().into_documents().map(|result| result.unwrap()).collect::<Vec<_>>().await);
     // }
 
     pub fn get_answer(&self) -> Option<&QueryAnswerResponse> {

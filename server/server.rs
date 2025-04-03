@@ -361,6 +361,8 @@ impl Server {
         let router_service = http::typedb_service::TypeDBService::create_protected_router(http_service.clone())
             .layer(authenticator)
             .merge(http::typedb_service::TypeDBService::create_unprotected_router(http_service))
+            // TODO: Allow CORS configuration
+            .layer(http::typedb_service::TypeDBService::create_cors_layer())
             .into_make_service();
 
         let shutdown_handle = Handle::new();

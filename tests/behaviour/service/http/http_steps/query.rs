@@ -1,20 +1,7 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 use std::{collections::VecDeque, ops::Index};
@@ -188,13 +175,12 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
 #[apply(generic_step)]
 #[step(expr = "answer type {is_or_not}: {query_answer_type}")]
 pub async fn answer_type_is(context: &mut Context, is_or_not: IsOrNot, query_answer_type: QueryAnswerType) {
+    let actual_answer_type = context.get_answer_type().unwrap();
     match query_answer_type {
-        QueryAnswerType::Ok => is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::Ok)),
-        QueryAnswerType::ConceptRows => {
-            is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::ConceptRows))
-        }
+        QueryAnswerType::Ok => is_or_not.check(matches!(actual_answer_type, AnswerType::Ok)),
+        QueryAnswerType::ConceptRows => is_or_not.check(matches!(actual_answer_type, AnswerType::ConceptRows)),
         QueryAnswerType::ConceptDocuments => {
-            is_or_not.check(matches!(context.answer.as_ref().unwrap().answer_type, AnswerType::ConceptDocuments))
+            is_or_not.check(matches!(actual_answer_type, AnswerType::ConceptDocuments))
         }
     }
 }
@@ -203,7 +189,7 @@ pub async fn answer_type_is(context: &mut Context, is_or_not: IsOrNot, query_ans
 #[step(expr = "answer unwraps as {query_answer_type}{may_error}")]
 pub async fn answer_unwraps_as(context: &mut Context, query_answer_type: QueryAnswerType, may_error: params::MayError) {
     let expect = !may_error.expects_error();
-    let response = context.answer.as_ref().unwrap();
+    let response = context.get_answer().unwrap();
     match response.answer_type {
         AnswerType::Ok => {
             assert_eq!(
@@ -232,7 +218,7 @@ pub async fn answer_unwraps_as(context: &mut Context, query_answer_type: QueryAn
 #[apply(generic_step)]
 #[step(expr = r"answer size is: {int}")]
 pub async fn answer_size_is(context: &mut Context, size: usize) {
-    let actual_size = context.answer.as_ref().unwrap().answers.as_ref().unwrap().len();
+    let actual_size = context.get_answer().unwrap().answers.as_ref().unwrap().len();
     assert_eq!(actual_size, size, "Expected {size} answers, got {actual_size}");
 }
 

@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http::request::Parts;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{authentication::Accessor, service::http::error::HTTPServiceError};
 
@@ -31,4 +31,14 @@ where
         Accessor::from_extensions(&parts.extensions)
             .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source }.into_response())
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenResponse {
+    pub token: String,
+}
+
+pub(crate) fn encode_token(token: String) -> TokenResponse {
+    TokenResponse { token }
 }

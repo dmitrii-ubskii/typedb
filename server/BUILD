@@ -83,6 +83,7 @@ rust_library(
         "@crates//:tonic",
         "@crates//:tonic-types",
         "@crates//:tower",
+        "@crates//:tower-http",
         "@crates//:tracing",
         "@crates//:uuid",
         "@crates//:pwhash",

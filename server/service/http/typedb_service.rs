@@ -28,6 +28,7 @@ use tokio::{
     },
     time::timeout,
 };
+use tower_http::cors::CorsLayer;
 use user::{permission_manager::PermissionManager, user_manager::UserManager};
 use uuid::Uuid;
 
@@ -38,7 +39,7 @@ use crate::{
             diagnostics::{run_with_diagnostics, run_with_diagnostics_async},
             error::HTTPServiceError,
             message::{
-                authentication::SigninPayload,
+                authentication::{encode_token, SigninPayload},
                 body::JsonBody,
                 database::{encode_database, encode_databases, DatabasePath},
                 query::{QueryOptionsPayload, QueryPayload, TransactionQueryPayload},
@@ -212,6 +213,46 @@ impl TypeDBService {
             .with_state(service)
     }
 
+    pub(crate) fn create_cors_layer() -> CorsLayer {
+        CorsLayer::permissive()
+        // TODO: Configure CorsLayer through config like this
+        // TODO: Maybe use CorsLayer::permissive in development mode?
+        // let mut cors = CorsLayer::new();
+        //
+        // if let Some(origins) = &config.cors_allowed_origins {
+        //     let origin_headers = origins
+        //         .iter()
+        //         .filter_map(|o| HeaderValue::from_str(o).ok())
+        //         .collect::<Vec<_>>();
+        //
+        //     cors = cors.allow_origin(origin_headers);
+        // }
+        //
+        // if let Some(methods) = &config.cors_allowed_methods {
+        //     let parsed_methods = methods
+        //         .iter()
+        //         .filter_map(|m| Method::from_bytes(m.as_bytes()).ok())
+        //         .collect::<Vec<_>>();
+        //
+        //     cors = cors.allow_methods(parsed_methods);
+        // }
+        //
+        // if let Some(headers) = &config.cors_allowed_headers {
+        //     let parsed_headers = headers
+        //         .iter()
+        //         .filter_map(|h| HeaderName::from_bytes(h.as_bytes()).ok())
+        //         .collect::<Vec<_>>();
+        //
+        //     cors = cors.allow_headers(parsed_headers);
+        // }
+        //
+        // if config.cors_allow_credentials {
+        //     cors = cors.allow_credentials(true);
+        // }
+        //
+        // cors
+    }
+
     async fn health() -> impl IntoResponse {
         StatusCode::NO_CONTENT
     }
@@ -226,7 +267,7 @@ impl TypeDBService {
                 .credential_verifier
                 .verify_password(&payload.username, &payload.password)
                 .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source })?;
-            Ok((StatusCode::OK, service.token_manager.new_token(payload.username).await))
+            Ok(JsonBody(encode_token(service.token_manager.new_token(payload.username).await)))
         })
         .await
     }
