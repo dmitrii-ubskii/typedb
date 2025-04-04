@@ -653,20 +653,6 @@ pub async fn answer_get_row_get_variable_get_value_of_type(
         Err(InvalidValueRetrieval(value_type.as_str().to_string()))
     };
     may_error.check(result);
-
-    // TODO: Check the value itself? I don't think so
-    // may_error.check(match value_type {
-    //     params::ValueType::Boolean => concept.try_get_boolean().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Integer => concept.try_get_integer().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Double => concept.try_get_double().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Decimal => concept.try_get_decimal().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::String => concept.try_get_string().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Date => concept.try_get_date().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Datetime => concept.try_get_datetime().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::DatetimeTZ => concept.try_get_datetime_tz().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Duration => concept.try_get_duration().map(|_| ()).ok_or(InvalidValueRetrieval(type_name)),
-    //     params::ValueType::Struct(_) => todo!("Implement structs"),
-    // });
 }
 
 #[apply(generic_step)]
@@ -916,6 +902,7 @@ pub async fn answer_contains_document(
     let concept_documents = context.get_answer().unwrap().answers.as_ref().unwrap();
     println!("Expected document: {expected_document:?}");
     println!("Got documents: {concept_documents:?}");
+    // TODO: Check documents
     // contains_or_doesnt.check_bool(
     //     list_contains_json(concept_documents, &expected_document),
     //     &format!("Concept documents: {:?}", concept_documents),

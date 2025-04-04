@@ -380,7 +380,7 @@ impl fmt::Display for HttpBehaviourTestError {
             Self::HttpError(source) => write!(f, "Http error: {source}"),
             Self::HyperError(source) => write!(f, "Hyper error: {source}"),
             Self::StatusError { code, message } => write!(f, "Status Error {}: {}", code.as_u16(), message),
-            Self::UnavailableRowVariable { variable } => write!(f, "Unavailable row variable '{}'", variable),
+            Self::UnavailableRowVariable { variable } => write!(f, "Cannot get concept from a concept row by variable '{}'", variable),
         }
     }
 }
