@@ -474,6 +474,21 @@ impl ValueType {
         }
     }
 
+    pub fn into_typedb_static(self) -> TypeDBValueType {
+        match self {
+            ValueType::Boolean => TypeDBValueType::Boolean,
+            ValueType::Integer => TypeDBValueType::Integer,
+            ValueType::Double => TypeDBValueType::Double,
+            ValueType::Decimal => TypeDBValueType::Decimal,
+            ValueType::Date => TypeDBValueType::Date,
+            ValueType::Datetime => TypeDBValueType::DateTime,
+            ValueType::DatetimeTZ => TypeDBValueType::DateTimeTZ,
+            ValueType::Duration => TypeDBValueType::Duration,
+            ValueType::String => TypeDBValueType::String,
+            ValueType::Struct(_) => panic!("Structs are not static value types. Use `into_typedb` instead"),
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             ValueType::Boolean => "boolean",
@@ -539,14 +554,6 @@ impl Value {
 
     pub fn as_str(&self) -> &str {
         &self.raw_value
-    }
-
-    pub fn as_unquoted_unescaped_str(&self) -> String {
-        let mut self_str = self.as_str();
-        if self_str.starts_with('"') && self_str.ends_with('"') && self_str.len() >= 2 {
-            self_str = &self_str[1..self_str.len() - 1];
-        }
-        self_str.replace(r"\\\", r"\")
     }
 
     pub fn into_typedb(self, value_type: TypeDBValueType) -> TypeDBValue<'static> {

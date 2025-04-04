@@ -13,6 +13,7 @@ rust_library(
     crate_root = "lib.rs",
     deps = [
         "//server:server",
+        "//encoding:encoding",
         "//common/options:options",
         "//tests/behaviour/steps/params:params",
         "//util/test:test_utils",

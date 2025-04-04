@@ -14,6 +14,7 @@ use std::{
     fmt::Formatter,
     iter, mem,
     path::{Path, PathBuf},
+    slice::Iter,
     str::FromStr,
     time::Instant,
 };
@@ -112,10 +113,8 @@ pub struct Context {
     pub http_context: HttpContext,
     pub transaction_ids: VecDeque<String>,
     pub answer: Option<QueryAnswerResponse>,
-    // pub collected_rows: Option<Vec<serde_json::Value>>,
-    pub collected_documents: Option<Vec<serde_json::Value>>,
-    pub concurrent_answers: Vec<String>,
-    // pub concurrent_rows_streams: Option<Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>>>,
+    pub concurrent_answers: Vec<QueryAnswerResponse>,
+    pub concurrent_answers_last_consumed_index: usize,
     pub shutdown_sender: Option<tokio::sync::watch::Sender<()>>,
     pub handler: Option<(TempDir, JoinHandle<Result<(), ServerOpenError>>)>,
 }
@@ -127,13 +126,7 @@ impl fmt::Debug for Context {
             .field("transaction_options", &self.transaction_options)
             .field("transactions", &self.transaction_ids)
             .field("answer", &self.answer)
-            // .field("collected_rows", &self.collected_rows)
-            .field("collected_documents", &self.collected_documents)
             .field("concurrent_answers", &self.concurrent_answers)
-            // .field(
-            //     "concurrent_rows_streams",
-            //     &self.concurrent_rows_streams.as_ref().map(|streams| format!("{} streams", streams.len())),
-            // )
             .finish()
     }
 }
@@ -253,13 +246,11 @@ impl Context {
 
     pub async fn cleanup_answers(&mut self) {
         self.answer = None;
-        // self.collected_rows = None;
-        self.collected_documents = None;
     }
 
     pub async fn cleanup_concurrent_answers(&mut self) {
         self.concurrent_answers = Vec::new();
-        // self.concurrent_rows_streams = None;
+        self.concurrent_answers_last_consumed_index = 0;
     }
 
     pub fn transaction_opt(&self) -> Option<&String> {
@@ -300,9 +291,10 @@ impl Context {
         Ok(())
     }
 
-    // pub fn set_concurrent_answers(&mut self, answers: Vec<QueryAnswer>) {
-    //     self.concurrent_answers = answers;
-    // }
+    pub fn set_concurrent_answers(&mut self, answers: Vec<QueryAnswerResponse>) {
+        self.concurrent_answers = answers;
+        self.concurrent_answers_last_consumed_index = 0;
+    }
 
     pub fn get_answer(&self) -> Option<&QueryAnswerResponse> {
         self.answer.as_ref()
@@ -316,38 +308,21 @@ impl Context {
         self.answer.as_ref().map(|answer| answer.answer_type)
     }
 
-    // pub async fn try_get_collected_rows(&mut self) -> Option<&Vec<ConceptRow>> {
-    //     self.unwrap_answer_if_needed().await;
-    //     self.collected_rows.as_ref()
-    // }
-
-    // pub async fn get_collected_rows(&mut self) -> &Vec<ConceptRow> {
-    //     self.try_get_collected_rows().await.unwrap()
-    // }
-
-    // pub async fn try_get_collected_documents(&mut self) -> Option<&Vec<serde_json::Value>> {
-    //     self.unwrap_answer_if_needed().await;
-    //     self.collected_documents.as_ref()
-    // }
-    //
-    // pub async fn get_collected_documents(&mut self) -> &Vec<serde_json::Value> {
-    //     self.try_get_collected_documents().await.unwrap()
-    // }
-
-    pub fn get_collected_answer_row_index(&mut self, index: usize) -> &serde_json::Value {
+    pub fn get_answer_row_index(&mut self, index: usize) -> &serde_json::Value {
         self.answer.as_ref().unwrap().answers.as_ref().unwrap().get(index).unwrap()
     }
 
-    // pub async fn try_get_concurrent_rows_streams(
-    //     &mut self,
-    // ) -> Option<&mut Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>>> {
-    //     self.unwrap_concurrent_answers_into_rows_streams_if_neeed().await;
-    //     self.concurrent_rows_streams.as_mut()
-    // }
+    pub fn get_concurrent_answers_index(&mut self) -> usize {
+        self.concurrent_answers_last_consumed_index
+    }
 
-    // pub async fn get_concurrent_rows_streams(&mut self) -> &mut Vec<BoxStream<'static, Result<(), HttpBehaviourTestError><ConceptRow>>> {
-    //     self.try_get_concurrent_rows_streams().await.unwrap()
-    // }
+    pub fn set_concurrent_answers_index(&mut self, index: usize) {
+        self.concurrent_answers_last_consumed_index = index;
+    }
+
+    pub fn get_concurrent_answers(&self) -> &Vec<QueryAnswerResponse> {
+        &self.concurrent_answers
+    }
 }
 
 impl Default for Context {
@@ -363,10 +338,8 @@ impl Default for Context {
             http_context: HttpContext { http_client: create_http_client(), auth_token: None },
             transaction_ids: VecDeque::new(),
             answer: None,
-            // collected_rows: None,
-            collected_documents: None,
             concurrent_answers: Vec::new(),
-            // concurrent_rows_streams: None,
+            concurrent_answers_last_consumed_index: 0,
             shutdown_sender: None,
             handler: None,
         }

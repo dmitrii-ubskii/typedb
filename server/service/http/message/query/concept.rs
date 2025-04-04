@@ -202,6 +202,7 @@ pub fn encode_attribute(
     })
 }
 
+// TODO: Fix, can give invalid answerss
 fn encode_iid<const ARRAY_INLINE_SIZE: usize>(iid: Bytes<'_, ARRAY_INLINE_SIZE>) -> String {
     HexBytesFormatter::owned(Vec::from(iid)).format_iid()
 }

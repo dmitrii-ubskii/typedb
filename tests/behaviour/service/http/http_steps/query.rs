@@ -4,13 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{collections::VecDeque, ops::Index};
+use std::{collections::VecDeque, ops::Index, str::FromStr};
 
 use cucumber::{gherkin::Step, given, then, when};
 use futures::{future::join_all, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean, ContainsOrDoesnt};
+use serde_json::{json, Value};
 use server::service::{http::message::query::QueryAnswerResponse, AnswerType, QueryType};
 
 use crate::{
@@ -30,7 +31,7 @@ fn get_answers_column_names(answer: &serde_json::Value) -> Vec<String> {
 }
 
 fn get_answer_rows_var(context: &mut Context, index: usize, var: Var) -> Option<&serde_json::Value> {
-    let concept_row = context.get_collected_answer_row_index(index);
+    let concept_row = context.get_answer_row_index(index);
     concept_row.get(&var.name)
 }
 
@@ -99,6 +100,29 @@ fn concept_get_type(concept: &ConceptResponse) -> ConceptResponse {
     }
 }
 
+pub fn unquote(value: &str) -> String {
+    let mut result: &str = value;
+    if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+        result = &value[1..value.len() - 1];
+    }
+    result.to_string()
+}
+
+fn check_is_value(
+    is_or_not: IsOrNot,
+    expected_value: params::Value,
+    actual_value: &serde_json::Value,
+    actual_value_type: &str,
+) {
+    let actual_value_type_converted = params::ValueType::from_str(actual_value_type)
+        .expect("Expected actual value type conversion")
+        .into_typedb_static();
+    let actual_value_converted = params::Value::from_str(&unquote(&actual_value.to_string()))
+        .expect("Expected actual value conversion")
+        .into_typedb(actual_value_type_converted.clone());
+    is_or_not.compare(expected_value.into_typedb(actual_value_type_converted), actual_value_converted);
+}
+
 #[apply(generic_step)]
 #[step(expr = "typeql schema query{typeql_may_error}")]
 #[step(expr = "typeql write query{typeql_may_error}")]
@@ -119,22 +143,24 @@ pub async fn get_answers_of_typeql_query(context: &mut Context, step: &Step) {
         .unwrap();
 }
 
-// #[apply(generic_step)]
-// #[step(expr = r"concurrently get answers of typeql schema query {int} times")]
-// #[step(expr = r"concurrently get answers of typeql write query {int} times")]
-// #[step(expr = r"concurrently get answers of typeql read query {int} times")]
-// pub async fn concurrently_get_answers_of_typeql_query_times(context: &mut Context, count: usize, step: &Step) {
-//     context.cleanup_concurrent_answers().await;
-//
-//     let queries = vec![step.docstring().unwrap(); count];
-//     let answers: Vec<QueryAnswer> = join_all(queries.into_iter().map(|query| run_query(context.transaction(), query)))
-//         .await
-//         .into_iter()
-//         .map(|result| result.unwrap())
-//         .collect();
-//
-//     context.set_concurrent_answers(answers);
-// }
+#[apply(generic_step)]
+#[step(expr = r"concurrently get answers of typeql schema query {int} times")]
+#[step(expr = r"concurrently get answers of typeql write query {int} times")]
+#[step(expr = r"concurrently get answers of typeql read query {int} times")]
+pub async fn concurrently_get_answers_of_typeql_query_times(context: &mut Context, count: usize, step: &Step) {
+    context.cleanup_concurrent_answers().await;
+
+    let queries = vec![step.docstring().unwrap(); count];
+    let answers: Vec<QueryAnswerResponse> = join_all(
+        queries.into_iter().map(|query| transactions_query(&context.http_context, context.transaction(), query)),
+    )
+    .await
+    .into_iter()
+    .map(|result| result.unwrap())
+    .collect();
+
+    context.set_concurrent_answers(answers);
+}
 
 #[apply(generic_step)]
 #[step(expr = "answer type {is_or_not}: {query_answer_type}")]
@@ -186,43 +212,47 @@ pub async fn answer_size_is(context: &mut Context, size: usize) {
     assert_eq!(actual_size, size, "Expected {size} answers, got {actual_size}");
 }
 
-// TODO:
-// #[apply(generic_step)]
-// #[step(expr = "concurrently process {int} row(s) from answers{may_error}")]
-// pub async fn concurrently_process_rows_from_answers(context: &mut Context, count: usize, may_error: params::MayError) {
-//     let expects_error = may_error.expects_error();
-//     let streams = context.get_concurrent_rows_streams().await;
-//
-//     let mut jobs = Vec::new();
-//
-//     for stream in streams.iter_mut() {
-//         let job = async {
-//             let mut failed = false;
-//             let mut rows = Vec::new();
-//
-//             for _ in 0..count {
-//                 if let Some(row) = stream.next().await {
-//                     rows.push(row.unwrap());
-//                 } else {
-//                     failed = true;
-//                     break;
-//                 }
-//             }
-//
-//             assert_eq!(expects_error, failed, "Expected to fail? {expects_error}, but did it? {failed}");
-//         };
-//
-//         jobs.push(job);
-//     }
-//
-//     join_all(jobs).await;
-// }
+#[apply(generic_step)]
+#[step(expr = "concurrently process {int} row(s) from answers{may_error}")]
+pub async fn concurrently_process_rows_from_answers(context: &mut Context, count: usize, may_error: params::MayError) {
+    // Cannot actually process them because they are already collected. But we can at least check that these rows exist
+    let expects_error = may_error.expects_error();
+    let index = context.get_concurrent_answers_index();
+    let new_index = index + count;
+    let answers = context.get_concurrent_answers();
+
+    let mut jobs = Vec::new();
+
+    for answer in answers.iter() {
+        let answer = answer.answers.as_ref().unwrap();
+        let job = async {
+            let mut failed = false;
+            let mut rows = Vec::new(); // Some work
+
+            for _ in 0..count {
+                if let Some(row) = answer.get(index) {
+                    rows.push(row.clone());
+                } else {
+                    failed = true;
+                    break;
+                }
+            }
+
+            assert_eq!(expects_error, failed, "Expected to fail? {expects_error}, but did it? {failed}");
+        };
+
+        jobs.push(job);
+    }
+
+    join_all(jobs).await;
+    context.set_concurrent_answers_index(new_index);
+}
 
 #[apply(generic_step)]
 #[step(expr = r"answer column names are:")]
 pub async fn answer_column_names_are(context: &mut Context, step: &Step) {
     let actual_column_names: Vec<String> =
-        get_answers_column_names(context.get_collected_answer_row_index(0)).into_iter().sorted().collect();
+        get_answers_column_names(context.get_answer_row_index(0)).into_iter().sorted().collect();
     let expected_column_names: Vec<String> = iter_table(step).sorted().map(|s| s.to_string()).collect();
     assert_eq!(actual_column_names, expected_column_names);
 }
@@ -257,7 +287,10 @@ pub async fn answer_get_row_get_variable(
     if matches!(is_by_var_index, IsByVarIndex::Is) {
         return; // http does not have indices
     }
-    may_error.check(Ok::<_, HttpBehaviourTestError>(get_answer_rows_var(context, index, var)));
+    let variable = var.name.clone();
+    may_error.check(
+        get_answer_rows_var(context, index, var).ok_or(HttpBehaviourTestError::UnavailableRowVariable { variable }),
+    );
 }
 
 #[apply(generic_step)]
@@ -576,7 +609,7 @@ pub async fn answer_get_row_get_variable_get_value(
     let concept = get_answer_rows_var(context, index, var).unwrap().clone().into();
     check_concept_is_kind(&concept, var_kind, params::Boolean::True);
     let actual_value = concept.get_value();
-    is_or_not.compare(value.as_str(), actual_value.to_string());
+    check_is_value(is_or_not, value, concept.get_value(), concept.get_value_type().unwrap());
 }
 
 #[apply(generic_step)]
@@ -680,7 +713,7 @@ pub async fn answer_get_row_get_variable_get_specific_value(
     let concept = get_answer_rows_var(context, index, var).unwrap().clone().into();
     check_concept_is_kind(&concept, var_kind, params::Boolean::True);
     assert_eq!(value_type.as_str(), concept.get_value_type().unwrap());
-    is_or_not.compare(value.as_str(), &concept.get_value().as_str().unwrap());
+    check_is_value(is_or_not, value, concept.get_value(), concept.get_value_type().unwrap());
 }
 
 #[apply(generic_step)]
@@ -866,7 +899,7 @@ pub async fn answer_get_row_get_variable_is_struct(
 #[apply(generic_step)]
 #[step(expr = r"answer get row\({int}\) get concepts size is: {int}")]
 pub async fn answer_get_row_get_concepts_size_is(context: &mut Context, index: usize, size: usize) {
-    let serde_json::Value::Object(value_object) = context.get_collected_answer_row_index(index) else {
+    let serde_json::Value::Object(value_object) = context.get_answer_row_index(index) else {
         panic!("Expected object");
     };
     assert_eq!(size, value_object.len());

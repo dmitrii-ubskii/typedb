@@ -64,6 +64,13 @@ impl IsOrNot {
             }
         };
     }
+
+    pub fn is(&self) -> bool {
+        match self {
+            IsOrNot::Is => true,
+            IsOrNot::IsNot => false,
+        }
+    }
 }
 
 impl FromStr for IsOrNot {
