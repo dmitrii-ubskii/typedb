@@ -236,7 +236,7 @@ impl Context {
 
     pub async fn cleanup_transactions(&mut self) {
         while let Some(transaction_id) = self.try_take_transaction() {
-            transactions_close(&self.http_context, &transaction_id).await.ok();
+            transactions_close(&self.http_context, &transaction_id).await.unwrap();
         }
     }
 
