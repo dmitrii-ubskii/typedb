@@ -172,7 +172,7 @@ impl TypeDBService {
 
     fn build_query_request(query_options_payload: Option<QueryOptionsPayload>, query: String) -> TransactionRequest {
         let query_options =
-            query_options_payload.map(|options| options.into()).unwrap_or_else(|| QueryOptions::default());
+            query_options_payload.map(|options| options.into()).unwrap_or_else(|| QueryOptions::default_http());
         TransactionRequest::Query(query_options, query)
     }
 

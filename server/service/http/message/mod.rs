@@ -8,7 +8,6 @@ pub mod authentication;
 pub(crate) mod body;
 pub mod database;
 pub mod error;
-pub(crate) mod header;
 pub mod query;
 pub mod transaction;
 pub mod user;

@@ -5,23 +5,18 @@
  */
 use axum::{
     response::{IntoResponse, Response},
-    Json,
 };
-use http::StatusCode;
 use itertools::Itertools;
-use options::{QueryOptions, TransactionOptions};
+use options::{QueryOptions};
 use resource::constants::server::{
-    DEFAULT_INCLUDE_INSTANCE_TYPES, DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS, DEFAULT_TRANSACTION_PARALLEL,
-    DEFAULT_TRANSACTION_TIMEOUT_MILLIS,
+    DEFAULT_ANSWER_COUNT_LIMIT_HTTP, DEFAULT_INCLUDE_INSTANCE_TYPES,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::service::{
     http::{
-        error::HTTPServiceError,
         message::{body::JsonBody, transaction::TransactionOpenPayload},
-        transaction_service::{QueryAnswer, TransactionServiceResponse},
+        transaction_service::{QueryAnswer},
     },
     AnswerType, QueryType,
 };
@@ -34,11 +29,18 @@ pub mod row;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct QueryOptionsPayload {
     pub include_instance_types: Option<bool>,
+    pub answer_count_limit: Option<usize>,
 }
 
 impl Into<QueryOptions> for QueryOptionsPayload {
     fn into(self) -> QueryOptions {
-        QueryOptions { include_instance_types: self.include_instance_types.unwrap_or(DEFAULT_INCLUDE_INSTANCE_TYPES) }
+        QueryOptions {
+            include_instance_types: self.include_instance_types.unwrap_or(DEFAULT_INCLUDE_INSTANCE_TYPES),
+            answer_count_limit: self
+                .answer_count_limit
+                .map(|option| Some(option))
+                .unwrap_or(DEFAULT_ANSWER_COUNT_LIMIT_HTTP),
+        }
     }
 }
 

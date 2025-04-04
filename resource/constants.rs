@@ -24,12 +24,15 @@ pub mod server {
 
     pub const GRPC_CONNECTION_KEEPALIVE: Duration = Duration::from_secs(2 * SECONDS_IN_HOUR);
 
+    // TODO: Maybe we start moving these options to separate crates?
     pub const DEFAULT_PREFETCH_SIZE: u64 = 32;
     pub const DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS: u64 = Duration::from_secs(10).as_millis() as u64;
     pub const DEFAULT_TRANSACTION_TIMEOUT_MILLIS: u64 = Duration::from_secs(5 * SECONDS_IN_MINUTE).as_millis() as u64;
     pub const DEFAULT_TRANSACTION_PARALLEL: bool = true;
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES: bool = true;
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH: bool = false;
+    pub const DEFAULT_ANSWER_COUNT_LIMIT_GRPC: Option<usize> = None;
+    pub const DEFAULT_ANSWER_COUNT_LIMIT_HTTP: Option<usize> = Some(1_000_000); // TODO: Smaller?
 
     pub const PERF_COUNTERS_ENABLED: bool = true;
 
@@ -42,6 +45,7 @@ pub mod server {
         'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     ];
 
+    // TODO: Maybe we start moving these options to separate crates?
     pub const HTTP_USERNAME_FIELD: &str = "username";
     pub const HTTP_PASSWORD_FIELD: &str = "password";
     pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
@@ -49,10 +53,6 @@ pub mod server {
     pub const DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 4 * SECONDS_IN_HOUR;
     pub const DEFAULT_AUTHENTICATION_TOKEN_TTL: Duration =
         Duration::from_secs(DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS);
-
-    pub const CONTENT_TYPE_FIELD: &str = "content-type";
-    pub const CONTENT_TYPE_GRPC: &str = "application/grpc";
-    pub const CONTENT_TYPE_JSON: &str = "application/json";
 
     pub const DATABASE_METRICS_UPDATE_INTERVAL: Duration = Duration::from_secs(10 * SECONDS_IN_MINUTE);
 

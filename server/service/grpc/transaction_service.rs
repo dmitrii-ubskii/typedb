@@ -743,7 +743,7 @@ impl TransactionService {
         req_id: Uuid,
         query_req: typedb_protocol::query::Req,
     ) -> Result<ControlFlow<(), ()>, Status> {
-        let query_options = QueryOptions::default();
+        let query_options = QueryOptions::default_grpc();
         let query = query_req.query;
         let parsed = match parse_query(&query) {
             Ok(parsed) => parsed,

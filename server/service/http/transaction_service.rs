@@ -771,8 +771,8 @@ impl TransactionService {
                             snapshot,
                             type_manager,
                             thing_manager,
-                            output_descriptor,
                             answer.query_options,
+                            output_descriptor,
                             batch,
                             responder,
                             interrupt,
@@ -784,6 +784,7 @@ impl TransactionService {
                             snapshot,
                             type_manager,
                             thing_manager,
+                            answer.query_options,
                             parameters,
                             documents,
                             responder,
@@ -826,8 +827,8 @@ impl TransactionService {
         snapshot: Arc<impl ReadableSnapshot>,
         type_manager: Arc<TypeManager>,
         thing_manager: Arc<ThingManager>,
-        output_descriptor: StreamQueryOutputDescriptor,
         query_options: QueryOptions,
+        output_descriptor: StreamQueryOutputDescriptor,
         batch: Batch,
         responder: TransactionResponder,
         mut interrupt: ExecutionInterrupt,
@@ -835,12 +836,14 @@ impl TransactionService {
         let mut result = vec![];
         let mut as_lending_iter = batch.into_iterator();
         while let Some(row) = as_lending_iter.next() {
-            let result_limit = 1000000; // TODO: Move to config and create a default const
-            if result.len() > result_limit {
-                respond_error_and_return_break!(
-                    responder,
-                    TransactionServiceError::WriteResultsLimitExceeded { limit: result_limit }
-                );
+            // TODO: Consider multiplicity?
+            if let Some(limit) = query_options.answer_count_limit {
+                if result.len() >= limit {
+                    respond_error_and_return_break!(
+                        responder,
+                        TransactionServiceError::WriteResultsLimitExceeded { limit }
+                    );
+                }
             }
 
             if let Some(interrupt) = interrupt.check() {
@@ -877,6 +880,7 @@ impl TransactionService {
         snapshot: Arc<impl ReadableSnapshot>,
         type_manager: Arc<TypeManager>,
         thing_manager: Arc<ThingManager>,
+        query_options: QueryOptions,
         parameters: Arc<ParameterRegistry>,
         documents: Vec<ConceptDocument>,
         responder: TransactionResponder,
@@ -884,13 +888,15 @@ impl TransactionService {
     ) -> ControlFlow<(), ()> {
         let mut result = Vec::with_capacity(documents.len());
         for document in documents {
-            let result_limit = 1000000; // TODO: Move to config and create a default const
-            if result.len() > result_limit {
-                respond_error_and_return_break!(
-                    responder,
-                    TransactionServiceError::WriteResultsLimitExceeded { limit: result_limit }
-                );
+            if let Some(limit) = query_options.answer_count_limit {
+                if result.len() >= limit {
+                    respond_error_and_return_break!(
+                        responder,
+                        TransactionServiceError::WriteResultsLimitExceeded { limit }
+                    );
+                }
             }
+
             if let Some(interrupt) = interrupt.check() {
                 respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
             }
@@ -986,11 +992,13 @@ impl TransactionService {
             let mut result = vec![];
             let mut comment = None;
             for next in iterator {
-                let result_limit = 1000000; // TODO: Move to config and create a default const
-                if result.len() > result_limit {
-                    comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit: result_limit });
-                    break;
+                if let Some(limit) = query_options.answer_count_limit {
+                    if result.len() >= limit {
+                        comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit });
+                        break;
+                    }
                 }
+
                 if let Some(interrupt) = interrupt.check() {
                     respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
                 }
@@ -1039,10 +1047,11 @@ impl TransactionService {
             let mut result = vec![];
             let mut comment = None;
             while let Some(next) = iterator.next() {
-                let result_limit = 1000000; // TODO: Move to config and create a default const
-                if result.len() > result_limit {
-                    comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit: result_limit });
-                    break;
+                if let Some(limit) = query_options.answer_count_limit {
+                    if result.len() >= limit {
+                        comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit });
+                        break;
+                    }
                 }
 
                 if let Some(interrupt) = interrupt.check() {
