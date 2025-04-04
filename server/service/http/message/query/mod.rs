@@ -3,20 +3,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-use axum::{
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use itertools::Itertools;
-use options::{QueryOptions};
-use resource::constants::server::{
-    DEFAULT_ANSWER_COUNT_LIMIT_HTTP, DEFAULT_INCLUDE_INSTANCE_TYPES,
-};
+use options::QueryOptions;
+use resource::constants::server::{DEFAULT_ANSWER_COUNT_LIMIT_HTTP, DEFAULT_INCLUDE_INSTANCE_TYPES};
 use serde::{Deserialize, Serialize};
 
 use crate::service::{
     http::{
         message::{body::JsonBody, transaction::TransactionOpenPayload},
-        transaction_service::{QueryAnswer},
+        transaction_service::QueryAnswer,
     },
     AnswerType, QueryType,
 };

@@ -8,27 +8,32 @@
 #![deny(elided_lifetimes_in_paths)]
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     error::Error,
     fmt,
     fmt::Formatter,
     iter, mem,
     path::{Path, PathBuf},
-    slice::Iter,
     str::FromStr,
     time::Instant,
 };
 
 use cucumber::{gherkin::Feature, StatsWriter, World};
 use futures::{
-    future::{try_join_all, Either},
+    future::Either,
     stream::{self, StreamExt},
 };
 use hyper::{client::HttpConnector, http, Client, StatusCode};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use itertools::Itertools;
 use options::TransactionOptions;
-use server::{error::ServerOpenError, service::http::message::transaction::TransactionResponse};
+use server::{
+    error::ServerOpenError,
+    service::{
+        http::message::{query::QueryAnswerResponse, transaction::TransactionResponse},
+        AnswerType, QueryType,
+    },
+};
 use test_utils::TempDir;
 use tokio::{
     task::JoinHandle,
@@ -38,7 +43,6 @@ use tokio::{
 use crate::{
     connection::start_typedb,
     message::{check_health, databases, databases_delete, transactions_close, users, users_delete, users_update},
-    params::QueryAnswerType,
 };
 
 macro_rules! in_background {
@@ -50,7 +54,6 @@ macro_rules! in_background {
     };
 }
 pub(crate) use in_background;
-use server::service::{http::message::query::QueryAnswerResponse, AnswerType, QueryType};
 
 mod connection;
 mod message;

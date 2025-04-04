@@ -18,8 +18,7 @@ use concept::{
 };
 use encoding::value::{value::Value, value_type::ValueType, ValueEncodable};
 use error::unimplemented_feature;
-use executor::write::WriteError::ConceptRead;
-use serde::{ser::SerializeStruct, Serialize, Serializer};
+use serde::{ser::SerializeStruct, Serializer};
 use serde_json::json;
 use storage::snapshot::ReadableSnapshot;
 
@@ -78,7 +77,6 @@ serializable_response! {
 serializable_response! {
     pub struct AttributeResponse {
         kind = "attribute",
-        pub iid: String => "iid",
         pub value: serde_json::Value => "value",
         pub value_type: String => "valueType",
         pub type_: Option<AttributeTypeResponse> => "type",
@@ -191,7 +189,6 @@ pub fn encode_attribute(
 ) -> Result<AttributeResponse, Box<ConceptReadError>> {
     let value = attribute.get_value(snapshot, thing_manager)?;
     Ok(AttributeResponse {
-        iid: encode_iid(attribute.iid()),
         value_type: encode_value_value_type(&value),
         value: encode_value_value(value),
         type_: if include_instance_types {

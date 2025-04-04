@@ -10,7 +10,7 @@ use axum::{
     extract::State,
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Json, RequestPartsExt, Router,
+    RequestPartsExt, Router,
 };
 use concurrency::TokioIntervalRunner;
 use database::database_manager::DatabaseManager;
@@ -19,7 +19,6 @@ use http::StatusCode;
 use itertools::Itertools;
 use options::{QueryOptions, TransactionOptions};
 use resource::constants::{common::SECONDS_IN_MINUTE, server::DEFAULT_TRANSACTION_TIMEOUT_MILLIS};
-use serde_json::json;
 use system::concepts::{Credential, User};
 use tokio::{
     sync::{

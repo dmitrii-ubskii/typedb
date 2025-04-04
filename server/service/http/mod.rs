@@ -9,7 +9,5 @@ mod diagnostics;
 pub(crate) mod encryption;
 mod error;
 pub mod message;
-mod request_parser;
-mod response_builders;
 pub(crate) mod transaction_service;
 pub(crate) mod typedb_service;

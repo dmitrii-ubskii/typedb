@@ -11,7 +11,6 @@ use futures::{future::join_all, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean, ContainsOrDoesnt};
-use serde_json::{json, Value};
 use server::service::{http::message::query::QueryAnswerResponse, AnswerType, QueryType};
 
 use crate::{

@@ -13,14 +13,14 @@ pub(crate) mod connection {
         connection_id: ConnectionID,
         receive_time: Instant,
         databases_all_res: typedb_protocol::database_manager::all::Res,
-        sign_in_res: typedb_protocol::authentication::token::create::Res,
+        token_create_res: typedb_protocol::authentication::token::create::Res,
     ) -> typedb_protocol::connection::open::Res {
         let processing_millis = Instant::now().duration_since(receive_time).as_millis();
         typedb_protocol::connection::open::Res {
             connection_id: Some(typedb_protocol::ConnectionId { id: Vec::from(connection_id) }),
             server_duration_millis: processing_millis as u64,
             databases_all: Some(databases_all_res),
-            authentication: Some(sign_in_res),
+            authentication: Some(token_create_res),
         }
     }
 }

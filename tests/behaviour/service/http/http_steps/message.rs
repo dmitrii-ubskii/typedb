@@ -8,7 +8,7 @@ use hyper::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Body, Client, Method, Request, Uri,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use server::service::http::message::{
     authentication::TokenResponse,
     database::{DatabaseResponse, DatabasesResponse},
