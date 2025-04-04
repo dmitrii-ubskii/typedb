@@ -32,6 +32,7 @@ use encoding::{
     },
 };
 use itertools::{Either, Itertools};
+use regex::Regex;
 use storage::snapshot::ReadableSnapshot;
 use test_utils::assert_matches;
 
@@ -89,6 +90,13 @@ impl MayError {
         match self {
             MayError::True(_) => true,
             MayError::False => false,
+        }
+    }
+
+    pub fn do_not_expect_error_message(self) -> Self {
+        match self {
+            MayError::False => MayError::False,
+            MayError::True(_) => MayError::True(None),
         }
     }
 }
@@ -327,13 +335,7 @@ impl FromStr for ContainsOrDoesnt {
 #[derive(Debug, Parameter)]
 #[param(name = "type_label", regex = r"[A-Za-z0-9_:-]+")]
 pub struct Label {
-    label_string: String,
-}
-
-impl Default for Label {
-    fn default() -> Self {
-        unreachable!("Why is default called?");
-    }
+    pub label_string: String,
 }
 
 impl Label {
@@ -436,7 +438,7 @@ impl FromStr for KindExtended {
 #[derive(Debug, Parameter)]
 #[param(
     name = "value_type",
-    regex = "(boolean|integer|double|decimal|datetime(?:-tz)?|duration|string|[A-Za-z0-9_:-]+)"
+    regex = r"(boolean|integer|double|decimal|date|datetime(?:-tz)?|duration|string|struct|struct\{[A-Za-z0-9_:-]+})"
 )]
 pub enum ValueType {
     Boolean,
@@ -478,11 +480,11 @@ impl ValueType {
             ValueType::Integer => "integer",
             ValueType::Double => "double",
             ValueType::Decimal => "decimal",
-            ValueType::Date => "decimal",
-            ValueType::Datetime => "decimal",
-            ValueType::DatetimeTZ => "decimal",
-            ValueType::Duration => "decimal",
-            ValueType::String => "decimal",
+            ValueType::Date => "date",
+            ValueType::Datetime => "datetime",
+            ValueType::DatetimeTZ => "datetime-tz",
+            ValueType::Duration => "duration",
+            ValueType::String => "string",
             ValueType::Struct(value) => &value.label_string,
         }
     }
@@ -501,7 +503,15 @@ impl FromStr for ValueType {
             "datetime-tz" => Self::DatetimeTZ,
             "duration" => Self::Duration,
             "string" => Self::String,
-            _ => Self::Struct(Label { label_string: s.to_string() }),
+            "struct" => Self::Struct(Label { label_string: "unknown".to_string() }),
+            other => {
+                let re = Regex::new(r"^struct\{([A-Za-z0-9_:-]+)}$").unwrap();
+                if let Some(caps) = re.captures(other) {
+                    Self::Struct(Label { label_string: caps[1].to_string() })
+                } else {
+                    panic!("Cannot parse value type {other}");
+                }
+            }
         })
     }
 }
@@ -509,7 +519,7 @@ impl FromStr for ValueType {
 #[derive(Debug, Default, Parameter, Clone)]
 #[param(name = "value", regex = ".*?")]
 pub struct Value {
-    raw_value: String,
+    pub raw_value: String,
 }
 
 impl Value {
@@ -529,6 +539,14 @@ impl Value {
 
     pub fn as_str(&self) -> &str {
         &self.raw_value
+    }
+
+    pub fn as_unquoted_unescaped_str(&self) -> String {
+        let mut self_str = self.as_str();
+        if self_str.starts_with('"') && self_str.ends_with('"') && self_str.len() >= 2 {
+            self_str = &self_str[1..self_str.len() - 1];
+        }
+        self_str.replace(r"\\\", r"\")
     }
 
     pub fn into_typedb(self, value_type: TypeDBValueType) -> TypeDBValue<'static> {

@@ -2954,6 +2954,7 @@ dependencies = [
  "cucumber",
  "encoding",
  "itertools 0.10.5",
+ "regex",
  "storage",
  "test_utils",
  "typeql",

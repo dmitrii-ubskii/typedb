@@ -29,7 +29,7 @@ async fn create_database(context: &HttpContext, name: String, may_error: params:
 }
 
 async fn delete_database(context: &HttpContext, name: &str, may_error: params::MayError) {
-    may_error.check(databases_delete(context, &name).await);
+    may_error.do_not_expect_error_message().check(databases_delete(context, &name).await);
 }
 
 async fn has_database(context: &HttpContext, name: &str) -> bool {
@@ -45,7 +45,7 @@ pub async fn connection_create_database(context: &mut Context, name: String, may
 #[apply(generic_step)]
 #[step(expr = "connection create database with empty name{may_error}")]
 pub async fn connection_create_database_with_an_empty_name(context: &mut Context, may_error: params::MayError) {
-    create_database(&context.http_context, "".to_string(), may_error).await;
+    create_database(&context.http_context, "".to_string(), may_error.do_not_expect_error_message()).await;
 }
 
 #[apply(generic_step)]

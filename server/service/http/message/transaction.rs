@@ -8,13 +8,12 @@ use std::{collections::HashMap, str::FromStr};
 
 use axum::{
     async_trait,
-    extract::{FromRequest, FromRequestParts, Path, Request},
+    extract::{FromRequest, FromRequestParts, Path},
     response::{IntoResponse, Response},
-    Json, RequestExt, RequestPartsExt,
+    RequestExt, RequestPartsExt,
 };
 use futures::TryFutureExt;
-use http::{header::CONTENT_TYPE, request::Parts, StatusCode};
-use itertools::Itertools;
+use http::{request::Parts, StatusCode};
 use options::TransactionOptions;
 use resource::constants::server::{
     DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS, DEFAULT_TRANSACTION_PARALLEL, DEFAULT_TRANSACTION_TIMEOUT_MILLIS,
@@ -23,9 +22,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::service::{
-    http::message::{
-        database::{encode_database, DatabaseResponse},
-        from_request_parts_impl,
+    http::{
+        error::HTTPServiceError, message::from_request_parts_impl, transaction_service::TransactionServiceResponse,
     },
     TransactionType,
 };
@@ -103,3 +101,15 @@ pub(crate) struct TransactionPath {
 }
 
 from_request_parts_impl!(TransactionPath { transaction_id: TransactionId });
+
+impl IntoResponse for TransactionServiceResponse {
+    fn into_response(self) -> Response {
+        match self {
+            TransactionServiceResponse::Ok => StatusCode::OK.into_response(),
+            TransactionServiceResponse::Query(query) => query.into_response(),
+            TransactionServiceResponse::Err(typedb_source) => {
+                HTTPServiceError::Transaction { typedb_source }.into_response()
+            }
+        }
+    }
+}

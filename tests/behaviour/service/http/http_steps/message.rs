@@ -276,13 +276,7 @@ impl ConceptResponse {
     }
 
     pub fn get_label(&self) -> &str {
-        match self {
-            ConceptResponse::EntityType(entity_type) => &entity_type.label,
-            ConceptResponse::RelationType(relation_type) => &relation_type.label,
-            ConceptResponse::AttributeType(attribute_type) => &attribute_type.label,
-            ConceptResponse::RoleType(role_type) => &role_type.label,
-            other => panic!("Kind '{other:?}' does not labels"),
-        }
+        self.try_get_label().unwrap_or("none")
     }
 
     pub fn try_get_label(&self) -> Option<&str> {
@@ -291,29 +285,60 @@ impl ConceptResponse {
             ConceptResponse::RelationType(relation_type) => Some(relation_type.label.as_str()),
             ConceptResponse::AttributeType(attribute_type) => Some(attribute_type.label.as_str()),
             ConceptResponse::RoleType(role_type) => Some(role_type.label.as_str()),
-            other => None,
+            ConceptResponse::Entity(entity) => entity.type_.as_ref().map(|val| val.label.as_str()),
+            ConceptResponse::Relation(relation) => relation.type_.as_ref().map(|val| val.label.as_str()),
+            ConceptResponse::Attribute(attribute) => attribute.type_.as_ref().map(|val| val.label.as_str()),
+            ConceptResponse::Value(value) => Some(value.value_type.as_ref()),
         }
     }
 
-    pub fn get_value_type(&self) -> Option<&String> {
+    pub fn get_value_type(&self) -> Option<&str> {
         match self {
-            ConceptResponse::AttributeType(attribute_type) => attribute_type.value_type.as_ref(),
+            ConceptResponse::AttributeType(attribute_type) => {
+                attribute_type.value_type.as_ref().map(|val| val.as_str())
+            }
             ConceptResponse::Attribute(attribute) => Some(&attribute.value_type),
             ConceptResponse::Value(value) => Some(&value.value_type),
             other => panic!("Kind '{other:?}' does not value types"),
         }
     }
 
-    pub fn get_value(&self) -> &ValueResponse {
+    pub fn try_get_value_type(&self) -> Option<&str> {
         match self {
-            ConceptResponse::Value(value) => value,
-            other => panic!("Kind '{other:?}' does not values"),
+            ConceptResponse::AttributeType(attribute_type) => {
+                attribute_type.value_type.as_ref().map(|val| val.as_str())
+            }
+            ConceptResponse::Attribute(attribute) => Some(&attribute.value_type),
+            ConceptResponse::Value(value) => Some(&value.value_type),
+            _ => None,
         }
     }
 
-    pub fn try_get_value(&self) -> Option<&ValueResponse> {
+    pub fn get_value_type_or_none(&self) -> &str {
+        self.try_get_value_type().unwrap_or_else(|| "none")
+    }
+
+    pub fn get_value(&self) -> &serde_json::Value {
         match self {
-            ConceptResponse::Value(value) => Some(value),
+            ConceptResponse::Attribute(attribute) => &attribute.value,
+            ConceptResponse::Value(value) => &value.value,
+            other => panic!("Kind '{other:?}' does not have values"),
+        }
+    }
+
+    pub fn try_get_value(&self) -> Option<&serde_json::Value> {
+        match self {
+            ConceptResponse::Attribute(attribute) => Some(&attribute.value),
+            ConceptResponse::Value(value) => Some(&value.value),
+            other => None,
+        }
+    }
+
+    pub fn try_get_iid(&self) -> Option<&String> {
+        match self {
+            // TODO: Maybe add attributes
+            ConceptResponse::Entity(entity) => Some(&entity.iid),
+            ConceptResponse::Relation(relation) => Some(&relation.iid),
             other => None,
         }
     }

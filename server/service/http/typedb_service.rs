@@ -49,7 +49,7 @@ use crate::{
             },
             transaction_service,
             transaction_service::{
-                QueryAnswer, TransactionRequest, TransactionResponder, TransactionResponse, TransactionService,
+                QueryAnswer, TransactionRequest, TransactionResponder, TransactionService, TransactionServiceResponse,
             },
         },
         transaction_service::TRANSACTION_REQUEST_BUFFER_SIZE,
@@ -154,11 +154,11 @@ impl TypeDBService {
         sender: &TransactionRequestSender,
         request: TransactionRequest,
         error_if_closed: bool,
-    ) -> Result<TransactionResponse, HTTPServiceError> {
+    ) -> Result<TransactionServiceResponse, HTTPServiceError> {
         let (result_sender, result_receiver) = oneshot::channel();
         if let Err(_) = sender.send((request, TransactionResponder(result_sender))).await {
             return match error_if_closed {
-                false => Ok(TransactionResponse::Ok),
+                false => Ok(TransactionServiceResponse::Ok),
                 true => Err(HTTPServiceError::no_open_transaction()),
             };
         }
@@ -176,11 +176,13 @@ impl TypeDBService {
         TransactionRequest::Query(query_options, query)
     }
 
-    fn try_get_query_response(transaction_response: TransactionResponse) -> Result<QueryAnswer, HTTPServiceError> {
+    fn try_get_query_response(
+        transaction_response: TransactionServiceResponse,
+    ) -> Result<QueryAnswer, HTTPServiceError> {
         match transaction_response {
-            TransactionResponse::Query(query_response) => Ok(query_response),
-            TransactionResponse::Err(typedb_source) => Err(HTTPServiceError::Transaction { typedb_source }),
-            TransactionResponse::Ok => {
+            TransactionServiceResponse::Query(query_response) => Ok(query_response),
+            TransactionServiceResponse::Err(typedb_source) => Err(HTTPServiceError::Transaction { typedb_source }),
+            TransactionServiceResponse::Ok => {
                 Err(HTTPServiceError::Internal { details: "unexpected transaction response".to_string() })
             }
         }
@@ -504,7 +506,7 @@ impl TypeDBService {
         let TransactionId(uuid) = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let Some(transaction) = senders.get(&uuid) else {
-            return Ok(TransactionResponse::Ok);
+            return Ok(TransactionServiceResponse::Ok);
         };
         if accessor != transaction.owner {
             return Err(HTTPServiceError::operation_not_permitted());
@@ -575,14 +577,14 @@ impl TypeDBService {
             false => Self::transaction_request(&request_sender, TransactionRequest::Close, true),
         }
         .await?;
-        if let TransactionResponse::Err(typedb_source) = close_response {
+        if let TransactionServiceResponse::Err(typedb_source) = close_response {
             return match commit {
                 true => Err(HTTPServiceError::QueryCommit { typedb_source }),
                 false => Err(HTTPServiceError::QueryClose { typedb_source }),
             };
         }
 
-        Ok(TransactionResponse::Query(query_response))
+        Ok(TransactionServiceResponse::Query(query_response))
     }
 }
 

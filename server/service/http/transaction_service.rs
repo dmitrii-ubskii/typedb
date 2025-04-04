@@ -103,7 +103,7 @@ use crate::service::{
 
 macro_rules! respond_error_and_return_break {
     ($responder:ident, $error:expr) => {{
-        let _ = respond_transaction_response($responder, TransactionResponse::Err($error));
+        let _ = respond_transaction_response($responder, TransactionServiceResponse::Err($error));
         return Break(());
     }};
 }
@@ -134,7 +134,7 @@ pub(crate) enum TransactionRequest {
     Close,
 }
 
-pub(crate) struct TransactionResponder(pub(crate) oneshot::Sender<TransactionResponse>);
+pub(crate) struct TransactionResponder(pub(crate) oneshot::Sender<TransactionServiceResponse>);
 
 impl Debug for TransactionResponder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -142,14 +142,17 @@ impl Debug for TransactionResponder {
     }
 }
 
-fn respond_query_response(responder: TransactionResponder, response: QueryAnswer) -> Result<(), TransactionResponse> {
-    respond_transaction_response(responder, TransactionResponse::Query(response))
+fn respond_query_response(
+    responder: TransactionResponder,
+    response: QueryAnswer,
+) -> Result<(), TransactionServiceResponse> {
+    respond_transaction_response(responder, TransactionServiceResponse::Query(response))
 }
 
 fn respond_transaction_response(
     responder: TransactionResponder,
-    response: TransactionResponse,
-) -> Result<(), TransactionResponse> {
+    response: TransactionServiceResponse,
+) -> Result<(), TransactionServiceResponse> {
     let TransactionResponder(sender) = responder;
     match sender.send(response) {
         Ok(()) => Ok(()),
@@ -181,49 +184,61 @@ pub(crate) struct TransactionService {
 }
 
 #[derive(Debug)]
-pub(crate) enum TransactionResponse {
+pub(crate) enum TransactionServiceResponse {
     Ok,
     Query(QueryAnswer),
     Err(TransactionServiceError),
 }
 
-impl IntoResponse for TransactionResponse {
-    fn into_response(self) -> Response {
-        match self {
-            TransactionResponse::Ok => StatusCode::OK.into_response(),
-            TransactionResponse::Query(query) => query.into_response(),
-            TransactionResponse::Err(typedb_source) => HTTPServiceError::Transaction { typedb_source }.into_response(),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum QueryAnswer {
     ResOk(QueryType),
-    ResRows((QueryType, Vec<serde_json::Value>)),
-    ResDocuments((QueryType, Vec<serde_json::Value>)),
+    ResRows((QueryType, Vec<serde_json::Value>, Option<QueryAnswerComment>)),
+    ResDocuments((QueryType, Vec<serde_json::Value>, Option<QueryAnswerComment>)),
 }
 
 impl QueryAnswer {
     pub(crate) fn query_type(&self) -> QueryType {
         match self {
             QueryAnswer::ResOk(query_type) => *query_type,
-            QueryAnswer::ResRows((query_type, _)) => *query_type,
-            QueryAnswer::ResDocuments((query_type, _)) => *query_type,
+            QueryAnswer::ResRows((query_type, _, _)) => *query_type,
+            QueryAnswer::ResDocuments((query_type, _, _)) => *query_type,
+        }
+    }
+
+    pub(crate) fn status_code(&self) -> StatusCode {
+        match self {
+            QueryAnswer::ResOk(_) => StatusCode::OK,
+            QueryAnswer::ResRows((_, _, comment)) => match comment {
+                None => StatusCode::OK,
+                Some(comment) => comment.status_code(),
+            },
+            QueryAnswer::ResDocuments((_, _, comment)) => match comment {
+                None => StatusCode::OK,
+                Some(comment) => comment.status_code(),
+            },
         }
     }
 }
 
-impl IntoResponse for QueryAnswer {
-    fn into_response(self) -> Response {
+#[derive(Debug)]
+pub(crate) enum QueryAnswerComment {
+    ReadResultsLimitExceeded { limit: usize },
+}
+
+impl QueryAnswerComment {
+    pub(crate) fn status_code(&self) -> StatusCode {
         match self {
-            QueryAnswer::ResOk(query_type) => Json(json!(encode_query_ok_answer(query_type))),
-            QueryAnswer::ResRows((query_type, rows)) => Json(json!(encode_query_rows_answer(query_type, rows))),
-            QueryAnswer::ResDocuments((query_type, documents)) => {
-                Json(json!(encode_query_documents_answer(query_type, documents)))
-            }
+            QueryAnswerComment::ReadResultsLimitExceeded { .. } => StatusCode::PARTIAL_CONTENT,
         }
-        .into_response()
+    }
+}
+
+impl fmt::Display for QueryAnswerComment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueryAnswerComment::ReadResultsLimitExceeded { limit } => write!(f, "Write query results limit ({limit}) exceeded, and the transaction is aborted. Retry with an extended limit or break the query into multiple smaller queries to achieve the same result.")
+        }
     }
 }
 
@@ -447,7 +462,7 @@ impl TransactionService {
                     responder,
                     |typedb_source| { TransactionServiceError::DataCommitFailed { typedb_source } }
                 );
-                respond_else_return_break!(responder, TransactionResponse::Ok);
+                respond_else_return_break!(responder, TransactionServiceResponse::Ok);
                 Break(())
             })
             .await
@@ -459,7 +474,7 @@ impl TransactionService {
                     responder,
                     |typedb_source| { TransactionServiceError::SchemaCommitFailed { typedb_source } }
                 );
-                respond_else_return_break!(responder, TransactionResponse::Ok);
+                respond_else_return_break!(responder, TransactionServiceResponse::Ok);
                 Break(())
             }
         }
@@ -486,13 +501,13 @@ impl TransactionService {
             Transaction::Write(mut transaction) => {
                 transaction.rollback();
                 self.transaction = Some(Transaction::Write(transaction));
-                respond_else_return_break!(responder, TransactionResponse::Ok);
+                respond_else_return_break!(responder, TransactionServiceResponse::Ok);
                 Continue(())
             }
             Transaction::Schema(mut transaction) => {
                 transaction.rollback();
                 self.transaction = Some(Transaction::Schema(transaction));
-                respond_else_return_break!(responder, TransactionResponse::Ok);
+                respond_else_return_break!(responder, TransactionServiceResponse::Ok);
                 Continue(())
             }
         }
@@ -500,7 +515,7 @@ impl TransactionService {
 
     async fn handle_close(&mut self, responder: TransactionResponder) -> ControlFlow<(), ()> {
         self.do_close().await;
-        respond_else_return_break!(responder, TransactionResponse::Ok);
+        respond_else_return_break!(responder, TransactionServiceResponse::Ok);
         Break(())
     }
 
@@ -540,7 +555,7 @@ impl TransactionService {
             } else {
                 respond_else_return_break!(
                     responder,
-                    TransactionResponse::Err(TransactionServiceError::QueryInterrupted { interrupt })
+                    TransactionServiceResponse::Err(TransactionServiceError::QueryInterrupted { interrupt })
                 );
             }
         }
@@ -584,7 +599,7 @@ impl TransactionService {
             if is_write_pipeline(&pipeline) {
                 respond_else_return_break!(
                     responder,
-                    TransactionResponse::Err(TransactionServiceError::QueryInterrupted { interrupt })
+                    TransactionServiceResponse::Err(TransactionServiceError::QueryInterrupted { interrupt })
                 );
             } else {
                 read_queries.push_back((responder, query_options, pipeline, source_query));
@@ -688,7 +703,7 @@ impl TransactionService {
         &mut self,
         query: SchemaQuery,
         source_query: String,
-    ) -> Result<TransactionResponse, TransactionServiceError> {
+    ) -> Result<TransactionServiceResponse, TransactionServiceError> {
         self.interrupt(InterruptType::SchemaQueryExecution).await;
         if let Break(()) = self.cancel_queued_read_queries(InterruptType::SchemaQueryExecution).await {
             return Err(TransactionServiceError::ServiceFailedQueueCleanup {});
@@ -703,7 +718,7 @@ impl TransactionService {
                     let (transaction, result) = execute_schema_query(schema_transaction, query, source_query).await;
                     self.transaction = Some(Transaction::Schema(transaction));
                     match result {
-                        Ok(_) => return Ok(TransactionResponse::Query(QueryAnswer::ResOk(QueryType::Schema))),
+                        Ok(_) => return Ok(TransactionServiceResponse::Query(QueryAnswer::ResOk(QueryType::Schema))),
                         Err(err) => {
                             return Err(TransactionServiceError::TxnAbortSchemaQueryFailed { typedb_source: *err })
                         }
@@ -713,7 +728,7 @@ impl TransactionService {
             }
         }
 
-        Ok(TransactionResponse::Err(TransactionServiceError::SchemaQueryRequiresSchemaTransaction {}))
+        Ok(TransactionServiceResponse::Err(TransactionServiceError::SchemaQueryRequiresSchemaTransaction {}))
     }
 
     async fn run_write_query(
@@ -732,7 +747,7 @@ impl TransactionService {
             }
             Err(err) => {
                 // non-fatal errors we will respond immediately
-                respond_else_return_break!(responder, TransactionResponse::Err(err));
+                respond_else_return_break!(responder, TransactionServiceResponse::Err(err));
             }
         };
         Continue(())
@@ -820,6 +835,14 @@ impl TransactionService {
         let mut result = vec![];
         let mut as_lending_iter = batch.into_iterator();
         while let Some(row) = as_lending_iter.next() {
+            let result_limit = 1000000; // TODO: Move to config and create a default const
+            if result.len() > result_limit {
+                respond_error_and_return_break!(
+                    responder,
+                    TransactionServiceError::WriteResultsLimitExceeded { limit: result_limit }
+                );
+            }
+
             if let Some(interrupt) = interrupt.check() {
                 respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
             }
@@ -844,7 +867,7 @@ impl TransactionService {
                 }
             }
         }
-        match respond_query_response(responder, QueryAnswer::ResRows((QueryType::Write, result))) {
+        match respond_query_response(responder, QueryAnswer::ResRows((QueryType::Write, result, None))) {
             Ok(_) => Continue(()),
             Err(_) => Break(()),
         }
@@ -861,6 +884,13 @@ impl TransactionService {
     ) -> ControlFlow<(), ()> {
         let mut result = Vec::with_capacity(documents.len());
         for document in documents {
+            let result_limit = 1000000; // TODO: Move to config and create a default const
+            if result.len() > result_limit {
+                respond_error_and_return_break!(
+                    responder,
+                    TransactionServiceError::WriteResultsLimitExceeded { limit: result_limit }
+                );
+            }
             if let Some(interrupt) = interrupt.check() {
                 respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
             }
@@ -879,7 +909,7 @@ impl TransactionService {
                 }
             }
         }
-        match respond_query_response(responder, QueryAnswer::ResDocuments((QueryType::Write, result))) {
+        match respond_query_response(responder, QueryAnswer::ResDocuments((QueryType::Write, result, None))) {
             Ok(_) => Continue(()),
             Err(_) => Break(()),
         }
@@ -954,7 +984,13 @@ impl TransactionService {
 
             let parameters = context.parameters;
             let mut result = vec![];
+            let mut comment = None;
             for next in iterator {
+                let result_limit = 1000000; // TODO: Move to config and create a default const
+                if result.len() > result_limit {
+                    comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit: result_limit });
+                    break;
+                }
                 if let Some(interrupt) = interrupt.check() {
                     respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
                 }
@@ -980,7 +1016,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionResponse::Query(QueryAnswer::ResDocuments((QueryType::Read, result)))
+                TransactionServiceResponse::Query(QueryAnswer::ResDocuments((QueryType::Read, result, comment)))
             );
             context.profile
         } else {
@@ -1001,7 +1037,14 @@ impl TransactionService {
             );
 
             let mut result = vec![];
+            let mut comment = None;
             while let Some(next) = iterator.next() {
+                let result_limit = 1000000; // TODO: Move to config and create a default const
+                if result.len() > result_limit {
+                    comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit: result_limit });
+                    break;
+                }
+
                 if let Some(interrupt) = interrupt.check() {
                     respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
                 }
@@ -1032,7 +1075,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionResponse::Query(QueryAnswer::ResRows((QueryType::Read, result)))
+                TransactionServiceResponse::Query(QueryAnswer::ResRows((QueryType::Read, result, comment)))
             );
             context.profile
         };

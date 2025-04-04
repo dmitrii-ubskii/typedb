@@ -23,6 +23,7 @@ rust_library(
         "@crates//:chrono-tz",
         "@crates//:cucumber",
         "@crates//:itertools",
+        "@crates//:regex",
     ],
 )
 
