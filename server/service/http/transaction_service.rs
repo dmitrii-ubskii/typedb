@@ -13,7 +13,7 @@ use std::{
         ControlFlow::{Break, Continue},
     },
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use axum::{
@@ -68,7 +68,7 @@ use tokio::{
         oneshot, watch,
     },
     task::{spawn_blocking, JoinHandle},
-    time::timeout,
+    time::{timeout, Instant},
 };
 use tokio_stream::StreamExt;
 use tonic::{Status, Streaming};
@@ -100,6 +100,7 @@ use crate::service::{
     },
     QueryType, TransactionType,
 };
+use crate::service::transaction_service::init_transaction_timeout;
 
 macro_rules! respond_error_and_return_break {
     ($responder:ident, $error:expr) => {{
@@ -113,6 +114,35 @@ macro_rules! respond_else_return_break {
         match respond_transaction_response($responder, $response) {
             Ok(()) => {}
             Err(_) => return Break(()),
+        }
+    }};
+}
+
+macro_rules! check_interrupt_else_respond_error_and_return_break {
+    ($interrupt:ident, $responder:ident) => {{
+        if let Some(interrupt) = $interrupt.check() {
+            respond_error_and_return_break!($responder, TransactionServiceError::QueryInterrupted { interrupt });
+        }
+    }};
+}
+
+macro_rules! check_timeout_else_respond_error_and_return_break {
+    ($timeout_at:ident, $responder:ident) => {{
+        if Instant::now() >= $timeout_at {
+            respond_error_and_return_break!($responder, TransactionServiceError::TransactionTimeout {});
+        }
+    }};
+}
+
+macro_rules! check_answer_count_limit_else_respond_error_and_return_break {
+    ($answer_count_limit:expr, $result:ident, $responder:ident) => {{
+        if let Some(limit) = $answer_count_limit {
+            if $result.len() >= limit {
+                respond_error_and_return_break!(
+                    $responder,
+                    TransactionServiceError::WriteResultsLimitExceeded { limit }
+                );
+            }
         }
     }};
 }
@@ -173,11 +203,10 @@ pub(crate) struct TransactionService {
     query_interrupt_receiver: ExecutionInterrupt,
     shutdown_receiver: watch::Receiver<()>,
 
-    transaction_timeout_millis: Option<u64>,
+    timeout_at: Instant,
     schema_lock_acquire_timeout_millis: Option<u64>,
     prefetch_size: Option<u64>,
 
-    is_open: bool,
     transaction: Option<Transaction>,
     query_queue: VecDeque<(TransactionResponder, QueryOptions, typeql::query::Pipeline, String)>,
     running_write_query: Option<(TransactionResponder, JoinHandle<(Transaction, WriteQueryResult)>)>,
@@ -259,40 +288,34 @@ impl TransactionService {
             query_interrupt_receiver: ExecutionInterrupt::new(query_interrupt_receiver),
             shutdown_receiver,
 
-            transaction_timeout_millis: None,
+            timeout_at: init_transaction_timeout(None),
             schema_lock_acquire_timeout_millis: None,
             prefetch_size: None,
 
-            is_open: false,
             transaction: None,
             query_queue: VecDeque::with_capacity(20),
             running_write_query: None,
         }
     }
 
-    pub(crate) fn is_open(&self) -> bool {
-        self.is_open
-    }
-
     pub(crate) async fn open(
         &mut self,
-        transaction_type: TransactionType,
+        type_: TransactionType,
         database_name: String,
-        transaction_options: TransactionOptions,
+        options: TransactionOptions,
     ) -> Result<u64, TransactionServiceError> {
         let receive_time = Instant::now();
-        // TODO: Use
-        self.transaction_timeout_millis = Some(transaction_options.transaction_timeout_millis);
+        let transaction_timeout_millis = options.transaction_timeout_millis;
 
         let database = self
             .database_manager
             .database(database_name.as_ref())
             .ok_or_else(|| TransactionServiceError::DatabaseNotFound { name: database_name.clone() })?;
 
-        let transaction = match transaction_type {
+        let transaction = match type_ {
             TransactionType::Read => {
                 let transaction = spawn_blocking(move || {
-                    TransactionRead::open(database, transaction_options)
+                    TransactionRead::open(database, options)
                         .map_err(|typedb_source| TransactionServiceError::TransactionFailed { typedb_source })
                 })
                 .await
@@ -301,7 +324,7 @@ impl TransactionService {
             }
             TransactionType::Write => {
                 let transaction = spawn_blocking(move || {
-                    TransactionWrite::open(database, transaction_options)
+                    TransactionWrite::open(database, options)
                         .map_err(|typedb_source| TransactionServiceError::TransactionFailed { typedb_source })
                 })
                 .await
@@ -310,7 +333,7 @@ impl TransactionService {
             }
             TransactionType::Schema => {
                 let transaction = spawn_blocking(move || {
-                    TransactionSchema::open(database, transaction_options)
+                    TransactionSchema::open(database, options)
                         .map_err(|typedb_source| TransactionServiceError::TransactionFailed { typedb_source })
                 })
                 .await
@@ -320,7 +343,7 @@ impl TransactionService {
         };
         self.diagnostics_manager.increment_load_count(&database_name, transaction.to_load_kind());
         self.transaction = Some(transaction);
-        self.is_open = true;
+        self.timeout_at = init_transaction_timeout(Some(transaction_timeout_millis));
 
         let processing_time_millis = Instant::now().duration_since(receive_time).as_millis() as u64;
         Ok(processing_time_millis)
@@ -332,6 +355,11 @@ impl TransactionService {
                 tokio::select! { biased;
                     _ = self.shutdown_receiver.changed() => {
                         event!(Level::TRACE, "Shutdown signal received, closing transaction service.");
+                        self.do_close().await;
+                        return;
+                    }
+                    _ = tokio::time::sleep_until(self.timeout_at) => {
+                        event!(Level::TRACE, "Transaction timeout met, closing transaction service.");
                         self.do_close().await;
                         return;
                     }
@@ -352,6 +380,11 @@ impl TransactionService {
                 tokio::select! { biased;
                     _ = self.shutdown_receiver.changed() => {
                         event!(Level::TRACE, "Shutdown signal received, closing transaction service.");
+                        self.do_close().await;
+                        return;
+                    }
+                    _ = tokio::time::sleep_until(self.timeout_at) => {
+                        event!(Level::TRACE, "Transaction timeout met, closing transaction service.");
                         self.do_close().await;
                         return;
                     }
@@ -766,6 +799,7 @@ impl TransactionService {
             let snapshot = transaction.snapshot.clone();
             let type_manager = transaction.type_manager.clone();
             let thing_manager = transaction.thing_manager.clone();
+            let timeout_at = self.timeout_at;
             let interrupt = self.query_interrupt_receiver.clone();
             tokio::spawn(async move {
                 match answer.answer {
@@ -778,6 +812,7 @@ impl TransactionService {
                             output_descriptor,
                             batch,
                             responder,
+                            timeout_at,
                             interrupt,
                         )
                         .await
@@ -791,6 +826,7 @@ impl TransactionService {
                             parameters,
                             documents,
                             responder,
+                            timeout_at,
                             interrupt,
                         )
                         .await
@@ -834,24 +870,20 @@ impl TransactionService {
         output_descriptor: StreamQueryOutputDescriptor,
         batch: Batch,
         responder: TransactionResponder,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
     ) -> ControlFlow<(), ()> {
         let mut result = vec![];
         let mut as_lending_iter = batch.into_iterator();
         while let Some(row) = as_lending_iter.next() {
+            check_timeout_else_respond_error_and_return_break!(timeout_at, responder);
+            check_interrupt_else_respond_error_and_return_break!(interrupt, responder);
             // TODO: Consider multiplicity?
-            if let Some(limit) = query_options.answer_count_limit {
-                if result.len() >= limit {
-                    respond_error_and_return_break!(
-                        responder,
-                        TransactionServiceError::WriteResultsLimitExceeded { limit }
-                    );
-                }
-            }
-
-            if let Some(interrupt) = interrupt.check() {
-                respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
-            }
+            check_answer_count_limit_else_respond_error_and_return_break!(
+                query_options.answer_count_limit,
+                result,
+                responder
+            );
 
             let encoded_row = encode_row(
                 row,
@@ -887,22 +919,19 @@ impl TransactionService {
         parameters: Arc<ParameterRegistry>,
         documents: Vec<ConceptDocument>,
         responder: TransactionResponder,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
     ) -> ControlFlow<(), ()> {
         let mut result = Vec::with_capacity(documents.len());
         for document in documents {
-            if let Some(limit) = query_options.answer_count_limit {
-                if result.len() >= limit {
-                    respond_error_and_return_break!(
-                        responder,
-                        TransactionServiceError::WriteResultsLimitExceeded { limit }
-                    );
-                }
-            }
-
-            if let Some(interrupt) = interrupt.check() {
-                respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
-            }
+            check_timeout_else_respond_error_and_return_break!(timeout_at, responder);
+            check_interrupt_else_respond_error_and_return_break!(interrupt, responder);
+            // TODO: Consider multiplicity?
+            check_answer_count_limit_else_respond_error_and_return_break!(
+                query_options.answer_count_limit,
+                result,
+                responder
+            );
 
             let encoded_document =
                 encode_document(document, snapshot.as_ref(), &type_manager, &thing_manager, &parameters);
@@ -932,6 +961,7 @@ impl TransactionService {
         source_query: String,
     ) -> JoinHandle<ControlFlow<(), ()>> {
         debug_assert!(self.query_queue.is_empty() && self.running_write_query.is_none() && self.transaction.is_some());
+        let timeout_at = self.timeout_at;
         let interrupt = self.query_interrupt_receiver.clone();
         with_readable_transaction!(self.transaction.as_ref().unwrap(), |transaction| {
             let snapshot = transaction.snapshot.clone();
@@ -957,6 +987,7 @@ impl TransactionService {
                     query_options,
                     pipeline,
                     &source_query,
+                    timeout_at,
                     interrupt,
                     responder,
                     snapshot,
@@ -971,6 +1002,7 @@ impl TransactionService {
         query_options: QueryOptions,
         pipeline: Pipeline<Snapshot, ReadPipelineStage<Snapshot>>,
         source_query: &str,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
         responder: TransactionResponder,
         snapshot: Arc<Snapshot>,
@@ -1002,9 +1034,8 @@ impl TransactionService {
                     }
                 }
 
-                if let Some(interrupt) = interrupt.check() {
-                    respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
-                }
+                check_timeout_else_respond_error_and_return_break!(timeout_at, responder);
+                check_interrupt_else_respond_error_and_return_break!(interrupt, responder);
 
                 let document =
                     unwrap_or_execute_else_respond_error_and_return_break!(next, responder, |typedb_source| {
@@ -1057,9 +1088,8 @@ impl TransactionService {
                     }
                 }
 
-                if let Some(interrupt) = interrupt.check() {
-                    respond_error_and_return_break!(responder, TransactionServiceError::QueryInterrupted { interrupt });
-                }
+                check_timeout_else_respond_error_and_return_break!(timeout_at, responder);
+                check_interrupt_else_respond_error_and_return_break!(interrupt, responder);
 
                 let row = unwrap_or_execute_else_respond_error_and_return_break!(next, responder, |typedb_source| {
                     TransactionServiceError::PipelineExecution { typedb_source: *typedb_source }

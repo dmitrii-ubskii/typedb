@@ -11,7 +11,7 @@ use std::{
         ControlFlow::{Break, Continue},
     },
     sync::Arc,
-    time::Instant,
+    time::Duration,
 };
 
 use compiler::VariablePosition;
@@ -55,6 +55,7 @@ use tokio::{
         watch,
     },
     task::{spawn_blocking, JoinHandle},
+    time::Instant,
 };
 use tokio_stream::StreamExt;
 use tonic::{Status, Streaming};
@@ -89,9 +90,9 @@ use crate::service::{
     },
     transaction_service::{
         execute_schema_query, execute_write_query_in, execute_write_query_in_schema, execute_write_query_in_write,
-        is_write_pipeline, prepare_read_query_in, unwrap_or_execute_and_return, with_readable_transaction,
-        StreamQueryOutputDescriptor, Transaction, TransactionServiceError, WriteQueryAnswer, WriteQueryBatchAnswer,
-        WriteQueryDocumentsAnswer, WriteQueryResult,
+        init_transaction_timeout, is_write_pipeline, prepare_read_query_in, unwrap_or_execute_and_return,
+        with_readable_transaction, StreamQueryOutputDescriptor, Transaction, TransactionServiceError, WriteQueryAnswer,
+        WriteQueryBatchAnswer, WriteQueryDocumentsAnswer, WriteQueryResult,
     },
 };
 
@@ -106,7 +107,7 @@ pub(crate) struct TransactionService {
     query_interrupt_receiver: ExecutionInterrupt,
     shutdown_receiver: watch::Receiver<()>,
 
-    transaction_timeout_millis: Option<u64>,
+    timeout_at: Instant,
     schema_lock_acquire_timeout_millis: Option<u64>,
     prefetch_size: Option<u64>,
     network_latency_millis: Option<u64>,
@@ -222,7 +223,7 @@ impl TransactionService {
             query_interrupt_receiver: ExecutionInterrupt::new(query_interrupt_receiver),
             shutdown_receiver,
 
-            transaction_timeout_millis: None,
+            timeout_at: init_transaction_timeout(None),
             schema_lock_acquire_timeout_millis: None,
             prefetch_size: None,
             network_latency_millis: None,
@@ -240,7 +241,13 @@ impl TransactionService {
             let result = if let Some((req_id, write_query_worker)) = &mut self.running_write_query {
                 tokio::select! { biased;
                     _ = self.shutdown_receiver.changed() => {
+                        println!("SHUTDOWN!");
                         event!(Level::TRACE, "Shutdown signal received, closing transaction service.");
+                        self.do_close().await;
+                        return;
+                    }
+                    _ = tokio::time::sleep_until(self.timeout_at) => {
+                        event!(Level::TRACE, "Transaction timeout met, closing transaction service.");
                         self.do_close().await;
                         return;
                     }
@@ -264,6 +271,11 @@ impl TransactionService {
                 tokio::select! { biased;
                     _ = self.shutdown_receiver.changed() => {
                         event!(Level::TRACE, "Shutdown signal received, closing transaction service.");
+                        self.do_close().await;
+                        return;
+                    }
+                    _ = tokio::time::sleep_until(self.timeout_at) => {
+                        event!(Level::TRACE, "Transaction timeout met, closing transaction service.");
                         self.do_close().await;
                         return;
                     }
@@ -448,12 +460,15 @@ impl TransactionService {
             if let Some(timeout) = options.schema_lock_acquire_timeout_millis {
                 transaction_options.schema_lock_acquire_timeout_millis = timeout
             }
+            if let Some(transaction_timeout_millis) = options.transaction_timeout_millis {
+                transaction_options.transaction_timeout_millis = transaction_timeout_millis
+            }
 
             // service options
             self.prefetch_size = options.prefetch_size.or(Some(DEFAULT_PREFETCH_SIZE));
-            self.transaction_timeout_millis =
-                options.transaction_timeout_millis.or(Some(DEFAULT_TRANSACTION_TIMEOUT_MILLIS));
         }
+
+        let transaction_timeout_millis = transaction_options.transaction_timeout_millis;
 
         let transaction_type = typedb_protocol::transaction::Type::try_from(open_req.r#type)
             .map_err(|_| ProtocolError::UnrecognisedTransactionType { enum_variant: open_req.r#type }.into_status())?;
@@ -497,6 +512,7 @@ impl TransactionService {
         };
         self.diagnostics_manager.increment_load_count(&database_name, transaction.to_load_kind());
         self.transaction = Some(transaction);
+        self.timeout_at = init_transaction_timeout(Some(transaction_timeout_millis));
         self.is_open = true;
 
         let processing_time_millis = Instant::now().duration_since(receive_time).as_millis() as u64;
@@ -880,6 +896,7 @@ impl TransactionService {
         debug_assert!(self.running_write_query.is_none());
         debug_assert!(self.transaction.is_some());
         let interrupt = self.query_interrupt_receiver.clone();
+        let timeout_at = self.timeout_at;
         match self.transaction.take() {
             Some(Transaction::Schema(schema_transaction)) => Ok(spawn_blocking(move || {
                 execute_write_query_in_schema(schema_transaction, query_options, pipeline, source_query, interrupt)
@@ -906,6 +923,7 @@ impl TransactionService {
             let snapshot = transaction.snapshot.clone();
             let type_manager = transaction.type_manager.clone();
             let thing_manager = transaction.thing_manager.clone();
+            let timeout_at = self.timeout_at;
             let interrupt = self.query_interrupt_receiver.clone();
             tokio::spawn(async move {
                 match answer.answer {
@@ -918,6 +936,7 @@ impl TransactionService {
                             answer.query_options,
                             batch,
                             sender,
+                            timeout_at,
                             interrupt,
                         )
                         .await
@@ -930,6 +949,7 @@ impl TransactionService {
                             parameters,
                             documents,
                             sender,
+                            timeout_at,
                             interrupt,
                         )
                         .await
@@ -947,6 +967,7 @@ impl TransactionService {
         query_options: QueryOptions,
         batch: Batch,
         sender: Sender<StreamQueryResponse>,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
     ) {
         let mut as_lending_iter = batch.into_iterator();
@@ -957,6 +978,14 @@ impl TransactionService {
                 Self::submit_response_async(
                     &sender,
                     StreamQueryResponse::done_err(TransactionServiceError::QueryInterrupted { interrupt }),
+                )
+                .await;
+                return;
+            }
+            if Instant::now() >= timeout_at {
+                Self::submit_response_async(
+                    &sender,
+                    StreamQueryResponse::done_err(TransactionServiceError::TransactionTimeout {}),
                 )
                 .await;
                 return;
@@ -994,6 +1023,7 @@ impl TransactionService {
         parameters: Arc<ParameterRegistry>,
         documents: Vec<ConceptDocument>,
         sender: Sender<StreamQueryResponse>,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
     ) {
         Self::submit_response_async(&sender, StreamQueryResponse::init_ok_documents(Write)).await;
@@ -1003,6 +1033,14 @@ impl TransactionService {
                 Self::submit_response_async(
                     &sender,
                     StreamQueryResponse::done_err(TransactionServiceError::QueryInterrupted { interrupt }),
+                )
+                .await;
+                return;
+            }
+            if Instant::now() >= timeout_at {
+                Self::submit_response_async(
+                    &sender,
+                    StreamQueryResponse::done_err(TransactionServiceError::TransactionTimeout {}),
                 )
                 .await;
                 return;
@@ -1035,6 +1073,7 @@ impl TransactionService {
         source_query: String,
     ) -> JoinHandle<()> {
         debug_assert!(self.query_queue.is_empty() && self.running_write_query.is_none() && self.transaction.is_some());
+        let timeout_at = self.timeout_at;
         let interrupt = self.query_interrupt_receiver.clone();
         with_readable_transaction!(self.transaction.as_ref().unwrap(), |transaction| {
             let snapshot = transaction.snapshot.clone();
@@ -1059,6 +1098,7 @@ impl TransactionService {
                     query_options,
                     pipeline,
                     &source_query,
+                    timeout_at,
                     interrupt,
                     &sender,
                     snapshot,
@@ -1073,6 +1113,7 @@ impl TransactionService {
         query_options: QueryOptions,
         pipeline: Pipeline<Snapshot, ReadPipelineStage<Snapshot>>,
         source_query: &str,
+        timeout_at: Instant,
         mut interrupt: ExecutionInterrupt,
         sender: &Sender<StreamQueryResponse>,
         snapshot: Arc<Snapshot>,
@@ -1099,6 +1140,13 @@ impl TransactionService {
                     Self::submit_response_sync(
                         sender,
                         StreamQueryResponse::done_err(TransactionServiceError::QueryInterrupted { interrupt }),
+                    );
+                    return;
+                }
+                if Instant::now() >= timeout_at {
+                    Self::submit_response_sync(
+                        sender,
+                        StreamQueryResponse::done_err(TransactionServiceError::TransactionTimeout {}),
                     );
                     return;
                 }
@@ -1145,6 +1193,13 @@ impl TransactionService {
                     Self::submit_response_sync(
                         sender,
                         StreamQueryResponse::done_err(TransactionServiceError::QueryInterrupted { interrupt }),
+                    );
+                    return;
+                }
+                if Instant::now() >= timeout_at {
+                    Self::submit_response_sync(
+                        sender,
+                        StreamQueryResponse::done_err(TransactionServiceError::TransactionTimeout {}),
                     );
                     return;
                 }

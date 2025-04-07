@@ -32,13 +32,13 @@ use crate::service::{
 pub(crate) struct TransactionOpenPayload {
     pub(crate) database_name: String,
     pub(crate) transaction_type: TransactionType,
-    pub(crate) options: Option<TransactionOptionsPayload>,
+    pub(crate) transaction_options: Option<TransactionOptionsPayload>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct TransactionOptionsPayload {
-    pub parallel: Option<bool>,
+    pub parallel: Option<bool>, // TODO: Not used? Remove?
     pub schema_lock_acquire_timeout_millis: Option<u64>,
     pub transaction_timeout_millis: Option<u64>,
 }

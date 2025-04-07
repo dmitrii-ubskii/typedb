@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use axum::response::IntoResponse;
 use compiler::VariablePosition;
@@ -30,12 +30,13 @@ use ir::pipeline::ParameterRegistry;
 use itertools::{Either, Itertools};
 use options::QueryOptions;
 use query::{error::QueryError, query_manager::QueryManager};
+use resource::constants::server::DEFAULT_TRANSACTION_TIMEOUT_MILLIS;
 use serde::{Deserialize, Serialize};
 use storage::{
     durability_client::WALClient,
     snapshot::{ReadableSnapshot, WritableSnapshot},
 };
-use tokio::task::spawn_blocking;
+use tokio::{task::spawn_blocking, time::Instant};
 use tracing::{event, Level};
 use typeql::{
     query::{stage::Stage, SchemaQuery},
@@ -367,6 +368,10 @@ pub(crate) fn prepare_read_query_in<Snapshot: ReadableSnapshot + 'static>(
     query_manager.prepare_read_pipeline(snapshot, type_manager, thing_manager, function_manager, pipeline, source_query)
 }
 
+pub(crate) fn init_transaction_timeout(transaction_timeout_millis: Option<u64>) -> Instant {
+    Instant::now() + Duration::from_millis(transaction_timeout_millis.unwrap_or(DEFAULT_TRANSACTION_TIMEOUT_MILLIS))
+}
+
 typedb_error! {
     pub(crate) TransactionServiceError(component = "Transaction service", prefix = "TSV") {
         DatabaseNotFound(1, "Database '{name}' not found.", name: String),
@@ -380,7 +385,7 @@ typedb_error! {
         WriteQueryRequiresSchemaOrWriteTransaction(9, "Data modification queries require either write or schema transactions."),
         TxnAbortSchemaQueryFailed(10, "Aborting transaction due to failed schema query.", typedb_source: QueryError),
         QueryFailed(11, "Query failed.", typedb_source: Box<QueryError>),
-        NoOpenTransaction(12, "Operation failed - no open transaction."),
+        NoOpenTransaction(12, "Operation failed: no open transaction."),
         QueryInterrupted(13, "Execution interrupted by to a concurrent {interrupt}.", interrupt: InterruptType),
         QueryStreamNotFound(
             14,
@@ -393,5 +398,6 @@ typedb_error! {
         ServiceFailedQueueCleanup(15, "The operation failed since the service is closing."),
         PipelineExecution(16, "Pipeline execution failed.", typedb_source: PipelineExecutionError),
         WriteResultsLimitExceeded(17, "Write query results limit ({limit}) exceeded, and the transaction is aborted. Retry with an extended limit or break the query into multiple smaller queries to achieve the same result.", limit: usize),
+        TransactionTimeout(18, "Operation failed: transaction timeout."),
     }
 }
