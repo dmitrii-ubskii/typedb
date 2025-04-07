@@ -344,7 +344,7 @@ pub async fn answer_get_row_get_variable_as(
     }
     let concept = get_answer_rows_var(context, index, var).unwrap().clone().into();
     may_error.check((|| {
-        kind.matches_concept(&concept).then(|| ()).ok_or(HttpBehaviourTestError::InvalidConceptConversion)
+        kind.matches_concept(&concept).then(|| ()).ok_or(HttpBehaviourTestError::InvalidConceptConversion {})
     })());
 }
 
@@ -649,7 +649,7 @@ pub async fn answer_get_row_get_variable_get_value_of_type(
     let result = if value_type.as_str() == concept.get_value_type().unwrap_or(value_type.as_str()) {
         Ok(())
     } else {
-        Err(InvalidValueRetrieval(value_type.as_str().to_string()))
+        Err(InvalidValueRetrieval { type_: value_type.as_str().to_string() })
     };
     may_error.check(result);
 }
@@ -901,7 +901,7 @@ pub async fn answer_contains_document(
     let concept_documents = context.get_answer().unwrap().answers.as_ref().unwrap();
     println!("Expected document: {expected_document:?}");
     println!("Got documents: {concept_documents:?}");
-    // TODO: Check documents
+    todo!("Check documents")
     // contains_or_doesnt.check_bool(
     //     list_contains_json(concept_documents, &expected_document),
     //     &format!("Concept documents: {:?}", concept_documents),

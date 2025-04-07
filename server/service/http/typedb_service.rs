@@ -42,11 +42,10 @@ use crate::{
                 body::JsonBody,
                 database::{encode_database, encode_databases, DatabasePath},
                 query::{QueryOptionsPayload, QueryPayload, TransactionQueryPayload},
-                transaction::{encode_transaction, TransactionId, TransactionOpenPayload, TransactionPath},
+                transaction::{encode_transaction, TransactionOpenPayload, TransactionPath},
                 user::{encode_user, encode_users, CreateUserPayload, UpdateUserPayload, UserPath},
                 version::ProtocolVersion,
             },
-            transaction_service,
             transaction_service::{
                 QueryAnswer, TransactionRequest, TransactionResponder, TransactionService, TransactionServiceResponse,
             },
@@ -487,7 +486,7 @@ impl TypeDBService {
         Accessor(accessor): Accessor,
         path: TransactionPath,
     ) -> impl IntoResponse {
-        let TransactionId(uuid) = path.transaction_id;
+        let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
@@ -502,7 +501,7 @@ impl TypeDBService {
         Accessor(accessor): Accessor,
         path: TransactionPath,
     ) -> impl IntoResponse {
-        let TransactionId(uuid) = path.transaction_id;
+        let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let Some(transaction) = senders.get(&uuid) else {
             return Ok(TransactionServiceResponse::Ok);
@@ -519,7 +518,7 @@ impl TypeDBService {
         Accessor(accessor): Accessor,
         path: TransactionPath,
     ) -> impl IntoResponse {
-        let TransactionId(uuid) = path.transaction_id;
+        let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
@@ -535,7 +534,7 @@ impl TypeDBService {
         path: TransactionPath,
         JsonBody(payload): JsonBody<TransactionQueryPayload>,
     ) -> impl IntoResponse {
-        let TransactionId(uuid) = path.transaction_id;
+        let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
@@ -584,18 +583,5 @@ impl TypeDBService {
         }
 
         Ok(TransactionServiceResponse::Query(query_response))
-    }
-}
-
-trait IntoStatusCode {
-    fn into_status_code(self) -> StatusCode;
-}
-
-impl IntoStatusCode for bool {
-    fn into_status_code(self) -> StatusCode {
-        match self {
-            true => StatusCode::OK,
-            false => StatusCode::NOT_FOUND,
-        }
     }
 }

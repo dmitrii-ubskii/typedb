@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::service::http::message::from_request_parts_impl;
 
+#[derive(Debug)]
 pub(crate) struct DatabasePath {
     pub(crate) database_name: String,
 }

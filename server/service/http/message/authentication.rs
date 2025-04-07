@@ -25,11 +25,11 @@ impl<S> FromRequestParts<S> for Accessor
 where
     S: Send + Sync,
 {
-    type Rejection = Response;
+    type Rejection = HTTPServiceError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Accessor::from_extensions(&parts.extensions)
-            .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source }.into_response())
+            .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source })
     }
 }
 

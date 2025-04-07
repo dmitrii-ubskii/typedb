@@ -7,13 +7,12 @@
 use std::{collections::HashMap, str::FromStr};
 
 use axum::{
-    async_trait,
     extract::{FromRequest, FromRequestParts, Path},
     response::{IntoResponse, Response},
     RequestExt, RequestPartsExt,
 };
 use futures::TryFutureExt;
-use http::{request::Parts, StatusCode};
+use http::StatusCode;
 use options::TransactionOptions;
 use resource::constants::server::{
     DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS, DEFAULT_TRANSACTION_PARALLEL, DEFAULT_TRANSACTION_TIMEOUT_MILLIS,
@@ -27,36 +26,6 @@ use crate::service::{
     },
     TransactionType,
 };
-
-#[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct TransactionId(pub(crate) Uuid);
-
-impl FromStr for TransactionId {
-    type Err = uuid::Error;
-
-    fn from_str(uuid: &str) -> Result<Self, Self::Err> {
-        Ok(TransactionId(Uuid::from_str(uuid)?))
-    }
-}
-
-#[async_trait]
-impl<S> FromRequestParts<S> for TransactionId
-where
-    S: Send + Sync,
-{
-    type Rejection = Response;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let params: Path<HashMap<String, String>> = parts.extract().await.map_err(IntoResponse::into_response)?;
-        let id = params
-            .get("transaction_id")
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "transaction_id param missing").into_response())?;
-        match TransactionId::from_str(id.as_str()) {
-            Ok(id) => Ok(id),
-            Err(err) => Err((StatusCode::BAD_REQUEST, "transaction_id param is ill-formed").into_response()),
-        }
-    }
-}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -96,11 +65,12 @@ pub(crate) fn encode_transaction(transaction_id: Uuid) -> TransactionResponse {
     TransactionResponse { transaction_id }
 }
 
+#[derive(Debug)]
 pub(crate) struct TransactionPath {
-    pub(crate) transaction_id: TransactionId,
+    pub(crate) transaction_id: Uuid,
 }
 
-from_request_parts_impl!(TransactionPath { transaction_id: TransactionId });
+from_request_parts_impl!(TransactionPath { transaction_id: Uuid });
 
 impl IntoResponse for TransactionServiceResponse {
     fn into_response(self) -> Response {

@@ -14,6 +14,7 @@ rust_library(
     deps = [
         "//server:server",
         "//encoding:encoding",
+        "//common/error:error",
         "//common/options:options",
         "//tests/behaviour/steps/params:params",
         "//util/test:test_utils",
@@ -33,6 +34,8 @@ rust_library(
         "@crates//:uuid",
         "@crates//:url",
         "@crates//:macro_rules_attribute",
+
+        "@typeql//rust:typeql",
     ],
 )
 

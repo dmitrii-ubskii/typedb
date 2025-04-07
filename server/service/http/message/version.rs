@@ -15,9 +15,15 @@ use axum::{
 use futures::TryFutureExt;
 use http::{request::Parts, StatusCode};
 
+use crate::service::http::error::HTTPServiceError;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd)]
 pub(crate) enum ProtocolVersion {
     V1,
+}
+
+impl ProtocolVersion {
+    const VERSION_PARAM: &'static str = "version";
 }
 
 #[async_trait]
@@ -29,8 +35,9 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let params: Path<HashMap<String, String>> = parts.extract().await.map_err(IntoResponse::into_response)?;
-        let version =
-            params.get("version").ok_or_else(|| (StatusCode::NOT_FOUND, "version param missing").into_response())?;
+        let version = params.get(Self::VERSION_PARAM).ok_or_else(|| {
+            HTTPServiceError::MissingPathParameter { parameter: Self::VERSION_PARAM.to_string() }.into_response()
+        })?;
         ProtocolVersion::from_str(version.as_str()).map_err(|error| error.into_response())
     }
 }

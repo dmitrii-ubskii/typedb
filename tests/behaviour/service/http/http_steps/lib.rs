@@ -15,10 +15,12 @@ use std::{
     iter, mem,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
     time::Instant,
 };
 
 use cucumber::{gherkin::Feature, StatsWriter, World};
+use error::typedb_error;
 use futures::{
     future::Either,
     stream::{self, StreamExt},
@@ -363,44 +365,14 @@ fn create_https_client() -> Client<HttpsConnector<HttpConnector>> {
     Client::builder().build::<_, hyper::Body>(https)
 }
 
-#[derive(Debug)]
-pub enum HttpBehaviourTestError {
-    Transaction,
-    InvalidConceptConversion,
-    InvalidValueRetrieval(String),
-    HttpError(http::Error),
-    HyperError(hyper::Error),
-    StatusError { code: StatusCode, message: String },
-    UnavailableRowVariable { variable: String },
-}
-
-impl fmt::Display for HttpBehaviourTestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transaction => write!(f, "Transaction error."),
-            Self::InvalidConceptConversion => write!(f, "Invalid concept conversion."),
-            Self::InvalidValueRetrieval(type_) => write!(f, "Could not retrieve a '{}' value.", type_),
-            Self::HttpError(source) => write!(f, "Http error: {source}"),
-            Self::HyperError(source) => write!(f, "Hyper error: {source}"),
-            Self::StatusError { code, message } => write!(f, "Status Error {}: {}", code.as_u16(), message),
-            Self::UnavailableRowVariable { variable } => {
-                write!(f, "Cannot get concept from a concept row by variable '{}'", variable)
-            }
-        }
-    }
-}
-
-impl Error for HttpBehaviourTestError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Transaction => None,
-            Self::InvalidConceptConversion => None,
-            Self::InvalidValueRetrieval(_) => None,
-            Self::HttpError(error) => Some(error),
-            Self::HyperError(error) => Some(error),
-            Self::StatusError { .. } => None,
-            Self::UnavailableRowVariable { .. } => None,
-        }
+typedb_error! {
+    pub HttpBehaviourTestError(component = "HTTP Behaviour Test", prefix = "HTB") {
+        InvalidConceptConversion(1, "Invalid concept conversion."),
+        InvalidValueRetrieval(2, "Could not retrieve a '{type_}' value.", type_: String),
+        HttpError(3, "Http error.", source: Arc<http::Error>),
+        HyperError(4, "Hyper error.", source: Arc<hyper::Error>),
+        StatusError(5, "Status Error {code}: {message}", code: StatusCode, message: String),
+        UnavailableRowVariable(6, "Cannot get concept from a concept row by variable '{variable}'.", variable: String),
     }
 }
 

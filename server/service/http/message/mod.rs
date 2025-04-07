@@ -39,6 +39,7 @@ macro_rules! from_request_parts_impl {
                 use std::str::FromStr;
                 use http::StatusCode;
                 use $crate::service::http::message::stringify_kebab_case;
+                use crate::service::http::error::HTTPServiceError;
 
                 let params: Path<HashMap<String, String>> = Path::<HashMap<String, String>>::from_request_parts(parts, state)
                     .await
@@ -47,9 +48,9 @@ macro_rules! from_request_parts_impl {
                 $(
                     let field_name = stringify_kebab_case!($field_name);
                     let $field_name = params.get(&field_name)
-                        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("Missing parameter: {}", field_name)).into_response())?
+                        .ok_or_else(|| HTTPServiceError::MissingPathParameter { parameter: field_name.clone() }.into_response())?
                         .parse::<$field_ty>()
-                        .map_err(|_| (StatusCode::BAD_REQUEST, format!("Invalid parameter: {}", field_name)).into_response())?;
+                        .map_err(|_| HTTPServiceError::InvalidPathParameter { parameter: field_name }.into_response())?;
                 )*
 
                 Ok(Self { $($field_name),* })

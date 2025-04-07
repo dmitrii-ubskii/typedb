@@ -59,6 +59,16 @@ features = {}
 		version = "0.3.31"
 		default-features = false
 
+	[dependencies.encoding]
+		path = "../../../../../encoding"
+		features = []
+		default-features = false
+
+	[dependencies.error]
+		path = "../../../../../common/error"
+		features = []
+		default-features = false
+
 	[dependencies.itertools]
 		features = ["default", "use_alloc", "use_std"]
 		version = "0.10.5"
@@ -87,6 +97,12 @@ features = {}
 	[dependencies.options]
 		path = "../../../../../common/options"
 		features = []
+		default-features = false
+
+	[dependencies.typeql]
+		features = []
+		rev = "00504c09beb591b0d1c27633c3fe29520691489b"
+		git = "https://github.com/typedb/typeql"
 		default-features = false
 
 	[dependencies.chrono]

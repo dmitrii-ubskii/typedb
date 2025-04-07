@@ -10,6 +10,7 @@ use system::concepts::User;
 
 use crate::service::http::message::from_request_parts_impl;
 
+#[derive(Debug)]
 pub(crate) struct UserPath {
     pub(crate) username: String,
 }

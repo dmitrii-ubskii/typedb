@@ -655,10 +655,13 @@ impl TransactionService {
         // TODO: pass query options
         let parsed = match parse_query(&query) {
             Ok(parsed) => parsed,
-            Err(err) => respond_error_and_return_break!(
-                responder,
-                TransactionServiceError::QueryParseFailed { typedb_source: err }
-            ),
+            Err(err) => {
+                let _ = respond_transaction_response(
+                    responder,
+                    TransactionServiceResponse::Err(TransactionServiceError::QueryParseFailed { typedb_source: err }),
+                );
+                return Continue(());
+            }
         };
         match parsed {
             Query::Schema(schema_query) => {

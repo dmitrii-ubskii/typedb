@@ -518,7 +518,7 @@ impl FromStr for ValueType {
             "datetime-tz" => Self::DatetimeTZ,
             "duration" => Self::Duration,
             "string" => Self::String,
-            "struct" => Self::Struct(Label { label_string: "unknown".to_string() }),
+            "struct" => Self::Struct(Label { label_string: "struct".to_string() }),
             other => {
                 let re = Regex::new(r"^struct\{([A-Za-z0-9_:-]+)}$").unwrap();
                 if let Some(caps) = re.captures(other) {

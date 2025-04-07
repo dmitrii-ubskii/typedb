@@ -2010,6 +2010,8 @@ dependencies = [
  "async-std",
  "chrono",
  "cucumber",
+ "encoding",
+ "error",
  "futures",
  "hyper 0.14.32",
  "hyper-rustls",
@@ -2024,6 +2026,7 @@ dependencies = [
  "smol",
  "test_utils",
  "tokio",
+ "typeql",
  "url",
  "uuid",
 ]

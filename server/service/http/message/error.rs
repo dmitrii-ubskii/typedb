@@ -27,6 +27,8 @@ impl IntoResponse for HTTPServiceError {
             HTTPServiceError::JsonBodyExpected { .. } => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             HTTPServiceError::RequestTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             HTTPServiceError::NotFound { .. } => StatusCode::NOT_FOUND,
+            HTTPServiceError::MissingPathParameter { .. } => StatusCode::NOT_FOUND,
+            HTTPServiceError::InvalidPathParameter { .. } => StatusCode::BAD_REQUEST,
             HTTPServiceError::Service { typedb_source } => match typedb_source {
                 ServiceError::Unimplemented { .. } => StatusCode::NOT_IMPLEMENTED,
                 ServiceError::OperationNotPermitted { .. } => StatusCode::FORBIDDEN,

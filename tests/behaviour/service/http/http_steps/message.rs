@@ -3,6 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+use std::sync::Arc;
+
 use hyper::{
     client::HttpConnector,
     header::{AUTHORIZATION, CONTENT_TYPE},
@@ -45,12 +47,18 @@ async fn send_request(
             Some(b) => Body::from(b.to_string()),
             None => Body::empty(),
         })
-        .map_err(|source| HttpBehaviourTestError::HttpError(source))?;
+        .map_err(|source| HttpBehaviourTestError::HttpError { source: Arc::new(source) })?;
 
-    let res = context.http_client.request(req).await.map_err(HttpBehaviourTestError::HyperError)?;
+    let res = context
+        .http_client
+        .request(req)
+        .await
+        .map_err(|source| HttpBehaviourTestError::HyperError { source: Arc::new(source) })?;
 
     let status = res.status();
-    let body_bytes = hyper::body::to_bytes(res.into_body()).await.map_err(HttpBehaviourTestError::HyperError)?;
+    let body_bytes = hyper::body::to_bytes(res.into_body())
+        .await
+        .map_err(|source| HttpBehaviourTestError::HyperError { source: Arc::new(source) })?;
 
     let body_str = String::from_utf8_lossy(&body_bytes).to_string();
 
@@ -67,10 +75,14 @@ pub async fn check_health(http_client: Client<HttpConnector>) -> Result<String, 
         .method(Method::GET)
         .uri(uri)
         .body(Body::empty())
-        .map_err(|source| HttpBehaviourTestError::HttpError(source))?;
-    let res = http_client.request(req).await.map_err(|source| HttpBehaviourTestError::HyperError(source))?;
-    let body_bytes =
-        hyper::body::to_bytes(res.into_body()).await.map_err(|source| HttpBehaviourTestError::HyperError(source))?;
+        .map_err(|source| HttpBehaviourTestError::HttpError { source: Arc::new(source) })?;
+    let res = http_client
+        .request(req)
+        .await
+        .map_err(|source| HttpBehaviourTestError::HyperError { source: Arc::new(source) })?;
+    let body_bytes = hyper::body::to_bytes(res.into_body())
+        .await
+        .map_err(|source| HttpBehaviourTestError::HyperError { source: Arc::new(source) })?;
     Ok(String::from_utf8_lossy(&body_bytes).to_string())
 }
 
