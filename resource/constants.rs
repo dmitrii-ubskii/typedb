@@ -27,7 +27,7 @@ pub mod server {
     // TODO: Maybe we start moving these options to separate crates?
     pub const DEFAULT_PREFETCH_SIZE: u64 = 32;
     pub const DEFAULT_SCHEMA_LOCK_ACQUIRE_TIMEOUT_MILLIS: u64 = Duration::from_secs(10).as_millis() as u64;
-    pub const DEFAULT_TRANSACTION_TIMEOUT_MILLIS: u64 = Duration::from_secs(10).as_millis() as u64;
+    pub const DEFAULT_TRANSACTION_TIMEOUT_MILLIS: u64 = Duration::from_secs(5 * SECONDS_IN_MINUTE).as_millis() as u64;
     pub const DEFAULT_TRANSACTION_PARALLEL: bool = true;
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES: bool = true;
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH: bool = false;

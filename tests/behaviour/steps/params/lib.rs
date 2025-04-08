@@ -438,7 +438,7 @@ impl FromStr for KindExtended {
 #[derive(Debug, Parameter)]
 #[param(
     name = "value_type",
-    regex = r"(boolean|integer|double|decimal|date|datetime(?:-tz)?|duration|string|struct|struct\{[A-Za-z0-9_:-]+})"
+    regex = r"(boolean|integer|double|decimal|date|datetime(?:-tz)?|duration|string|struct|struct\{[A-Za-z0-9_:-]+}|[A-Za-z0-9_:-]+)"
 )]
 pub enum ValueType {
     Boolean,
@@ -524,7 +524,7 @@ impl FromStr for ValueType {
                 if let Some(caps) = re.captures(other) {
                     Self::Struct(Label { label_string: caps[1].to_string() })
                 } else {
-                    panic!("Cannot parse value type {other}");
+                    Self::Struct(Label { label_string: other.to_string() })
                 }
             }
         })

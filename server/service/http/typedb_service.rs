@@ -167,7 +167,7 @@ impl TypeDBService {
 
         match timeout(Duration::from_millis(transaction.transaction_timeout_millis), result_receiver).await {
             Ok(Ok(response)) => Ok(response),
-            Ok(Err(_)) => Err(HTTPServiceError::Internal { details: "channel closed".to_string() }),
+            Ok(Err(_)) => Err(HTTPServiceError::no_open_transaction()),
             Err(_) => Err(HTTPServiceError::RequestTimeout {}),
         }
     }
