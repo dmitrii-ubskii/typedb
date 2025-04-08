@@ -94,13 +94,12 @@ use crate::service::{
     },
     transaction_service::{
         execute_schema_query, execute_write_query_in, execute_write_query_in_schema, execute_write_query_in_write,
-        is_write_pipeline, prepare_read_query_in, with_readable_transaction, StreamQueryOutputDescriptor, Transaction,
-        TransactionServiceError, WriteQueryAnswer, WriteQueryBatchAnswer, WriteQueryDocumentsAnswer, WriteQueryResult,
-        TRANSACTION_REQUEST_BUFFER_SIZE,
+        init_transaction_timeout, is_write_pipeline, prepare_read_query_in, with_readable_transaction,
+        StreamQueryOutputDescriptor, Transaction, TransactionServiceError, WriteQueryAnswer, WriteQueryBatchAnswer,
+        WriteQueryDocumentsAnswer, WriteQueryResult, TRANSACTION_REQUEST_BUFFER_SIZE,
     },
     QueryType, TransactionType,
 };
-use crate::service::transaction_service::init_transaction_timeout;
 
 macro_rules! respond_error_and_return_break {
     ($responder:ident, $error:expr) => {{

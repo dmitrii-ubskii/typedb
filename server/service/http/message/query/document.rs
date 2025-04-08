@@ -8,7 +8,6 @@ use std::collections::HashMap;
 
 use answer::{Concept, Thing, Type};
 use concept::{error::ConceptReadError, thing::thing_manager::ThingManager, type_::type_manager::TypeManager};
-use encoding::graph::type_::Kind;
 use executor::document::{ConceptDocument, DocumentLeaf, DocumentList, DocumentMap, DocumentNode};
 use ir::pipeline::ParameterRegistry;
 use itertools::Itertools;
@@ -18,6 +17,7 @@ use storage::snapshot::ReadableSnapshot;
 
 use crate::service::http::message::query::concept::{
     encode_attribute, encode_attribute_type, encode_entity_type, encode_relation_type, encode_role_type, encode_value,
+    AttributeTypeDocument, TypeDocument,
 };
 
 pub fn encode_document(
@@ -100,34 +100,40 @@ fn encode_leaf(
         DocumentLeaf::Empty => Ok(serde_json::Value::Null),
         DocumentLeaf::Concept(concept) => Ok(json!(match concept {
             Concept::Type(Type::Entity(entity_type)) => {
-                json!(encode_entity_type(&entity_type, snapshot, type_manager)?)
+                json!(Into::<TypeDocument>::into(encode_entity_type(&entity_type, snapshot, type_manager)?))
             }
             Concept::Type(Type::Relation(relation_type)) => {
-                json!(encode_relation_type(&relation_type, snapshot, type_manager)?)
+                json!(Into::<TypeDocument>::into(encode_relation_type(&relation_type, snapshot, type_manager)?))
             }
             Concept::Type(Type::Attribute(attribute_type)) => {
-                json!(encode_attribute_type(&attribute_type, snapshot, type_manager)?)
+                json!(Into::<AttributeTypeDocument>::into(encode_attribute_type(
+                    &attribute_type,
+                    snapshot,
+                    type_manager
+                )?))
             }
             Concept::Type(Type::RoleType(role_type)) => {
-                json!(encode_role_type(&role_type, snapshot, type_manager)?)
+                json!(Into::<TypeDocument>::into(encode_role_type(&role_type, snapshot, type_manager)?))
             }
-            Concept::Thing(Thing::Entity(entity)) => {
-                unreachable!()
+            Concept::Thing(Thing::Entity(_)) => {
+                unreachable!("Entities are not represented as documents")
             }
-            Concept::Thing(Thing::Relation(relation)) => {
-                unreachable!()
+            Concept::Thing(Thing::Relation(_)) => {
+                unreachable!("Relations are not represented as documents")
             }
             Concept::Thing(Thing::Attribute(attribute)) => {
-                json!(encode_attribute(&attribute, snapshot, type_manager, thing_manager, include_instance_types)?)
+                Into::<serde_json::Value>::into(encode_attribute(
+                    &attribute,
+                    snapshot,
+                    type_manager,
+                    thing_manager,
+                    include_instance_types,
+                )?)
             }
             Concept::Value(value) => {
-                json!(encode_value(value))
+                Into::<serde_json::Value>::into(encode_value(value))
             }
         })),
-        DocumentLeaf::Kind(kind) => Ok(json!(encode_kind(kind))),
+        DocumentLeaf::Kind(kind) => Ok(json!(kind.name())),
     }
-}
-
-fn encode_kind(kind: Kind) -> serde_json::Value {
-    json!(kind.name())
 }

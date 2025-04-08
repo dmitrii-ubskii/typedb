@@ -899,11 +899,8 @@ pub async fn answer_contains_document(
 ) {
     let expected_document = parse_json(step.docstring().unwrap());
     let concept_documents = context.get_answer().unwrap().answers.as_ref().unwrap();
-    println!("Expected document: {expected_document:?}");
-    println!("Got documents: {concept_documents:?}");
-    todo!("Check documents")
-    // contains_or_doesnt.check_bool(
-    //     list_contains_json(concept_documents, &expected_document),
-    //     &format!("Concept documents: {:?}", concept_documents),
-    // );
+    contains_or_doesnt.check_bool(
+        list_contains_json(concept_documents, &expected_document),
+        &format!("Concept documents: {:?}", concept_documents),
+    );
 }

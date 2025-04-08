@@ -18,7 +18,7 @@ use concept::{
 };
 use encoding::value::{value::Value, value_type::ValueType, ValueEncodable};
 use error::unimplemented_feature;
-use serde::{ser::SerializeStruct, Serializer};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use serde_json::json;
 use storage::snapshot::ReadableSnapshot;
 
@@ -117,6 +117,61 @@ serializable_response! {
     pub struct RoleTypeResponse {
         kind = "roleType",
         pub label: String => "label",
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+// #[serde(rename_all = "camelCase")] // TODO: driver-based documents don't use camelCase?
+pub struct TypeDocument {
+    kind: String,
+    label: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+// #[serde(rename_all = "camelCase")] // TODO: driver-based documents don't use camelCase?
+pub struct AttributeTypeDocument {
+    kind: String,
+    label: String,
+    value_type: String,
+}
+
+impl Into<serde_json::Value> for AttributeResponse {
+    fn into(self) -> serde_json::Value {
+        self.value
+    }
+}
+
+impl Into<serde_json::Value> for ValueResponse {
+    fn into(self) -> serde_json::Value {
+        self.value
+    }
+}
+
+impl Into<TypeDocument> for EntityTypeResponse {
+    fn into(self) -> TypeDocument {
+        TypeDocument { kind: "entity".to_string(), label: self.label }
+    }
+}
+
+impl Into<TypeDocument> for RelationTypeResponse {
+    fn into(self) -> TypeDocument {
+        TypeDocument { kind: "relation".to_string(), label: self.label }
+    }
+}
+
+impl Into<AttributeTypeDocument> for AttributeTypeResponse {
+    fn into(self) -> AttributeTypeDocument {
+        AttributeTypeDocument {
+            kind: "attribute".to_string(),
+            label: self.label,
+            value_type: self.value_type.unwrap_or_else(|| "none".to_string()),
+        }
+    }
+}
+
+impl Into<TypeDocument> for RoleTypeResponse {
+    fn into(self) -> TypeDocument {
+        TypeDocument { kind: "relation:role".to_string(), label: self.label }
     }
 }
 
