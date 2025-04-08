@@ -24,7 +24,7 @@ impl IntoResponse for HTTPServiceError {
     fn into_response(self) -> Response {
         let code = match &self {
             HTTPServiceError::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HTTPServiceError::JsonBodyExpected { .. } => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            HTTPServiceError::JsonBodyExpected { .. } => StatusCode::BAD_REQUEST,
             HTTPServiceError::RequestTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             HTTPServiceError::NotFound { .. } => StatusCode::NOT_FOUND,
             HTTPServiceError::MissingPathParameter { .. } => StatusCode::NOT_FOUND,
