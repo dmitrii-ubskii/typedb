@@ -21,9 +21,9 @@ pub mod concept;
 pub mod document;
 pub mod row;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct QueryOptionsPayload {
+pub struct QueryOptionsPayload {
     pub include_instance_types: Option<bool>,
     pub answer_count_limit: Option<usize>,
 }
@@ -40,14 +40,14 @@ impl Into<QueryOptions> for QueryOptionsPayload {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TransactionQueryPayload {
     pub query_options: Option<QueryOptionsPayload>,
     pub query: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct QueryPayload {
     pub query_options: Option<QueryOptionsPayload>,

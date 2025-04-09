@@ -112,7 +112,10 @@ impl Server {
         initialise_default_user(&user_manager);
 
         let credential_verifier = Arc::new(CredentialVerifier::new(user_manager.clone()));
-        let token_manager = Arc::new(TokenManager::new(server_config.authentication.token_expiration_seconds));
+        let token_manager = Arc::new(
+            TokenManager::new(server_config.authentication.token_expiration_seconds)
+                .map_err(|typedb_source| ServerOpenError::TokenConfiguration { typedb_source })?,
+        );
 
         let grpc_server_address = Self::resolve_address(server_config.address.clone()).await;
 
@@ -279,7 +282,7 @@ impl Server {
         let (http_server, http_address) = if let Some(mut http_service) = self.http_service {
             let http_address = *http_service.address();
             if grpc_address == http_address {
-                return Err(ServerOpenError::GPRCHTTPConflictingAddress { address: grpc_address });
+                return Err(ServerOpenError::GrpcHttpConflictingAddress { address: grpc_address });
             }
             let server = Self::serve_http(
                 http_address,
@@ -312,7 +315,7 @@ impl Server {
     fn install_default_encryption_provider() -> Result<(), ServerOpenError> {
         tokio_rustls::rustls::crypto::ring::default_provider()
             .install_default()
-            .map_err(|_| ServerOpenError::HTTPTLSUnsetDefaultCryptoProvider {})
+            .map_err(|_| ServerOpenError::HttpTlsUnsetDefaultCryptoProvider {})
     }
 
     async fn serve_grpc(
@@ -329,7 +332,7 @@ impl Server {
         if let Some(tls_config) = grpc::encryption::prepare_tls_config(encryption_config)? {
             grpc_server = grpc_server
                 .tls_config(tls_config)
-                .map_err(|source| ServerOpenError::GRPCTLSFailedConfiguration { source: Arc::new(source) })?;
+                .map_err(|source| ServerOpenError::GrpcTlsFailedConfiguration { source: Arc::new(source) })?;
         }
         let authenticator =
             grpc::authenticator::Authenticator::new(credential_verifier, token_manager, diagnostics_manager);
@@ -342,7 +345,7 @@ impl Server {
                 shutdown_receiver.changed().await.expect("Expected shutdown receiver signal");
             })
             .await
-            .map_err(|source| ServerOpenError::GRPCServe { address, source: Arc::new(source) })
+            .map_err(|source| ServerOpenError::GrpcServe { address, source: Arc::new(source) })
     }
 
     async fn serve_http(
@@ -362,7 +365,6 @@ impl Server {
         let router_service = http::typedb_service::TypeDBService::create_protected_router(http_service.clone())
             .layer(authenticator)
             .merge(http::typedb_service::TypeDBService::create_unprotected_router(http_service))
-            // TODO: Allow CORS configuration
             .layer(http::typedb_service::TypeDBService::create_cors_layer())
             .into_make_service();
 
@@ -382,7 +384,7 @@ impl Server {
             }
             None => axum_server::bind(address).handle(shutdown_handle).serve(router_service).await,
         }
-        .map_err(|source| ServerOpenError::HTTPServe { address, source: Arc::new(source) })
+        .map_err(|source| ServerOpenError::HttpServe { address, source: Arc::new(source) })
     }
 
     async fn resolve_address(address: String) -> SocketAddr {

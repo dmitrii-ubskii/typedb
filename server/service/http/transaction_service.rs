@@ -86,7 +86,7 @@ use uuid::Uuid;
 
 use crate::service::{
     http::{
-        error::HTTPServiceError,
+        error::HttpServiceError,
         message::query::{
             document::encode_document, encode_query_documents_answer, encode_query_ok_answer, encode_query_rows_answer,
             row::encode_row,

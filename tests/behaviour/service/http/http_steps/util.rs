@@ -8,6 +8,7 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     env,
+    time::Duration,
 };
 
 use cucumber::gherkin::Step;
@@ -90,4 +91,10 @@ async fn set_time_zone(_: &mut Context, time_zone: String) {
         // (currently not upheld)
         env::set_var("TZ", time_zone);
     }
+}
+
+#[apply(generic_step)]
+#[step(expr = "wait {int} seconds")]
+async fn wait_seconds(_: &mut Context, seconds: u64) {
+    tokio::time::sleep(Duration::from_secs(seconds)).await
 }

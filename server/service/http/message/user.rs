@@ -17,16 +17,16 @@ pub(crate) struct UserPath {
 
 from_request_parts_impl!(UserPath { username: String });
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CreateUserPayload {
-    pub(crate) password: String,
+pub struct CreateUserPayload {
+    pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct UpdateUserPayload {
-    pub(crate) password: String,
+pub struct UpdateUserPayload {
+    pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

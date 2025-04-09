@@ -33,7 +33,7 @@ pub(crate) enum ProtocolError {
     FailedQueryResponse {},
 }
 
-impl IntoGRPCStatus for ProtocolError {
+impl IntoGrpcStatus for ProtocolError {
     fn into_status(self) -> Status {
         match self {
             Self::MissingField { name, description } => Status::with_error_details(
@@ -100,15 +100,14 @@ impl<T: TypeDBError + Sync> IntoProtocolErrorMessage for T {
     }
 }
 
-pub(crate) trait IntoGRPCStatus {
+pub(crate) trait IntoGrpcStatus {
     fn into_status(self) -> Status;
 }
 
-impl IntoGRPCStatus for typedb_protocol::Error {
+impl IntoGrpcStatus for typedb_protocol::Error {
     fn into_status(self) -> Status {
         let mut details = ErrorDetails::with_error_info(self.error_code, self.domain, HashMap::new());
         details.set_debug_info(self.stack_trace, "");
-        // TODO: Should probably extend these Status codes somehow
         Status::with_error_details(Code::InvalidArgument, "Request generated error", details)
     }
 }

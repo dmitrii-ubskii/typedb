@@ -8,6 +8,7 @@ use std::{collections::VecDeque, time::Duration};
 
 use cucumber::{gherkin::Step, given, then, when};
 use futures::{future::join_all, FutureExt};
+use itertools::Either;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
 
@@ -27,9 +28,9 @@ pub async fn connection_open_transaction_for_database(
     may_error: params::MayError,
 ) {
     context.cleanup_transactions().await;
-    may_error.check(
-        context.push_transaction(transactions_open(&context.http_context, &database_name, &transaction_type).await),
-    );
+    may_error.check(context.push_transaction(
+        transactions_open(&context.http_context, &database_name, &transaction_type, &context.transaction_options).await,
+    ));
 }
 
 #[apply(generic_step)]
@@ -37,7 +38,15 @@ pub async fn connection_open_transaction_for_database(
 async fn connection_open_transactions_for_database(context: &mut Context, database_name: String, step: &Step) {
     for transaction_type in iter_table(step) {
         context
-            .push_transaction(transactions_open(&context.http_context, &database_name, &transaction_type).await)
+            .push_transaction(
+                transactions_open(
+                    &context.http_context,
+                    &database_name,
+                    &transaction_type,
+                    &context.transaction_options,
+                )
+                .await,
+            )
             .unwrap();
     }
 }
@@ -45,15 +54,29 @@ async fn connection_open_transactions_for_database(context: &mut Context, databa
 #[apply(generic_step)]
 #[step(expr = "connection open transaction(s) in parallel for database: {word}, of type:")]
 pub async fn connection_open_transactions_in_parallel(context: &mut Context, database_name: String, step: &Step) {
-    let transactions: VecDeque<String> = join_all(
-        iter_table(step)
-            .map(|transaction_type| transactions_open(&context.http_context, &database_name, transaction_type)),
-    )
+    let transactions: VecDeque<String> = join_all(iter_table(step).map(|transaction_type| {
+        transactions_open(&context.http_context, &database_name, transaction_type, &context.transaction_options)
+    }))
     .await
     .into_iter()
     .map(|result| result.unwrap().transaction_id.to_string())
     .collect();
     context.set_transactions(transactions).await;
+}
+
+#[apply(generic_step)]
+#[step(expr = "in background, connection open {word} transaction for database: {word}{may_error}")]
+pub async fn in_background_connection_open_transaction_for_database(
+    context: &mut Context,
+    transaction_type: String,
+    database_name: String,
+    may_error: params::MayError,
+) {
+    in_background!(context, |background| {
+        may_error.check(context.push_background_transaction(
+            transactions_open(&background, &database_name, &transaction_type, &context.transaction_options).await,
+        ));
+    });
 }
 
 #[apply(generic_step)]
@@ -94,4 +117,18 @@ pub async fn transaction_closes(context: &mut Context) {
 pub async fn transaction_rollbacks(context: &mut Context, may_error: params::MayError) {
     let transaction = context.transaction();
     may_error.check(transactions_rollback(&context.http_context, &transaction).await);
+}
+
+#[apply(generic_step)]
+#[step(expr = "set transaction option transaction_timeout_millis to: {int}")]
+pub async fn set_transaction_option_transaction_timeout_millis(context: &mut Context, value: u64) {
+    context.init_transaction_options_if_needed();
+    context.transaction_options.as_mut().unwrap().transaction_timeout_millis = Some(value);
+}
+
+#[apply(generic_step)]
+#[step(expr = "set transaction option schema_lock_acquire_timeout_millis to: {int}")]
+pub async fn set_transaction_option_schema_lock_acquire_timeout_millis(context: &mut Context, value: u64) {
+    context.init_transaction_options_if_needed();
+    context.transaction_options.as_mut().unwrap().schema_lock_acquire_timeout_millis = Some(value);
 }

@@ -11,9 +11,9 @@ use axum::{
 use http::request::Parts;
 use serde::{Deserialize, Serialize};
 
-use crate::{authentication::Accessor, service::http::error::HTTPServiceError};
+use crate::{authentication::Accessor, service::http::error::HttpServiceError};
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SigninPayload {
     pub username: String,
@@ -25,11 +25,11 @@ impl<S> FromRequestParts<S> for Accessor
 where
     S: Send + Sync,
 {
-    type Rejection = HTTPServiceError;
+    type Rejection = HttpServiceError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Accessor::from_extensions(&parts.extensions)
-            .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source })
+            .map_err(|typedb_source| HttpServiceError::Authentication { typedb_source })
     }
 }
 

@@ -17,3 +17,29 @@ Feature: Debugging Space
     Given connection has 0 databases
     Given connection create database: typedb
     Given connection has database: typedb
+
+
+
+  Scenario: Driver can open a schema transaction when a parallel schema lock is released
+    When set transaction option transaction_timeout_millis to: 50000
+    When set transaction option schema_lock_acquire_timeout_millis to: 1000
+    When in background, connection open schema transaction for database: typedb
+    Then transaction is open: false
+    Then connection open schema transaction for database: typedb; fails with a message containing: "timeout"
+    Then transaction is open: false
+    Then typeql schema query; fails with a message containing: "no open transaction"
+      """
+      match entity $x;
+      """
+    When wait 5 seconds
+    When set transaction option transaction_timeout_millis to: 1000
+    When set transaction option schema_lock_acquire_timeout_millis to: 5000
+    When in background, connection open schema transaction for database: typedb
+    Then transaction is open: false
+    When connection open schema transaction for database: typedb
+    Then transaction is open: true
+    Then transaction has type: schema
+    Then typeql schema query
+      """
+      match entity $x;
+      """

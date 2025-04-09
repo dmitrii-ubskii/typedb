@@ -31,8 +31,12 @@ pub struct CLIArgs {
     pub server_http_address: String,
 
     /// The amount of seconds generated authentication tokens will remain valid, specified in seconds.
-    /// Use smaller values for better security and bigger values for better authentication performance and convenience.
-    #[arg(long = "server.authentication.token_ttl_seconds", default_value_t = DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS)]
+    /// Use smaller values for better security and bigger values for better authentication performance and convenience
+    /// (min: 1 second, max: 1 year).
+    #[arg(
+        long = "server.authentication.token_ttl_seconds",
+        default_value_t = DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS,
+    )]
     pub server_authentication_token_ttl_seconds: u64,
 
     /// Enable/disable in-flight encryption. Specify to enable, or leave out to disable

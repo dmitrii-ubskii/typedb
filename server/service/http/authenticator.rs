@@ -13,7 +13,7 @@ use tower::{Layer, Service};
 
 use crate::{
     authentication::{authenticate, credential_verifier::CredentialVerifier, token_manager::TokenManager},
-    service::http::error::HTTPServiceError,
+    service::http::error::HttpServiceError,
 };
 
 #[derive(Clone, Debug)]
@@ -37,7 +37,7 @@ impl Authenticator {
     pub async fn authenticate(&self, request: Request<Body>) -> Result<Request<Body>, impl IntoResponse> {
         authenticate(self.token_manager.clone(), request)
             .await
-            .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source })
+            .map_err(|typedb_source| HttpServiceError::Authentication { typedb_source })
     }
 }
 

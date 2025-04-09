@@ -33,7 +33,7 @@ use crate::{
     service::{
         grpc::{
             diagnostics::{run_with_diagnostics, run_with_diagnostics_async},
-            error::{IntoGRPCStatus, IntoProtocolErrorMessage, ProtocolError},
+            error::{IntoGrpcStatus, IntoProtocolErrorMessage, ProtocolError},
             request_parser::{users_create_req, users_update_req},
             response_builders::{
                 authentication::token_create_res,
@@ -150,7 +150,7 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
                         }
                         .into_status());
                     };
-                    let authentication_result = self
+                    let token = self
                         .process_token_create(authentication)
                         .await
                         .map_err(|typedb_source| typedb_source.into_error_message().into_status())?;
@@ -166,7 +166,7 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
                         self.generate_connection_id(),
                         receive_time,
                         database_all_res(&self.address, self.database_manager.database_names()),
-                        token_create_res(authentication_result),
+                        token_create_res(token),
                     )))
                 }
             },

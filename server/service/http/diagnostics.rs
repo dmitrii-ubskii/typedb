@@ -11,16 +11,16 @@ use diagnostics::{
     metrics::ActionKind,
 };
 
-use crate::service::http::error::HTTPServiceError;
+use crate::service::http::error::HttpServiceError;
 
 pub(crate) fn run_with_diagnostics<F, T>(
     diagnostics_manager: &DiagnosticsManager,
     database_name: Option<impl AsRef<str> + Hash>,
     action_kind: ActionKind,
     f: F,
-) -> Result<T, HTTPServiceError>
+) -> Result<T, HttpServiceError>
 where
-    F: FnOnce() -> Result<T, HTTPServiceError>,
+    F: FnOnce() -> Result<T, HttpServiceError>,
 {
     let result = f();
     submit_result_metrics(diagnostics_manager, database_name, action_kind, &result);
@@ -32,10 +32,10 @@ pub(crate) async fn run_with_diagnostics_async<F, Fut, T>(
     database_name: Option<impl AsRef<str> + Hash>,
     action_kind: ActionKind,
     f: F,
-) -> Result<T, HTTPServiceError>
+) -> Result<T, HttpServiceError>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<T, HTTPServiceError>> + Send,
+    Fut: Future<Output = Result<T, HttpServiceError>> + Send,
     T: Send,
 {
     let result = f().await;
@@ -47,7 +47,7 @@ fn submit_result_metrics<T>(
     diagnostics_manager: &DiagnosticsManager,
     database_name: Option<impl AsRef<str> + Hash>,
     action_kind: ActionKind,
-    result: &Result<T, HTTPServiceError>,
+    result: &Result<T, HttpServiceError>,
 ) {
     if !is_diagnostics_needed(database_name.as_ref()) {
         return;

@@ -15,7 +15,7 @@ use crate::{
     authentication::{authenticate, credential_verifier::CredentialVerifier, token_manager::TokenManager},
     service::grpc::{
         diagnostics::run_with_diagnostics_async,
-        error::{IntoGRPCStatus, IntoProtocolErrorMessage},
+        error::{IntoGrpcStatus, IntoProtocolErrorMessage},
     },
 };
 

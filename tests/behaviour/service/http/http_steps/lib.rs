@@ -56,6 +56,7 @@ macro_rules! in_background {
     };
 }
 pub(crate) use in_background;
+use server::service::http::message::transaction::TransactionOptionsPayload;
 
 mod connection;
 mod message;
@@ -114,9 +115,10 @@ pub struct HttpContext {
 #[derive(World)]
 pub struct Context {
     pub tls_root_ca: PathBuf,
-    pub transaction_options: TransactionOptions,
+    pub transaction_options: Option<TransactionOptionsPayload>,
     pub http_context: HttpContext,
     pub transaction_ids: VecDeque<String>,
+    pub background_transaction_ids: VecDeque<String>,
     pub answer: Option<QueryAnswerResponse>,
     pub concurrent_answers: Vec<QueryAnswerResponse>,
     pub concurrent_answers_last_consumed_index: usize,
@@ -129,7 +131,8 @@ impl fmt::Debug for Context {
         f.debug_struct("Context")
             .field("tls_root_ca", &self.tls_root_ca)
             .field("transaction_options", &self.transaction_options)
-            .field("transactions", &self.transaction_ids)
+            .field("transaction_ids", &self.transaction_ids)
+            .field("background_transaction_ids", &self.background_transaction_ids)
             .field("answer", &self.answer)
             .field("concurrent_answers", &self.concurrent_answers)
             .finish()
@@ -218,6 +221,7 @@ impl Context {
     pub async fn after_scenario(&mut self) {
         sleep(Context::STEP_REATTEMPT_SLEEP).await;
         self.cleanup_transactions().await;
+        self.cleanup_background_transactions().await;
         self.cleanup_databases().await;
         self.cleanup_users().await;
         self.cleanup_answers().await;
@@ -234,6 +238,12 @@ impl Context {
 
     pub async fn cleanup_transactions(&mut self) {
         while let Some(transaction_id) = self.try_take_transaction() {
+            transactions_close(&self.http_context, &transaction_id).await.unwrap();
+        }
+    }
+
+    pub async fn cleanup_background_transactions(&mut self) {
+        while let Some(transaction_id) = self.try_take_background_transaction() {
             transactions_close(&self.http_context, &transaction_id).await.unwrap();
         }
     }
@@ -274,11 +284,23 @@ impl Context {
         self.transaction_ids.pop_front()
     }
 
+    pub fn try_take_background_transaction(&mut self) -> Option<String> {
+        self.background_transaction_ids.pop_front()
+    }
+
     pub fn push_transaction(
         &mut self,
         transaction: Result<TransactionResponse, HttpBehaviourTestError>,
     ) -> Result<(), HttpBehaviourTestError> {
         self.transaction_ids.push_back(transaction?.transaction_id.to_string());
+        Ok(())
+    }
+
+    pub fn push_background_transaction(
+        &mut self,
+        transaction: Result<TransactionResponse, HttpBehaviourTestError>,
+    ) -> Result<(), HttpBehaviourTestError> {
+        self.background_transaction_ids.push_back(transaction?.transaction_id.to_string());
         Ok(())
     }
 
@@ -328,20 +350,26 @@ impl Context {
     pub fn get_concurrent_answers(&self) -> &Vec<QueryAnswerResponse> {
         &self.concurrent_answers
     }
+
+    pub fn init_transaction_options_if_needed(&mut self) {
+        if self.transaction_options.is_none() {
+            self.transaction_options = Some(TransactionOptionsPayload::default());
+        }
+    }
 }
 
 impl Default for Context {
     fn default() -> Self {
-        let transaction_options = TransactionOptions::default();
         let tls_root_ca = match std::env::var("ROOT_CA") {
             Ok(root_ca) => PathBuf::from(root_ca),
             Err(_) => PathBuf::new(),
         };
         Self {
             tls_root_ca,
-            transaction_options,
+            transaction_options: None,
             http_context: HttpContext { http_client: create_http_client(), auth_token: None },
             transaction_ids: VecDeque::new(),
+            background_transaction_ids: VecDeque::new(),
             answer: None,
             concurrent_answers: Vec::new(),
             concurrent_answers_last_consumed_index: 0,

@@ -76,7 +76,6 @@ impl<'a> HexBytesFormatter<'a> {
         Self(Cow::Borrowed(bytes))
     }
 
-    // TODO: Not sure where to place it yet.
     pub fn format_iid(&self) -> String {
         const PREFIX: &'static str = "0x";
         let mut result = String::with_capacity(PREFIX.len() + self.0.len() * 2);

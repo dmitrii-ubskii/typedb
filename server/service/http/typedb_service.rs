@@ -36,7 +36,7 @@ use crate::{
     service::{
         http::{
             diagnostics::{run_with_diagnostics, run_with_diagnostics_async},
-            error::HTTPServiceError,
+            error::HttpServiceError,
             message::{
                 authentication::{encode_token, SigninPayload},
                 body::JsonBody,
@@ -131,7 +131,7 @@ impl TypeDBService {
         service: &TypeDBService,
         owner: String,
         payload: TransactionOpenPayload,
-    ) -> Result<(TransactionInfo, u64), HTTPServiceError> {
+    ) -> Result<(TransactionInfo, u64), HttpServiceError> {
         let (request_sender, request_stream) = channel(TRANSACTION_REQUEST_BUFFER_SIZE);
         let options =
             payload.transaction_options.map(|options| options.into()).unwrap_or_else(|| TransactionOptions::default());
@@ -146,7 +146,7 @@ impl TypeDBService {
         let processing_time = transaction_service
             .open(payload.transaction_type, payload.database_name, options)
             .await
-            .map_err(|typedb_source| HTTPServiceError::Transaction { typedb_source })?;
+            .map_err(|typedb_source| HttpServiceError::Transaction { typedb_source })?;
 
         tokio::spawn(async move { transaction_service.listen().await });
         Ok((TransactionInfo { owner, request_sender, transaction_timeout_millis }, processing_time))
@@ -156,19 +156,19 @@ impl TypeDBService {
         transaction: &TransactionInfo,
         request: TransactionRequest,
         error_if_closed: bool,
-    ) -> Result<TransactionServiceResponse, HTTPServiceError> {
+    ) -> Result<TransactionServiceResponse, HttpServiceError> {
         let (result_sender, result_receiver) = oneshot::channel();
         if let Err(_) = transaction.request_sender.send((request, TransactionResponder(result_sender))).await {
             return match error_if_closed {
                 false => Ok(TransactionServiceResponse::Ok),
-                true => Err(HTTPServiceError::no_open_transaction()),
+                true => Err(HttpServiceError::no_open_transaction()),
             };
         }
 
         match timeout(Duration::from_millis(transaction.transaction_timeout_millis), result_receiver).await {
             Ok(Ok(response)) => Ok(response),
-            Ok(Err(_)) => Err(HTTPServiceError::no_open_transaction()),
-            Err(_) => Err(HTTPServiceError::RequestTimeout {}),
+            Ok(Err(_)) => Err(HttpServiceError::no_open_transaction()),
+            Err(_) => Err(HttpServiceError::RequestTimeout {}),
         }
     }
 
@@ -180,12 +180,12 @@ impl TypeDBService {
 
     fn try_get_query_response(
         transaction_response: TransactionServiceResponse,
-    ) -> Result<QueryAnswer, HTTPServiceError> {
+    ) -> Result<QueryAnswer, HttpServiceError> {
         match transaction_response {
             TransactionServiceResponse::Query(query_response) => Ok(query_response),
-            TransactionServiceResponse::Err(typedb_source) => Err(HTTPServiceError::Transaction { typedb_source }),
+            TransactionServiceResponse::Err(typedb_source) => Err(HttpServiceError::Transaction { typedb_source }),
             TransactionServiceResponse::Ok => {
-                Err(HTTPServiceError::Internal { details: "unexpected transaction response".to_string() })
+                Err(HttpServiceError::Internal { details: "unexpected transaction response".to_string() })
             }
         }
     }
@@ -223,42 +223,6 @@ impl TypeDBService {
 
     pub(crate) fn create_cors_layer() -> CorsLayer {
         CorsLayer::permissive()
-        // TODO: Configure CorsLayer through config like this
-        // TODO: Maybe use CorsLayer::permissive in development mode?
-        // let mut cors = CorsLayer::new();
-        //
-        // if let Some(origins) = &config.cors_allowed_origins {
-        //     let origin_headers = origins
-        //         .iter()
-        //         .filter_map(|o| HeaderValue::from_str(o).ok())
-        //         .collect::<Vec<_>>();
-        //
-        //     cors = cors.allow_origin(origin_headers);
-        // }
-        //
-        // if let Some(methods) = &config.cors_allowed_methods {
-        //     let parsed_methods = methods
-        //         .iter()
-        //         .filter_map(|m| Method::from_bytes(m.as_bytes()).ok())
-        //         .collect::<Vec<_>>();
-        //
-        //     cors = cors.allow_methods(parsed_methods);
-        // }
-        //
-        // if let Some(headers) = &config.cors_allowed_headers {
-        //     let parsed_headers = headers
-        //         .iter()
-        //         .filter_map(|h| HeaderName::from_bytes(h.as_bytes()).ok())
-        //         .collect::<Vec<_>>();
-        //
-        //     cors = cors.allow_headers(parsed_headers);
-        // }
-        //
-        // if config.cors_allow_credentials {
-        //     cors = cors.allow_credentials(true);
-        // }
-        //
-        // cors
     }
 
     async fn health() -> impl IntoResponse {
@@ -274,7 +238,7 @@ impl TypeDBService {
             service
                 .credential_verifier
                 .verify_password(&payload.username, &payload.password)
-                .map_err(|typedb_source| HTTPServiceError::Authentication { typedb_source })?;
+                .map_err(|typedb_source| HttpServiceError::Authentication { typedb_source })?;
             Ok(JsonBody(encode_token(service.token_manager.new_token(payload.username).await)))
         })
         .await
@@ -299,7 +263,7 @@ impl TypeDBService {
                 let database_name = service
                     .database_manager
                     .database(&database_path.database_name)
-                    .ok_or(HTTPServiceError::NotFound {})?
+                    .ok_or(HttpServiceError::NotFound {})?
                     .name()
                     .to_string();
                 Ok(JsonBody(encode_database(database_name)))
@@ -320,7 +284,7 @@ impl TypeDBService {
                 service
                     .database_manager
                     .create_database(&database_path.database_name)
-                    .map_err(|typedb_source| HTTPServiceError::DatabaseCreate { typedb_source })
+                    .map_err(|typedb_source| HttpServiceError::DatabaseCreate { typedb_source })
             },
         )
     }
@@ -338,7 +302,7 @@ impl TypeDBService {
                 service
                     .database_manager
                     .delete_database(&database_path.database_name)
-                    .map_err(|typedb_source| HTTPServiceError::DatabaseDelete { typedb_source })
+                    .map_err(|typedb_source| HttpServiceError::DatabaseDelete { typedb_source })
             },
         )
     }
@@ -358,7 +322,7 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersAll, || {
             if !PermissionManager::exec_user_all_permitted(accessor.as_str()) {
-                return Err(HTTPServiceError::operation_not_permitted());
+                return Err(HttpServiceError::operation_not_permitted());
             }
             Ok(JsonBody(encode_users(service.user_manager.all())))
         })
@@ -372,14 +336,14 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersContains, || {
             if !PermissionManager::exec_user_get_permitted(accessor.as_str(), &user_path.username) {
-                return Err(HTTPServiceError::operation_not_permitted());
+                return Err(HttpServiceError::operation_not_permitted());
             }
             service
                 .user_manager
                 .get(&user_path.username)
-                .map_err(|typedb_source| HTTPServiceError::UserGet { typedb_source })?
+                .map_err(|typedb_source| HttpServiceError::UserGet { typedb_source })?
                 .map(|(user, _)| JsonBody(encode_user(&user)))
-                .ok_or(HTTPServiceError::NotFound {})
+                .ok_or(HttpServiceError::NotFound {})
         })
     }
 
@@ -392,14 +356,14 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         run_with_diagnostics(&service.diagnostics_manager, None::<&str>, ActionKind::UsersCreate, || {
             if !PermissionManager::exec_user_create_permitted(accessor.as_str()) {
-                return Err(HTTPServiceError::operation_not_permitted());
+                return Err(HttpServiceError::operation_not_permitted());
             }
             let user = User { name: user_path.username };
             let credential = Credential::new_password(payload.password.as_str());
             service
                 .user_manager
                 .create(&user, &credential)
-                .map_err(|typedb_source| HTTPServiceError::UserCreate { typedb_source })
+                .map_err(|typedb_source| HttpServiceError::UserCreate { typedb_source })
         })
     }
 
@@ -419,12 +383,12 @@ impl TypeDBService {
                 let credential_update = Some(Credential::new_password(&payload.password));
                 let username = user_path.username.as_str();
                 if !PermissionManager::exec_user_update_permitted(accessor.as_str(), username) {
-                    return Err(HTTPServiceError::operation_not_permitted());
+                    return Err(HttpServiceError::operation_not_permitted());
                 }
                 service
                     .user_manager
                     .update(username, &user_update, &credential_update)
-                    .map_err(|typedb_source| HTTPServiceError::UserUpdate { typedb_source })?;
+                    .map_err(|typedb_source| HttpServiceError::UserUpdate { typedb_source })?;
                 service.token_manager.invalidate_user(username).await;
                 Ok(())
             },
@@ -445,12 +409,12 @@ impl TypeDBService {
             || async {
                 let username = user_path.username.as_str();
                 if !PermissionManager::exec_user_delete_allowed(accessor.as_str(), username) {
-                    return Err(HTTPServiceError::operation_not_permitted());
+                    return Err(HttpServiceError::operation_not_permitted());
                 }
                 service
                     .user_manager
                     .delete(&user_path.username)
-                    .map_err(|typedb_source| HTTPServiceError::UserDelete { typedb_source })?;
+                    .map_err(|typedb_source| HttpServiceError::UserDelete { typedb_source })?;
                 service.token_manager.invalidate_user(username).await;
                 Ok(())
             },
@@ -488,9 +452,9 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
-        let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
+        let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
-            return Err(HTTPServiceError::operation_not_permitted());
+            return Err(HttpServiceError::operation_not_permitted());
         }
         Self::transaction_request(&transaction, TransactionRequest::Commit, true).await
     }
@@ -507,7 +471,7 @@ impl TypeDBService {
             return Ok(TransactionServiceResponse::Ok);
         };
         if accessor != transaction.owner {
-            return Err(HTTPServiceError::operation_not_permitted());
+            return Err(HttpServiceError::operation_not_permitted());
         }
         Self::transaction_request(&transaction, TransactionRequest::Close, false).await
     }
@@ -520,9 +484,9 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
-        let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
+        let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
-            return Err(HTTPServiceError::operation_not_permitted());
+            return Err(HttpServiceError::operation_not_permitted());
         }
         Self::transaction_request(&transaction, TransactionRequest::Rollback, true).await
     }
@@ -536,9 +500,9 @@ impl TypeDBService {
     ) -> impl IntoResponse {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
-        let transaction = senders.get(&uuid).ok_or(HTTPServiceError::no_open_transaction())?;
+        let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
         if accessor != transaction.owner {
-            return Err(HTTPServiceError::operation_not_permitted());
+            return Err(HttpServiceError::operation_not_permitted());
         }
         Self::transaction_request(&transaction, Self::build_query_request(payload.query_options, payload.query), true)
             .await
@@ -574,8 +538,8 @@ impl TypeDBService {
         .await?;
         if let TransactionServiceResponse::Err(typedb_source) = close_response {
             return match commit {
-                true => Err(HTTPServiceError::QueryCommit { typedb_source }),
-                false => Err(HTTPServiceError::QueryClose { typedb_source }),
+                true => Err(HttpServiceError::QueryCommit { typedb_source }),
+                false => Err(HttpServiceError::QueryClose { typedb_source }),
             };
         }
 

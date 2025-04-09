@@ -22,25 +22,31 @@ use uuid::Uuid;
 
 use crate::service::{
     http::{
-        error::HTTPServiceError, message::from_request_parts_impl, transaction_service::TransactionServiceResponse,
+        error::HttpServiceError, message::from_request_parts_impl, transaction_service::TransactionServiceResponse,
     },
     TransactionType,
 };
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct TransactionOpenPayload {
-    pub(crate) database_name: String,
-    pub(crate) transaction_type: TransactionType,
-    pub(crate) transaction_options: Option<TransactionOptionsPayload>,
+pub struct TransactionOpenPayload {
+    pub database_name: String,
+    pub transaction_type: TransactionType,
+    pub transaction_options: Option<TransactionOptionsPayload>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct TransactionOptionsPayload {
+pub struct TransactionOptionsPayload {
     pub parallel: Option<bool>, // TODO: Not used? Remove?
     pub schema_lock_acquire_timeout_millis: Option<u64>,
     pub transaction_timeout_millis: Option<u64>,
+}
+
+impl Default for TransactionOptionsPayload {
+    fn default() -> Self {
+        Self { parallel: None, schema_lock_acquire_timeout_millis: None, transaction_timeout_millis: None }
+    }
 }
 
 impl Into<TransactionOptions> for TransactionOptionsPayload {
@@ -78,7 +84,7 @@ impl IntoResponse for TransactionServiceResponse {
             TransactionServiceResponse::Ok => StatusCode::OK.into_response(),
             TransactionServiceResponse::Query(query) => query.into_response(),
             TransactionServiceResponse::Err(typedb_source) => {
-                HTTPServiceError::Transaction { typedb_source }.into_response()
+                HttpServiceError::Transaction { typedb_source }.into_response()
             }
         }
     }

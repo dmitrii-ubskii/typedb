@@ -10,8 +10,10 @@ use std::{
 };
 
 use concurrency::TokioIntervalRunner;
+use error::typedb_error;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rand::{self, Rng};
+use resource::constants::server::{MAX_AUTHENTICATION_TOKEN_TTL, MIN_AUTHENTICATION_TOKEN_TTL};
 use serde::{Deserialize, Serialize, Serializer};
 use tokio::sync::RwLock;
 
@@ -28,7 +30,9 @@ pub struct TokenManager {
 impl TokenManager {
     const TOKENS_CLEANUP_INTERVAL_MULTIPLIER: u32 = 2;
 
-    pub fn new(tokens_expiration_time: Duration) -> Self {
+    pub fn new(tokens_expiration_time: Duration) -> Result<Self, TokenManagerError> {
+        Self::validate_tokens_expiration_time(tokens_expiration_time)?;
+
         let token_owners = Arc::new(RwLock::new(HashMap::new()));
         let token_owners_clone = token_owners.clone();
 
@@ -51,8 +55,7 @@ impl TokenManager {
             tokens_cleanup_interval,
             false,
         ));
-        // TODO: limit tokens_expiration_time by (min, max)? What values? 1 second and 100 years?..
-        Self { token_owners, tokens_expiration_time, secret_key, _tokens_cleanup_job: tokens_cleanup_job }
+        Ok(Self { token_owners, tokens_expiration_time, secret_key, _tokens_cleanup_job: tokens_cleanup_job })
     }
 
     pub async fn new_token(&self, username: String) -> String {
@@ -117,6 +120,20 @@ impl TokenManager {
     fn random_key() -> String {
         rand::thread_rng().sample_iter(&rand::distributions::Alphanumeric).take(128).map(char::from).collect()
     }
+
+    fn validate_tokens_expiration_time(tokens_expiration_time: Duration) -> Result<(), TokenManagerError> {
+        if tokens_expiration_time < MIN_AUTHENTICATION_TOKEN_TTL
+            || tokens_expiration_time > MAX_AUTHENTICATION_TOKEN_TTL
+        {
+            Err(TokenManagerError::InvlaidTokensExpirationTime {
+                value: tokens_expiration_time.as_secs(),
+                min: MIN_AUTHENTICATION_TOKEN_TTL.as_secs(),
+                max: MAX_AUTHENTICATION_TOKEN_TTL.as_secs(),
+            })
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -124,4 +141,10 @@ pub(crate) struct Claims {
     sub: String,
     exp: u64,
     iat: u64,
+}
+
+typedb_error! {
+    pub TokenManagerError(component = "Token manager", prefix = "TKM") {
+        InvlaidTokensExpirationTime(1, "Invalid tokens expiration time '{value}'. It must be between '{min}' and '{max}' seconds.", value: u64, min: u64, max: u64),
+    }
 }

@@ -14,7 +14,7 @@ use crate::{
 };
 
 typedb_error!(
-    pub HTTPServiceError(component = "HTTP Service", prefix = "HSR") {
+    pub HttpServiceError(component = "HTTP Service", prefix = "HSR") {
         Internal(1, "Internal error: {details}", details: String),
         JsonBodyExpected(2, "Cannot parse expected JSON body: {details}", details: String),
         RequestTimeout(3, "Request timeout."),
@@ -35,19 +35,12 @@ typedb_error!(
     }
 );
 
-impl HTTPServiceError {
+impl HttpServiceError {
     pub(crate) fn source(&self) -> &(dyn TypeDBError + Sync + '_) {
         self.source_typedb_error().unwrap_or(self)
     }
 
     pub(crate) fn format_source_trace(&self) -> String {
-        // TODO: Should be reversed? Currently, it's like:
-        /*
-        {
-            "code": "HSR6",
-            "message": "[AUT1] Invalid credential supplied.\n[HSR6] Authentication error."
-        }
-         */
         self.stack_trace().join("\n").to_string()
     }
 

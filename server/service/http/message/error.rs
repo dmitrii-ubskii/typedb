@@ -9,7 +9,7 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::service::{
-    http::{error::HTTPServiceError, message::body::JsonBody},
+    http::{error::HttpServiceError, message::body::JsonBody},
     ServiceError,
 };
 
@@ -20,36 +20,36 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
-impl IntoResponse for HTTPServiceError {
+impl IntoResponse for HttpServiceError {
     fn into_response(self) -> Response {
         let code = match &self {
-            HTTPServiceError::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            HTTPServiceError::JsonBodyExpected { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::RequestTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            HTTPServiceError::NotFound { .. } => StatusCode::NOT_FOUND,
-            HTTPServiceError::MissingPathParameter { .. } => StatusCode::NOT_FOUND,
-            HTTPServiceError::InvalidPathParameter { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::Service { typedb_source } => match typedb_source {
+            HttpServiceError::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            HttpServiceError::JsonBodyExpected { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::RequestTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            HttpServiceError::NotFound { .. } => StatusCode::NOT_FOUND,
+            HttpServiceError::MissingPathParameter { .. } => StatusCode::NOT_FOUND,
+            HttpServiceError::InvalidPathParameter { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::Service { typedb_source } => match typedb_source {
                 ServiceError::Unimplemented { .. } => StatusCode::NOT_IMPLEMENTED,
                 ServiceError::OperationNotPermitted { .. } => StatusCode::FORBIDDEN,
                 ServiceError::DatabaseDoesNotExist { .. } => StatusCode::NOT_FOUND,
                 ServiceError::UserDoesNotExist { .. } => StatusCode::NOT_FOUND,
             },
-            HTTPServiceError::Authentication { .. } => StatusCode::UNAUTHORIZED,
-            HTTPServiceError::DatabaseCreate { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::DatabaseDelete { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::UserCreate { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::UserUpdate { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::UserDelete { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::UserGet { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::Transaction { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::QueryClose { .. } => StatusCode::BAD_REQUEST,
-            HTTPServiceError::QueryCommit { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::Authentication { .. } => StatusCode::UNAUTHORIZED,
+            HttpServiceError::DatabaseCreate { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::DatabaseDelete { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::UserCreate { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::UserUpdate { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::UserDelete { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::UserGet { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::Transaction { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::QueryClose { .. } => StatusCode::BAD_REQUEST,
+            HttpServiceError::QueryCommit { .. } => StatusCode::BAD_REQUEST,
         };
         (code, JsonBody(encode_error(self))).into_response()
     }
 }
 
-pub(crate) fn encode_error(error: HTTPServiceError) -> ErrorResponse {
-    ErrorResponse { code: error.code().to_string(), message: error.format_source_trace() }
+pub(crate) fn encode_error(error: HttpServiceError) -> ErrorResponse {
+    ErrorResponse { code: error.root_source_typedb_error().code().to_string(), message: error.format_source_trace() }
 }

@@ -76,7 +76,7 @@ use crate::service::{
     grpc::{
         diagnostics::run_with_diagnostics_async,
         document::encode_document,
-        error::{IntoGRPCStatus, IntoProtocolErrorMessage, ProtocolError},
+        error::{IntoGrpcStatus, IntoProtocolErrorMessage, ProtocolError},
         response_builders::transaction::{
             query_initial_res_from_error, query_initial_res_from_query_res_ok,
             query_initial_res_ok_from_query_res_ok_ok, query_res_ok_concept_document_stream,
@@ -241,7 +241,6 @@ impl TransactionService {
             let result = if let Some((req_id, write_query_worker)) = &mut self.running_write_query {
                 tokio::select! { biased;
                     _ = self.shutdown_receiver.changed() => {
-                        println!("SHUTDOWN!");
                         event!(Level::TRACE, "Shutdown signal received, closing transaction service.");
                         self.do_close().await;
                         return;
@@ -896,7 +895,6 @@ impl TransactionService {
         debug_assert!(self.running_write_query.is_none());
         debug_assert!(self.transaction.is_some());
         let interrupt = self.query_interrupt_receiver.clone();
-        let timeout_at = self.timeout_at;
         match self.transaction.take() {
             Some(Transaction::Schema(schema_transaction)) => Ok(spawn_blocking(move || {
                 execute_write_query_in_schema(schema_transaction, query_options, pipeline, source_query, interrupt)

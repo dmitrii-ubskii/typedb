@@ -10,6 +10,7 @@ use hyper::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Body, Client, Method, Request, Uri,
 };
+use options::TransactionOptions;
 use serde_json::json;
 use server::service::http::message::{
     authentication::TokenResponse,
@@ -21,7 +22,7 @@ use server::service::http::message::{
         },
         QueryAnswerResponse,
     },
-    transaction::TransactionResponse,
+    transaction::{TransactionOptionsPayload, TransactionResponse},
     user::{UserResponse, UsersResponse},
 };
 use url::form_urlencoded;
@@ -184,13 +185,17 @@ pub async fn transactions_open(
     context: &HttpContext,
     database_name: &str,
     transaction_type: &str,
+    transaction_options: &Option<TransactionOptionsPayload>,
 ) -> Result<TransactionResponse, HttpBehaviourTestError> {
     let url = format!("{}/transactions/open", Context::default_versioned_endpoint());
-    let json_body = json!({
-        "databaseName": database_name,
-        "transactionType": transaction_type,
-    });
-    let response = send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await?;
+    let mut json_map = serde_json::Map::new();
+    json_map.insert("databaseName".to_string(), json!(database_name));
+    json_map.insert("transactionType".to_string(), json!(transaction_type));
+    if let Some(transaction_options) = transaction_options {
+        json_map.insert("transactionOptions".to_string(), json!(transaction_options));
+    }
+
+    let response = send_request(context, Method::POST, &url, Some(json!(json_map).to_string().as_str())).await?;
     Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 
@@ -225,7 +230,6 @@ pub async fn transactions_query(
         "query": query,
     });
     let response = send_request(context, Method::POST, &url, Some(json_body.to_string().as_str())).await?;
-    println!("Response: {response}");
     Ok(serde_json::from_str(&response).expect("Expected a json body"))
 }
 

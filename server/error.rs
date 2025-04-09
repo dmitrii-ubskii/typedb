@@ -12,6 +12,8 @@ use tokio_rustls::rustls::{
     pki_types::pem::Error as RustlsCertError, server::VerifierBuilderError as RustlsVerifierError,
 };
 
+use crate::authentication::token_manager::TokenManagerError;
+
 typedb_error! {
     pub ServerOpenError(component = "Server open", prefix = "SRO") {
         NotADirectory(1, "Invalid path '{path}': not a directory.", path: String),
@@ -20,21 +22,22 @@ typedb_error! {
         CouldNotCreateDataDirectory(4, "Could not create data directory in '{path}'.", path: String, source: Arc<io::Error>),
         InvalidServerID(5, "Server ID read from '{path}' is invalid. Delete the corrupted file and try again.", path: String),
         DatabaseOpen(6, "Could not open database.", typedb_source: DatabaseOpenError),
-        MissingTLSCertificate(7, "TLS certificate path must be specified when encryption is enabled."),
-        MissingTLSCertificateKey(8, "TLS certificate key path must be specified when encryption is enabled."),
-        GPRCHTTPConflictingAddress(9, "Configuring HTTP and gRPC on the same address {address} is not supported.", address: SocketAddr),
-        GRPCServe(10, "Could not serve gRPC on {address}.", address: SocketAddr, source: Arc<tonic::transport::Error>),
-        GRPCCouldNotReadTLSCertificate(11, "Could not read TLS certificate from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
-        GRPCCouldNotReadTLSCertificateKey(12, "Could not read TLS certificate key from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
-        GRPCCouldNotReadRootCA(13, "Could not read root CA from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
-        GRPCInvalidRootCA(14, "Invalid root CA for the gRPC server.", source: Arc<io::Error>),
-        GRPCTLSFailedConfiguration(15, "Failed to configure TLS for the gRPC server.", source: Arc<tonic::transport::Error>),
-        HTTPServe(16, "Could not serve HTTP on {address}.", address: SocketAddr, source: Arc<io::Error>),
-        HTTPCouldNotReadTLSCertificate(17, "Could not read TLS certificate from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
-        HTTPCouldNotReadTLSCertificateKey(18, "Could not read TLS certificate key from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
-        HTTPCouldNotReadRootCA(19, "Could not read root CA from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
-        HTTPInvalidRootCA(20, "Invalid root CA for the HTTP server.", source: Arc<RustlsVerifierError>),
-        HTTPTLSFailedConfiguration(21, "Failed to configure TLS for the HTTP server.", source: Arc<tokio_rustls::rustls::Error>),
-        HTTPTLSUnsetDefaultCryptoProvider(22, "Failed to install default crypto provider for the HTTP server TLS configuration."),
+        TokenConfiguration(7, "Token configuration error.", typedb_source: TokenManagerError),
+        MissingTLSCertificate(8, "TLS certificate path must be specified when encryption is enabled."),
+        MissingTLSCertificateKey(9, "TLS certificate key path must be specified when encryption is enabled."),
+        GrpcHttpConflictingAddress(10, "Configuring HTTP and gRPC on the same address {address} is not supported.", address: SocketAddr),
+        GrpcServe(11, "Could not serve gRPC on {address}.", address: SocketAddr, source: Arc<tonic::transport::Error>),
+        GrpcCouldNotReadTlsCertificate(12, "Could not read TLS certificate from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
+        GrpcCouldNotReadTlsCertificateKey(13, "Could not read TLS certificate key from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
+        GrpcCouldNotReadRootCa(14, "Could not read root CA from '{path}' for the gRPC server.", path: String, source: Arc<io::Error>),
+        GrpcInvalidRootCa(15, "Invalid root CA for the gRPC server.", source: Arc<io::Error>),
+        GrpcTlsFailedConfiguration(16, "Failed to configure TLS for the gRPC server.", source: Arc<tonic::transport::Error>),
+        HttpServe(17, "Could not serve HTTP on {address}.", address: SocketAddr, source: Arc<io::Error>),
+        HttpCouldNotReadTlsCertificate(18, "Could not read TLS certificate from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
+        HttpCouldNotReadTlsCertificateKey(19, "Could not read TLS certificate key from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
+        HttpCouldNotReadRootCa(20, "Could not read root CA from '{path}' for the HTTP server.", path: String, source: Arc<RustlsCertError>),
+        HttpInvalidRootCa(21, "Invalid root CA for the HTTP server.", source: Arc<RustlsVerifierError>),
+        HttpTlsFailedConfiguration(22, "Failed to configure TLS for the HTTP server.", source: Arc<tokio_rustls::rustls::Error>),
+        HttpTlsUnsetDefaultCryptoProvider(23, "Failed to install default crypto provider for the HTTP server TLS configuration."),
     }
 }

@@ -68,7 +68,7 @@ features = {}
 
 	[dev-dependencies.typeql]
 		features = []
-		rev = "00504c09beb591b0d1c27633c3fe29520691489b"
+		rev = "e7a22dead3ef151e0bedad5a90751be7929e058c"
 		git = "https://github.com/typedb/typeql"
 		default-features = false
 
@@ -81,7 +81,7 @@ features = {}
 
 	[dependencies.tokio]
 		features = ["bytes", "default", "fs", "full", "io-std", "io-util", "libc", "macros", "mio", "net", "parking_lot", "process", "rt", "rt-multi-thread", "signal", "signal-hook-registry", "socket2", "sync", "time", "tokio-macros"]
-		version = "1.44.1"
+		version = "1.44.2"
 		default-features = false
 
 	[dependencies.server]

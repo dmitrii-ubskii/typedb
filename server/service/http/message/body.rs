@@ -11,7 +11,7 @@ use axum::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::service::http::error::HTTPServiceError;
+use crate::service::http::error::HttpServiceError;
 
 pub(crate) struct JsonBody<T>(pub T);
 
@@ -33,7 +33,7 @@ where
     T: DeserializeOwned,
     S: Send + Sync,
 {
-    type Rejection = HTTPServiceError;
+    type Rejection = HttpServiceError;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         Json::from_request(req, state)

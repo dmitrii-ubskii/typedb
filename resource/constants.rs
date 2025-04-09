@@ -7,7 +7,14 @@
 pub mod common {
     pub const SECONDS_IN_MINUTE: u64 = 60;
     pub const MINUTES_IN_HOUR: u64 = 60;
+    pub const HOURS_IN_DAY: u64 = 24;
+    pub const DAYS_IN_MONTH: u64 = 30; // Approximate
+    pub const DAYS_IN_YEAR: u64 = 365;
+
     pub const SECONDS_IN_HOUR: u64 = SECONDS_IN_MINUTE * MINUTES_IN_HOUR;
+    pub const SECONDS_IN_DAY: u64 = SECONDS_IN_HOUR * HOURS_IN_DAY;
+    pub const SECONDS_IN_MONTH: u64 = SECONDS_IN_DAY * DAYS_IN_MONTH;
+    pub const SECONDS_IN_YEAR: u64 = SECONDS_IN_DAY * DAYS_IN_YEAR;
 
     pub const ERROR_QUERY_POINTER_LINES_BEFORE: usize = 2;
     pub const ERROR_QUERY_POINTER_LINES_AFTER: usize = 2;
@@ -16,7 +23,7 @@ pub mod common {
 pub mod server {
     use std::time::Duration;
 
-    use crate::constants::common::{SECONDS_IN_HOUR, SECONDS_IN_MINUTE};
+    use crate::constants::common::{SECONDS_IN_HOUR, SECONDS_IN_MINUTE, SECONDS_IN_YEAR};
 
     pub const DISTRIBUTION: &str = "TypeDB CE";
     pub const VERSION: &str = include_str!("../VERSION");
@@ -32,7 +39,7 @@ pub mod server {
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES: bool = true;
     pub const DEFAULT_INCLUDE_INSTANCE_TYPES_FETCH: bool = false;
     pub const DEFAULT_ANSWER_COUNT_LIMIT_GRPC: Option<usize> = None;
-    pub const DEFAULT_ANSWER_COUNT_LIMIT_HTTP: Option<usize> = Some(1_000_000); // TODO: Smaller?
+    pub const DEFAULT_ANSWER_COUNT_LIMIT_HTTP: Option<usize> = Some(10_000);
 
     pub const PERF_COUNTERS_ENABLED: bool = true;
 
@@ -50,7 +57,11 @@ pub mod server {
     pub const HTTP_PASSWORD_FIELD: &str = "password";
     pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
     pub const HTTP_BEARER_PREFIX: &str = "Bearer ";
+    pub const MIN_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 1;
+    pub const MAX_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 1 * SECONDS_IN_YEAR;
     pub const DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 4 * SECONDS_IN_HOUR;
+    pub const MIN_AUTHENTICATION_TOKEN_TTL: Duration = Duration::from_secs(MIN_AUTHENTICATION_TOKEN_TTL_SECONDS);
+    pub const MAX_AUTHENTICATION_TOKEN_TTL: Duration = Duration::from_secs(MAX_AUTHENTICATION_TOKEN_TTL_SECONDS);
     pub const DEFAULT_AUTHENTICATION_TOKEN_TTL: Duration =
         Duration::from_secs(DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS);
 
