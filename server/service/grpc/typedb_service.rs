@@ -179,7 +179,6 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
         request: Request<typedb_protocol::authentication::token::create::Req>,
     ) -> Result<Response<typedb_protocol::authentication::token::create::Res>, Status> {
         let message = request.into_inner();
-        println!("Got sign in request: {message:?}"); // TODO: Remove
         run_with_diagnostics_async(self.diagnostics_manager.clone(), None::<&str>, ActionKind::SignIn, || async {
             self.process_token_create(message)
                 .await

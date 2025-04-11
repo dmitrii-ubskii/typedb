@@ -935,7 +935,6 @@ impl TransactionService {
         answer: WriteQueryAnswer,
         sender: Sender<StreamQueryResponse>,
     ) -> JoinHandle<()> {
-        // TODO: How to execute it?
         with_readable_transaction!(self.transaction.as_ref().unwrap(), |transaction| {
             let snapshot = transaction.snapshot.clone();
             let type_manager = transaction.type_manager.clone();

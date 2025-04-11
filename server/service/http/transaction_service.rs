@@ -460,7 +460,7 @@ impl TransactionService {
         //   note: if any write query errors, the whole transaction errors
         // finish any active write query
         if let Break(()) = self.finish_running_write_query_no_transmit(InterruptType::TransactionCommitted).await {
-            return Break(()); // TODO: We should really return state errors just to indicate there is an error to return from function, but identifying that the repsonde is already sent
+            return Break(());
         }
 
         // interrupt active queries
@@ -520,7 +520,7 @@ impl TransactionService {
             return Break(());
         }
         if let Break(()) = self.finish_running_write_query_no_transmit(InterruptType::TransactionCommitted).await {
-            return Break(()); // TODO: We should really return state errors just to indicate there is an error to return from function, but identifying that the repsonde is already sent
+            return Break(());
         }
         if let Break(()) = self.cancel_queued_write_queries(InterruptType::TransactionRolledback).await {
             return Break(());
@@ -696,7 +696,6 @@ impl TransactionService {
         query: String,
         responder: TransactionResponder,
     ) -> ControlFlow<(), ()> {
-        // TODO: pass query options
         let parsed = match parse_query(&query) {
             Ok(parsed) => parsed,
             Err(err) => {

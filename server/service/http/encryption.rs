@@ -52,7 +52,9 @@ pub(crate) fn prepare_tls_config(
                 }
             })?;
             while let Some(root_ca) = root_ca_iter.next() {
-                client_auth_roots.add(root_ca.unwrap()).unwrap(); // TODO: Convert to errors
+                client_auth_roots
+                    .add(root_ca.map_err(|source| ServerOpenError::HttpTlsPemFileError { source: Arc::new(source) })?)
+                    .map_err(|source| ServerOpenError::HttpTlsFailedConfiguration { source: Arc::new(source) })?;
             }
             Some(
                 WebPkiClientVerifier::builder(Arc::new(client_auth_roots))

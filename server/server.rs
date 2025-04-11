@@ -156,7 +156,7 @@ impl Server {
             diagnostics_manager: diagnostics_manager.clone(),
             database_diagnostics_updater: IntervalRunner::new(
                 move || Self::synchronize_database_metrics(diagnostics_manager.clone(), database_manager.clone()),
-                Duration::from_secs(10), // TODO Return
+                DATABASE_METRICS_UPDATE_INTERVAL,
             ),
             user_manager,
             credential_verifier,
