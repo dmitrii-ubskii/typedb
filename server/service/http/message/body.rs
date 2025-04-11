@@ -48,3 +48,11 @@ impl<T: Serialize> IntoResponse for JsonBody<T> {
         Json(self.0).into_response()
     }
 }
+
+pub(crate) struct PlainTextBody(pub String);
+
+impl IntoResponse for PlainTextBody {
+    fn into_response(self) -> Response {
+        self.0.into_response()
+    }
+}

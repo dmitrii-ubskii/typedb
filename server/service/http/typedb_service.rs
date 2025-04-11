@@ -18,7 +18,7 @@ use diagnostics::{diagnostics_manager::DiagnosticsManager, metrics::ActionKind};
 use http::StatusCode;
 use itertools::Itertools;
 use options::{QueryOptions, TransactionOptions};
-use resource::constants::{common::SECONDS_IN_MINUTE, server::DEFAULT_TRANSACTION_TIMEOUT_MILLIS};
+use resource::constants::common::SECONDS_IN_MINUTE;
 use system::concepts::{Credential, User};
 use tokio::{
     sync::{
@@ -39,7 +39,7 @@ use crate::{
             error::HttpServiceError,
             message::{
                 authentication::{encode_token, SigninPayload},
-                body::JsonBody,
+                body::{JsonBody, PlainTextBody},
                 database::{encode_database, encode_databases, DatabasePath},
                 query::{QueryOptionsPayload, QueryPayload, TransactionQueryPayload},
                 transaction::{encode_transaction, TransactionOpenPayload, TransactionPath},
@@ -202,6 +202,7 @@ impl TypeDBService {
             .route("/:version/databases/:database-name", post(Self::databases_create))
             .route("/:version/databases/:database-name", delete(Self::databases_delete))
             .route("/:version/databases/:database-name/schema", get(Self::databases_schema))
+            .route("/:version/databases/:database-name/type-schema", get(Self::databases_type_schema))
             .route("/:version/users", get(Self::users))
             .route("/:version/users/:username", get(Self::users_get))
             .route("/:version/users/:username", post(Self::users_create))
@@ -315,7 +316,39 @@ impl TypeDBService {
         State(service): State<Arc<TypeDBService>>,
         database_path: DatabasePath,
     ) -> impl IntoResponse {
-        StatusCode::NOT_IMPLEMENTED
+        run_with_diagnostics(
+            &service.diagnostics_manager,
+            Some(&database_path.database_name),
+            ActionKind::DatabaseSchema,
+            || {
+                // service
+                //     .database_manager
+                //     .xxxxxx(&database_path.database_name)
+                //     .map_err(|typedb_source| HttpServiceError::DatabaseDelete { typedb_source })
+                // Ok::<_, HttpServiceError>(PlainTextBody("".to_string())) // TODO: Return this when implemented
+                Ok::<_, HttpServiceError>(StatusCode::NOT_IMPLEMENTED)
+            },
+        )
+    }
+
+    async fn databases_type_schema(
+        _version: ProtocolVersion,
+        State(service): State<Arc<TypeDBService>>,
+        database_path: DatabasePath,
+    ) -> impl IntoResponse {
+        run_with_diagnostics(
+            &service.diagnostics_manager,
+            Some(&database_path.database_name),
+            ActionKind::DatabaseTypeSchema,
+            || {
+                // service
+                //     .database_manager
+                //     .xxxxxx(&database_path.database_name)
+                //     .map_err(|typedb_source| HttpServiceError::DatabaseDelete { typedb_source })
+                // Ok::<_, HttpServiceError>(PlainTextBody("".to_string())) // TODO: Return this when implemented
+                Ok::<_, HttpServiceError>(StatusCode::NOT_IMPLEMENTED)
+            },
+        )
     }
 
     async fn users(
