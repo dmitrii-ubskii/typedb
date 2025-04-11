@@ -62,7 +62,7 @@ pub struct AuthenticatedService<S> {
 }
 
 impl<S> AuthenticatedService<S> {
-    const AUTHENTICATION_FREE_METHODS: &'static [&'static str] = &["connection_open", "sign_in"];
+    const AUTHENTICATION_FREE_METHODS: &'static [&'static str] = &["connection_open", "authentication_token_create"];
 
     pub fn new(inner: S, authenticator: Authenticator) -> Self {
         Self { inner, authenticator }

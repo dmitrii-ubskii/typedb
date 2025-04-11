@@ -122,6 +122,7 @@ impl TypeDBService {
 
 #[tonic::async_trait]
 impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
+    // Update AUTHENTICATION_FREE_METHODS if this method is renamed
     async fn connection_open(
         &self,
         request: Request<typedb_protocol::connection::open::Req>,
@@ -174,6 +175,7 @@ impl typedb_protocol::type_db_server::TypeDb for TypeDBService {
         .await
     }
 
+    // Update AUTHENTICATION_FREE_METHODS if this method is renamed
     async fn authentication_token_create(
         &self,
         request: Request<typedb_protocol::authentication::token::create::Req>,
