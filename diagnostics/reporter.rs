@@ -78,7 +78,7 @@ impl Reporter {
                 let is_posthog_enabled = is_posthog_enabled.clone();
                 let diagnostics = diagnostics.clone();
                 async move {
-                    Self::report(is_posthog_enabled, diagnostics).await;
+                    Self::report(is_posthog_enabled, false, diagnostics).await;
                 }
             },
             REPORT_INTERVAL,
@@ -97,20 +97,28 @@ impl Reporter {
 
             tokio::spawn(async move {
                 tokio::time::sleep(REPORT_ONCE_DELAY).await;
-                if Self::report(is_posthog_enabled, diagnostics).await {
+                if Self::report(is_posthog_enabled, true, diagnostics).await {
                     Self::save_disabled_reporting_file(&data_directory);
                 }
             });
         }
     }
 
-    async fn report(is_posthog_enabled: Arc<AtomicBool>, diagnostics: Arc<Diagnostics>) -> bool {
-        let posthog_result = Self::report_posthog(is_posthog_enabled, diagnostics.clone()).await;
+    async fn report(
+        is_posthog_enabled: Arc<AtomicBool>,
+        ignore_disabling: bool,
+        diagnostics: Arc<Diagnostics>,
+    ) -> bool {
+        let posthog_result = Self::report_posthog(is_posthog_enabled, ignore_disabling, diagnostics).await;
         posthog_result
     }
 
-    async fn report_posthog(is_enabled: Arc<AtomicBool>, diagnostics: Arc<Diagnostics>) -> bool {
-        if !is_enabled.load(Ordering::Relaxed) {
+    async fn report_posthog(
+        is_enabled: Arc<AtomicBool>,
+        ignore_disabling: bool,
+        diagnostics: Arc<Diagnostics>,
+    ) -> bool {
+        if !ignore_disabling && !is_enabled.load(Ordering::Relaxed) {
             return false;
         }
 
