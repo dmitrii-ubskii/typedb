@@ -80,8 +80,7 @@ where
         let authenticator = self.authenticator.clone();
         let mut inner = self.inner.clone();
         Box::pin(async move {
-            let req = tokio::task::spawn(async move { authenticator.authenticate(request).await }).await.unwrap();
-            match req {
+            match authenticator.authenticate(request).await {
                 Ok(req) => inner.call(req).await,
                 Err(err) => Ok(err.into_response()),
             }

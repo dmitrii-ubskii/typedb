@@ -31,7 +31,7 @@ use database::{
 };
 use diagnostics::{
     diagnostics_manager::DiagnosticsManager,
-    metrics::{ActionKind, LoadKind},
+    metrics::{ActionKind, ClientEndpoint, LoadKind},
 };
 use error::{typedb_error, TypeDBError};
 use executor::{
@@ -73,10 +73,6 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tonic::{Status, Streaming};
 use tracing::{event, Level};
-use typedb_protocol::{
-    query::Type::{Read, Write},
-    transaction::{stream_signal::Req, Server as ProtocolServer},
-};
 use typeql::{
     parse_query,
     query::{stage::Stage, SchemaQuery},
@@ -185,10 +181,7 @@ fn respond_transaction_response(
     let TransactionResponder(sender) = responder;
     match sender.send(response) {
         Ok(()) => Ok(()),
-        Err(response) => {
-            event!(Level::ERROR, "Could not send transaction response: '{response:?}'.");
-            Err(response)
-        }
+        Err(response) => Err(response),
     }
 }
 
@@ -221,8 +214,8 @@ pub(crate) enum TransactionServiceResponse {
 #[derive(Debug)]
 pub(crate) enum QueryAnswer {
     ResOk(QueryType),
-    ResRows((QueryType, Vec<serde_json::Value>, Option<QueryAnswerComment>)),
-    ResDocuments((QueryType, Vec<serde_json::Value>, Option<QueryAnswerComment>)),
+    ResRows((QueryType, Vec<serde_json::Value>, Option<QueryAnswerWarning>)),
+    ResDocuments((QueryType, Vec<serde_json::Value>, Option<QueryAnswerWarning>)),
 }
 
 impl QueryAnswer {
@@ -237,35 +230,35 @@ impl QueryAnswer {
     pub(crate) fn status_code(&self) -> StatusCode {
         match self {
             QueryAnswer::ResOk(_) => StatusCode::OK,
-            QueryAnswer::ResRows((_, _, comment)) => match comment {
+            QueryAnswer::ResRows((_, _, warning)) => match warning {
                 None => StatusCode::OK,
-                Some(comment) => comment.status_code(),
+                Some(warning) => warning.status_code(),
             },
-            QueryAnswer::ResDocuments((_, _, comment)) => match comment {
+            QueryAnswer::ResDocuments((_, _, warning)) => match warning {
                 None => StatusCode::OK,
-                Some(comment) => comment.status_code(),
+                Some(warning) => warning.status_code(),
             },
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum QueryAnswerComment {
+pub(crate) enum QueryAnswerWarning {
     ReadResultsLimitExceeded { limit: usize },
 }
 
-impl QueryAnswerComment {
+impl QueryAnswerWarning {
     pub(crate) fn status_code(&self) -> StatusCode {
         match self {
-            QueryAnswerComment::ReadResultsLimitExceeded { .. } => StatusCode::PARTIAL_CONTENT,
+            QueryAnswerWarning::ReadResultsLimitExceeded { .. } => StatusCode::PARTIAL_CONTENT,
         }
     }
 }
 
-impl fmt::Display for QueryAnswerComment {
+impl fmt::Display for QueryAnswerWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QueryAnswerComment::ReadResultsLimitExceeded { limit } => write!(f, "Write query results limit ({limit}) exceeded, and the transaction is aborted. Retry with an extended limit or break the query into multiple smaller queries to achieve the same result.")
+            QueryAnswerWarning::ReadResultsLimitExceeded { limit } => write!(f, "Write query results limit ({limit}) exceeded, and the transaction is aborted. Retry with an extended limit or break the query into multiple smaller queries to achieve the same result.")
         }
     }
 }
@@ -340,7 +333,7 @@ impl TransactionService {
                 Transaction::Schema(transaction)
             }
         };
-        self.diagnostics_manager.increment_load_count(&database_name, transaction.to_load_kind());
+        self.diagnostics_manager.increment_load_count(ClientEndpoint::Http, &database_name, transaction.to_load_kind());
         self.transaction = Some(transaction);
         self.timeout_at = init_transaction_timeout(Some(transaction_timeout_millis));
 
@@ -488,7 +481,11 @@ impl TransactionService {
                 respond_error_and_return_break!(responder, TransactionServiceError::CannotCommitReadTransaction {});
             }
             Transaction::Write(transaction) => spawn_blocking(move || {
-                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Http,
+                    transaction.database.name(),
+                    LoadKind::WriteTransactions,
+                );
                 unwrap_or_execute_else_respond_error_and_return_break!(
                     transaction.commit(),
                     responder,
@@ -500,7 +497,11 @@ impl TransactionService {
             .await
             .expect("Expected write transaction execution completion"),
             Transaction::Schema(transaction) => {
-                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
+                diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Http,
+                    transaction.database.name(),
+                    LoadKind::SchemaTransactions,
+                );
                 unwrap_or_execute_else_respond_error_and_return_break!(
                     transaction.commit(),
                     responder,
@@ -560,16 +561,27 @@ impl TransactionService {
         match self.transaction.take() {
             None => (),
             Some(Transaction::Read(transaction)) => {
-                self.diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::ReadTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Http,
+                    transaction.database.name(),
+                    LoadKind::ReadTransactions,
+                );
                 transaction.close()
             }
             Some(Transaction::Write(transaction)) => {
-                self.diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Http,
+                    transaction.database.name(),
+                    LoadKind::WriteTransactions,
+                );
                 transaction.close()
             }
             Some(Transaction::Schema(transaction)) => {
-                self.diagnostics_manager
-                    .decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Http,
+                    transaction.database.name(),
+                    LoadKind::SchemaTransactions,
+                );
                 transaction.close()
             }
         }
@@ -1024,11 +1036,11 @@ impl TransactionService {
 
             let parameters = context.parameters;
             let mut result = vec![];
-            let mut comment = None;
+            let mut warning = None;
             for next in iterator {
                 if let Some(limit) = query_options.answer_count_limit {
                     if result.len() >= limit {
-                        comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit });
+                        warning = Some(QueryAnswerWarning::ReadResultsLimitExceeded { limit });
                         break;
                     }
                 }
@@ -1057,7 +1069,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionServiceResponse::Query(QueryAnswer::ResDocuments((QueryType::Read, result, comment)))
+                TransactionServiceResponse::Query(QueryAnswer::ResDocuments((QueryType::Read, result, warning)))
             );
             context.profile
         } else {
@@ -1078,11 +1090,11 @@ impl TransactionService {
             );
 
             let mut result = vec![];
-            let mut comment = None;
+            let mut warning = None;
             while let Some(next) = iterator.next() {
                 if let Some(limit) = query_options.answer_count_limit {
                     if result.len() >= limit {
-                        comment = Some(QueryAnswerComment::ReadResultsLimitExceeded { limit });
+                        warning = Some(QueryAnswerWarning::ReadResultsLimitExceeded { limit });
                         break;
                     }
                 }
@@ -1116,7 +1128,7 @@ impl TransactionService {
             }
             respond_else_return_break!(
                 responder,
-                TransactionServiceResponse::Query(QueryAnswer::ResRows((QueryType::Read, result, comment)))
+                TransactionServiceResponse::Query(QueryAnswer::ResRows((QueryType::Read, result, warning)))
             );
             context.profile
         };

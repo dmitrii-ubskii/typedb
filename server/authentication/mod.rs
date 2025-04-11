@@ -12,14 +12,15 @@ use axum_extra::{
 };
 use error::typedb_error;
 use http::Extensions;
-use resource::constants::server::{HTTP_AUTHORIZATION_FIELD, HTTP_BEARER_PREFIX, HTTP_USERNAME_FIELD};
 use tonic::metadata::MetadataMap;
-use user::errors::UserGetError;
 
 use crate::authentication::token_manager::TokenManager;
 
 pub(crate) mod credential_verifier;
 pub(crate) mod token_manager;
+
+pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
+pub const HTTP_BEARER_PREFIX: &str = "Bearer ";
 
 pub(crate) async fn extract_parts_authorization_token(mut parts: http::request::Parts) -> Option<String> {
     parts

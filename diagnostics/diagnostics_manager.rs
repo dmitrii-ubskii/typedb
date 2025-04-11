@@ -9,7 +9,7 @@ use std::{collections::HashSet, hash::Hash, sync::Arc};
 use resource::constants::database::INTERNAL_DATABASE_PREFIX;
 
 use crate::{
-    metrics::{ActionKind, DatabaseMetrics, LoadKind},
+    metrics::{ActionKind, ClientEndpoint, DatabaseMetrics, LoadKind},
     monitoring_server::MonitoringServer,
     reporter::Reporter,
     Diagnostics,
@@ -63,11 +63,11 @@ impl DiagnosticsManager {
 
     diagnostics_method! {
         pub fn submit_database_metrics(&self, database_metrics: HashSet<DatabaseMetrics>);
-        pub fn submit_error(&self, database_name: Option<impl AsRef<str> + Hash>, error_code: String);
-        pub fn submit_action_success(&self, database_name: Option<impl AsRef<str> + Hash>, action_kind: ActionKind);
-        pub fn submit_action_fail(&self, database_name: Option<impl AsRef<str> + Hash>, action_kind: ActionKind);
-        pub fn increment_load_count(&self, database_name: &str, connection_: LoadKind);
-        pub fn decrement_load_count(&self, database_name: &str, connection_: LoadKind);
+        pub fn submit_error(&self, client: ClientEndpoint, database_name: Option<impl AsRef<str> + Hash>, error_code: String);
+        pub fn submit_action_success(&self, client: ClientEndpoint, database_name: Option<impl AsRef<str> + Hash>, action_kind: ActionKind);
+        pub fn submit_action_fail(&self, client: ClientEndpoint, database_name: Option<impl AsRef<str> + Hash>, action_kind: ActionKind);
+        pub fn increment_load_count(&self, client: ClientEndpoint, database_name: impl AsRef<str> + Hash, connection_: LoadKind);
+        pub fn decrement_load_count(&self, client: ClientEndpoint, database_name: impl AsRef<str> + Hash, connection_: LoadKind);
     }
 
     pub async fn may_start_reporting(&self) {

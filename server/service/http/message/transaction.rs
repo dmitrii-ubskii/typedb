@@ -38,7 +38,7 @@ pub struct TransactionOpenPayload {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TransactionOptionsPayload {
-    pub parallel: Option<bool>, // TODO: Not used? Remove?
+    pub parallel: Option<bool>,
     pub schema_lock_acquire_timeout_millis: Option<u64>,
     pub transaction_timeout_millis: Option<u64>,
 }

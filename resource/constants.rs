@@ -52,11 +52,6 @@ pub mod server {
         'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     ];
 
-    // TODO: Maybe we start moving these options to separate crates?
-    pub const HTTP_USERNAME_FIELD: &str = "username";
-    pub const HTTP_PASSWORD_FIELD: &str = "password";
-    pub const HTTP_AUTHORIZATION_FIELD: &str = "authorization";
-    pub const HTTP_BEARER_PREFIX: &str = "Bearer ";
     pub const MIN_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 1;
     pub const MAX_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 1 * SECONDS_IN_YEAR;
     pub const DEFAULT_AUTHENTICATION_TOKEN_TTL_SECONDS: u64 = 4 * SECONDS_IN_HOUR;
@@ -147,7 +142,6 @@ pub mod diagnostics {
 
     pub const UNKNOWN_STR: &str = "Unknown";
 
-    pub const SERVICE_REPORTING_URI: &str = "https://diagnostics.typedb.com/";
     pub const POSTHOG_BATCH_REPORTING_URI: &str = "https://us.i.posthog.com/batch/";
     // The key is write-only and safe to expose
     pub const POSTHOG_API_KEY: &str = "phc_pYoyROZCtNDL8obeJfLZ8cP0UKzIAxmd0JcQQ03i07T";

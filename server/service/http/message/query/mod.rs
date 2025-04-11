@@ -64,27 +64,27 @@ pub struct QueryAnswerResponse {
     pub query_type: QueryType,
     pub answer_type: AnswerType,
     pub answers: Option<Vec<serde_json::Value>>,
-    pub comment: Option<String>,
+    pub warning: Option<String>,
 }
 
 pub(crate) fn encode_query_ok_answer(query_type: QueryType) -> QueryAnswerResponse {
-    QueryAnswerResponse { query_type, answer_type: AnswerType::Ok, answers: None, comment: None }
+    QueryAnswerResponse { query_type, answer_type: AnswerType::Ok, answers: None, warning: None }
 }
 
 pub(crate) fn encode_query_rows_answer(
     query_type: QueryType,
     rows: Vec<serde_json::Value>,
-    comment: Option<String>,
+    warning: Option<String>,
 ) -> QueryAnswerResponse {
-    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptRows, answers: Some(rows), comment }
+    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptRows, answers: Some(rows), warning }
 }
 
 pub(crate) fn encode_query_documents_answer(
     query_type: QueryType,
     documents: Vec<serde_json::Value>,
-    comment: Option<String>,
+    warning: Option<String>,
 ) -> QueryAnswerResponse {
-    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptDocuments, answers: Some(documents), comment }
+    QueryAnswerResponse { query_type, answer_type: AnswerType::ConceptDocuments, answers: Some(documents), warning }
 }
 
 impl IntoResponse for QueryAnswer {
@@ -92,13 +92,13 @@ impl IntoResponse for QueryAnswer {
         let code = self.status_code();
         let body = match self {
             QueryAnswer::ResOk(query_type) => JsonBody(encode_query_ok_answer(query_type)),
-            QueryAnswer::ResRows((query_type, rows, comment)) => {
-                JsonBody(encode_query_rows_answer(query_type, rows, comment.map(|comment| comment.to_string())))
+            QueryAnswer::ResRows((query_type, rows, warning)) => {
+                JsonBody(encode_query_rows_answer(query_type, rows, warning.map(|warning| warning.to_string())))
             }
-            QueryAnswer::ResDocuments((query_type, documents, comment)) => JsonBody(encode_query_documents_answer(
+            QueryAnswer::ResDocuments((query_type, documents, warning)) => JsonBody(encode_query_documents_answer(
                 query_type,
                 documents,
-                comment.map(|comment| comment.to_string()),
+                warning.map(|warning| warning.to_string()),
             )),
         };
         (code, body).into_response()

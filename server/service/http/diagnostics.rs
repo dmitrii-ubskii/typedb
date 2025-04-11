@@ -8,7 +8,7 @@ use std::{future::Future, hash::Hash, sync::Arc};
 
 use diagnostics::{
     diagnostics_manager::{is_diagnostics_needed, DiagnosticsManager},
-    metrics::ActionKind,
+    metrics::{ActionKind, ClientEndpoint},
 };
 
 use crate::service::http::error::HttpServiceError;
@@ -54,10 +54,10 @@ fn submit_result_metrics<T>(
     }
 
     match result {
-        Ok(_) => diagnostics_manager.submit_action_success(database_name, action_kind),
+        Ok(_) => diagnostics_manager.submit_action_success(ClientEndpoint::Http, database_name, action_kind),
         Err(error) => {
-            diagnostics_manager.submit_action_fail(database_name.as_ref(), action_kind);
-            diagnostics_manager.submit_error(database_name, error.source().code().to_string());
+            diagnostics_manager.submit_action_fail(ClientEndpoint::Http, database_name.as_ref(), action_kind);
+            diagnostics_manager.submit_error(ClientEndpoint::Http, database_name, error.source().code().to_string());
         }
     }
 }

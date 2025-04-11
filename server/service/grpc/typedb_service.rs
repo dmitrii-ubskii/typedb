@@ -11,7 +11,7 @@ use database::database_manager::DatabaseManager;
 use diagnostics::{diagnostics_manager::DiagnosticsManager, metrics::ActionKind, Diagnostics};
 use error::typedb_error;
 use http::StatusCode;
-use resource::constants::server::{DEFAULT_USER_NAME, HTTP_USERNAME_FIELD};
+use resource::constants::server::DEFAULT_USER_NAME;
 use system::concepts::{Credential, PasswordHash, User};
 use tokio::sync::mpsc::channel;
 use tokio_stream::wrappers::ReceiverStream;

@@ -121,14 +121,14 @@ serializable_response! {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-// #[serde(rename_all = "camelCase")] // TODO: driver-based documents don't use camelCase?
+#[serde(rename_all = "camelCase")]
 pub struct TypeDocument {
     kind: String,
     label: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-// #[serde(rename_all = "camelCase")] // TODO: driver-based documents don't use camelCase?
+#[serde(rename_all = "camelCase")]
 pub struct AttributeTypeDocument {
     kind: String,
     label: String,

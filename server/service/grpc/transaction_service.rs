@@ -24,7 +24,7 @@ use database::{
 };
 use diagnostics::{
     diagnostics_manager::DiagnosticsManager,
-    metrics::{ActionKind, LoadKind},
+    metrics::{ActionKind, ClientEndpoint, LoadKind},
 };
 use error::typedb_error;
 use executor::{
@@ -509,7 +509,7 @@ impl TransactionService {
                 Transaction::Schema(transaction)
             }
         };
-        self.diagnostics_manager.increment_load_count(&database_name, transaction.to_load_kind());
+        self.diagnostics_manager.increment_load_count(ClientEndpoint::Grpc, &database_name, transaction.to_load_kind());
         self.transaction = Some(transaction);
         self.timeout_at = init_transaction_timeout(Some(transaction_timeout_millis));
         self.is_open = true;
@@ -545,7 +545,11 @@ impl TransactionService {
                 Err(TransactionServiceError::CannotCommitReadTransaction {}.into_error_message().into_status())
             }
             Transaction::Write(transaction) => spawn_blocking(move || {
-                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Grpc,
+                    transaction.database.name(),
+                    LoadKind::WriteTransactions,
+                );
                 transaction.commit().map_err(|err| {
                     TransactionServiceError::DataCommitFailed { typedb_source: err }.into_error_message().into_status()
                 })
@@ -553,7 +557,11 @@ impl TransactionService {
             .await
             .expect("Expected write transaction execution completion"),
             Transaction::Schema(transaction) => {
-                diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
+                diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Grpc,
+                    transaction.database.name(),
+                    LoadKind::SchemaTransactions,
+                );
                 transaction.commit().map_err(|typedb_source| {
                     TransactionServiceError::SchemaCommitFailed { typedb_source }.into_error_message().into_status()
                 })
@@ -615,16 +623,27 @@ impl TransactionService {
         match self.transaction.take() {
             None => (),
             Some(Transaction::Read(transaction)) => {
-                self.diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::ReadTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Grpc,
+                    transaction.database.name(),
+                    LoadKind::ReadTransactions,
+                );
                 transaction.close()
             }
             Some(Transaction::Write(transaction)) => {
-                self.diagnostics_manager.decrement_load_count(transaction.database.name(), LoadKind::WriteTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Grpc,
+                    transaction.database.name(),
+                    LoadKind::WriteTransactions,
+                );
                 transaction.close()
             }
             Some(Transaction::Schema(transaction)) => {
-                self.diagnostics_manager
-                    .decrement_load_count(transaction.database.name(), LoadKind::SchemaTransactions);
+                self.diagnostics_manager.decrement_load_count(
+                    ClientEndpoint::Grpc,
+                    transaction.database.name(),
+                    LoadKind::SchemaTransactions,
+                );
                 transaction.close()
             }
         };

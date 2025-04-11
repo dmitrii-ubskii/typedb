@@ -101,7 +101,7 @@ async fn connection_opens_with_authentication(
     password: String,
     may_error: params::MayError,
 ) {
-    if let Some(Either::Left(response)) = may_error.check(
+    if let Either::Left(response) = may_error.check(
         authenticate(
             &context.http_context,
             Context::default_versioned_endpoint().as_str(),

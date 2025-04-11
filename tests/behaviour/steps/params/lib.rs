@@ -44,16 +44,16 @@ pub enum MayError {
 }
 
 impl MayError {
-    pub fn check<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
+    pub fn check<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Either<T, E> {
         match self {
-            MayError::False => Some(Either::Left(res.unwrap())),
-            MayError::True(None) => Some(Either::Right(res.unwrap_err())),
+            MayError::False => Either::Left(res.unwrap()),
+            MayError::True(None) => Either::Right(res.unwrap_err()),
             MayError::True(Some(expected_message)) => {
                 let actual_error = res.unwrap_err();
                 let actual_message = format!("{actual_error:?}");
 
                 if actual_message.contains(expected_message) {
-                    Some(Either::Right(actual_error))
+                    Either::Right(actual_error)
                 } else {
                     panic!(
                         "Expected error message containing: '{}', but got error message: '{}'",
@@ -69,9 +69,8 @@ impl MayError {
         res: &Result<T, Box<ConceptWriteError>>,
     ) -> Option<Box<ConceptWriteError>> {
         match self.check(res.as_ref().map_err(|e| e.as_ref())) {
-            None => None,
-            Some(Either::Left(_)) => None,
-            Some(Either::Right(error)) => match error {
+            Either::Left(_) => None,
+            Either::Right(error) => match error {
                 ConceptWriteError::ConceptRead { typedb_source: source } => {
                     panic!("Expected logic error, got ConceptRead {:?}", source)
                 }
@@ -127,15 +126,15 @@ pub enum TypeQLMayError {
 }
 
 impl TypeQLMayError {
-    pub fn check<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
+    pub fn check<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Either<T, E> {
         self.as_may_error().check(res)
     }
 
-    pub fn check_parsing<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
+    pub fn check_parsing<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Either<T, E> {
         self.as_may_error_parsing().check(res)
     }
 
-    pub fn check_logic<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Option<Either<T, E>> {
+    pub fn check_logic<T: fmt::Debug, E: fmt::Debug>(&self, res: Result<T, E>) -> Either<T, E> {
         self.as_may_error_logic().check(res)
     }
 

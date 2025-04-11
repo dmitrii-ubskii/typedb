@@ -1243,6 +1243,7 @@ dependencies = [
  "logger",
  "resource",
  "sentry",
+ "serde",
  "serde_json",
  "sysinfo",
  "tokio",
@@ -5021,7 +5022,7 @@ dependencies = [
 [[package]]
 name = "typedb-protocol"
 version = "0.0.0"
-source = "git+https://github.com/typedb/typedb-protocol?rev=c43acc88e676fad831d09491577e11fef12501be#c43acc88e676fad831d09491577e11fef12501be"
+source = "git+https://github.com/typedb/typedb-protocol?rev=154c0dd891192d4b3649abcd09ef019249a204f5#154c0dd891192d4b3649abcd09ef019249a204f5"
 dependencies = [
  "prost",
  "tonic",

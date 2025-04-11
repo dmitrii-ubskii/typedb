@@ -8,7 +8,7 @@ use std::{future::Future, hash::Hash, sync::Arc};
 
 use diagnostics::{
     diagnostics_manager::{is_diagnostics_needed, DiagnosticsManager},
-    metrics::ActionKind,
+    metrics::{ActionKind, ClientEndpoint},
 };
 use tonic::Status;
 use tonic_types::StatusExt;
@@ -54,11 +54,11 @@ fn submit_result_metrics<T>(
     }
 
     match result {
-        Ok(_) => diagnostics_manager.submit_action_success(database_name, action_kind),
+        Ok(_) => diagnostics_manager.submit_action_success(ClientEndpoint::Grpc, database_name, action_kind),
         Err(status) => {
-            diagnostics_manager.submit_action_fail(database_name.as_ref(), action_kind);
+            diagnostics_manager.submit_action_fail(ClientEndpoint::Grpc, database_name.as_ref(), action_kind);
             if let Some(error_code) = get_status_error_code(status) {
-                diagnostics_manager.submit_error(database_name, error_code.clone());
+                diagnostics_manager.submit_error(ClientEndpoint::Grpc, database_name, error_code.clone());
             }
         }
     }

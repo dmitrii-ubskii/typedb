@@ -98,7 +98,7 @@ where
         let mut inner = self.inner.clone();
         Box::pin(async move {
             let request = match Self::is_authentication_required(&request) {
-                true => tokio::task::spawn(async move { authenticator.authenticate(request).await }).await.unwrap()?,
+                true => authenticator.authenticate(request).await?,
                 false => request,
             };
             inner.call(request).await

@@ -60,6 +60,7 @@ type TransactionRequestSender = Sender<(TransactionRequest, TransactionResponder
 #[derive(Debug, Clone)]
 struct TransactionInfo {
     pub owner: String,
+    pub database_name: String,
     pub request_sender: TransactionRequestSender,
     pub transaction_timeout_millis: u64,
 }
@@ -143,13 +144,15 @@ impl TypeDBService {
             service.shutdown_receiver.clone(),
         );
 
+        let database_name = payload.database_name;
+
         let processing_time = transaction_service
-            .open(payload.transaction_type, payload.database_name, options)
+            .open(payload.transaction_type, database_name.clone(), options)
             .await
             .map_err(|typedb_source| HttpServiceError::Transaction { typedb_source })?;
 
         tokio::spawn(async move { transaction_service.listen().await });
-        Ok((TransactionInfo { owner, request_sender, transaction_timeout_millis }, processing_time))
+        Ok((TransactionInfo { owner, database_name, request_sender, transaction_timeout_millis }, processing_time))
     }
 
     async fn transaction_request(
@@ -442,8 +445,6 @@ impl TypeDBService {
         .await
     }
 
-    // TODO: Add diangostics to all these methods! Probably move out of transaction service if they exist there for "Query" coverage!
-
     async fn transactions_commit(
         _version: ProtocolVersion,
         State(service): State<Arc<TypeDBService>>,
@@ -453,10 +454,19 @@ impl TypeDBService {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
-        if accessor != transaction.owner {
-            return Err(HttpServiceError::operation_not_permitted());
-        }
-        Self::transaction_request(&transaction, TransactionRequest::Commit, true).await
+
+        run_with_diagnostics_async(
+            service.diagnostics_manager.clone(),
+            Some(transaction.database_name.clone()),
+            ActionKind::TransactionCommit,
+            || async {
+                if accessor != transaction.owner {
+                    return Err(HttpServiceError::operation_not_permitted());
+                }
+                Self::transaction_request(&transaction, TransactionRequest::Commit, true).await
+            },
+        )
+        .await
     }
 
     async fn transactions_close(
@@ -470,10 +480,19 @@ impl TypeDBService {
         let Some(transaction) = senders.get(&uuid) else {
             return Ok(TransactionServiceResponse::Ok);
         };
-        if accessor != transaction.owner {
-            return Err(HttpServiceError::operation_not_permitted());
-        }
-        Self::transaction_request(&transaction, TransactionRequest::Close, false).await
+
+        run_with_diagnostics_async(
+            service.diagnostics_manager.clone(),
+            Some(transaction.database_name.clone()),
+            ActionKind::TransactionClose,
+            || async {
+                if accessor != transaction.owner {
+                    return Err(HttpServiceError::operation_not_permitted());
+                }
+                Self::transaction_request(&transaction, TransactionRequest::Close, false).await
+            },
+        )
+        .await
     }
 
     async fn transactions_rollback(
@@ -485,10 +504,19 @@ impl TypeDBService {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
-        if accessor != transaction.owner {
-            return Err(HttpServiceError::operation_not_permitted());
-        }
-        Self::transaction_request(&transaction, TransactionRequest::Rollback, true).await
+
+        run_with_diagnostics_async(
+            service.diagnostics_manager.clone(),
+            Some(transaction.database_name.clone()),
+            ActionKind::TransactionRollback,
+            || async {
+                if accessor != transaction.owner {
+                    return Err(HttpServiceError::operation_not_permitted());
+                }
+                Self::transaction_request(&transaction, TransactionRequest::Rollback, true).await
+            },
+        )
+        .await
     }
 
     async fn transactions_query(
@@ -501,11 +529,24 @@ impl TypeDBService {
         let uuid = path.transaction_id;
         let senders = service.transaction_services.read().await;
         let transaction = senders.get(&uuid).ok_or(HttpServiceError::no_open_transaction())?;
-        if accessor != transaction.owner {
-            return Err(HttpServiceError::operation_not_permitted());
-        }
-        Self::transaction_request(&transaction, Self::build_query_request(payload.query_options, payload.query), true)
-            .await
+
+        run_with_diagnostics_async(
+            service.diagnostics_manager.clone(),
+            Some(transaction.database_name.clone()),
+            ActionKind::TransactionQuery,
+            || async {
+                if accessor != transaction.owner {
+                    return Err(HttpServiceError::operation_not_permitted());
+                }
+                Self::transaction_request(
+                    &transaction,
+                    Self::build_query_request(payload.query_options, payload.query),
+                    true,
+                )
+                .await
+            },
+        )
+        .await
     }
 
     async fn query(
@@ -514,35 +555,44 @@ impl TypeDBService {
         Accessor(accessor): Accessor,
         JsonBody(payload): JsonBody<QueryPayload>,
     ) -> impl IntoResponse {
-        let (transaction_info, _processing_time) =
-            Self::transaction_new(&service, accessor, payload.transaction_open_payload).await?;
+        run_with_diagnostics_async(
+            service.diagnostics_manager.clone(),
+            Some(payload.transaction_open_payload.database_name.clone()),
+            ActionKind::OneshotQuery,
+            || async {
+                let (transaction_info, _processing_time) =
+                    Self::transaction_new(&service, accessor, payload.transaction_open_payload).await?;
 
-        let transaction_response = Self::transaction_request(
-            &transaction_info,
-            Self::build_query_request(payload.query_options, payload.query),
-            true,
+                let transaction_response = Self::transaction_request(
+                    &transaction_info,
+                    Self::build_query_request(payload.query_options, payload.query),
+                    true,
+                )
+                .await?;
+                let query_response = Self::try_get_query_response(transaction_response)?;
+
+                let commit = match query_response.query_type() {
+                    QueryType::Read => false,
+                    QueryType::Write | QueryType::Schema => {
+                        payload.commit.unwrap_or(Self::QUERY_ENDPOINT_COMMIT_DEFAULT)
+                    }
+                };
+
+                let close_response = match commit {
+                    true => Self::transaction_request(&transaction_info, TransactionRequest::Commit, true),
+                    false => Self::transaction_request(&transaction_info, TransactionRequest::Close, true),
+                }
+                .await?;
+                if let TransactionServiceResponse::Err(typedb_source) = close_response {
+                    return match commit {
+                        true => Err(HttpServiceError::QueryCommit { typedb_source }),
+                        false => Err(HttpServiceError::QueryClose { typedb_source }),
+                    };
+                }
+
+                Ok(TransactionServiceResponse::Query(query_response))
+            },
         )
-        .await?;
-        let query_response = Self::try_get_query_response(transaction_response)?;
-
-        // TODO: Move the default somewhere, probably rename
-        let commit = match query_response.query_type() {
-            QueryType::Read => false,
-            QueryType::Write | QueryType::Schema => payload.commit.unwrap_or(Self::QUERY_ENDPOINT_COMMIT_DEFAULT),
-        };
-
-        let close_response = match commit {
-            true => Self::transaction_request(&transaction_info, TransactionRequest::Commit, true),
-            false => Self::transaction_request(&transaction_info, TransactionRequest::Close, true),
-        }
-        .await?;
-        if let TransactionServiceResponse::Err(typedb_source) = close_response {
-            return match commit {
-                true => Err(HttpServiceError::QueryCommit { typedb_source }),
-                false => Err(HttpServiceError::QueryClose { typedb_source }),
-            };
-        }
-
-        Ok(TransactionServiceResponse::Query(query_response))
+        .await
     }
 }

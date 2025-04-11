@@ -9,6 +9,7 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use axum_server::{tls_rustls::RustlsConfig, Handle};
@@ -155,7 +156,7 @@ impl Server {
             diagnostics_manager: diagnostics_manager.clone(),
             database_diagnostics_updater: IntervalRunner::new(
                 move || Self::synchronize_database_metrics(diagnostics_manager.clone(), database_manager.clone()),
-                DATABASE_METRICS_UPDATE_INTERVAL,
+                Duration::from_secs(10), // TODO Return
             ),
             user_manager,
             credential_verifier,
@@ -264,8 +265,6 @@ impl Server {
     pub async fn serve(mut self) -> Result<(), ServerOpenError> {
         Self::print_hello(ASCII_LOGO, self.distribution, self.version, self.config.is_development_mode);
 
-        // TODO: It has been introduced by the rustls dependency (for some reason, we didn't need it before).
-        // Leave this call for now, but be aware that it can cause issues on different machines.
         Self::install_default_encryption_provider()?;
 
         let grpc_address = *self.grpc_service.address();
