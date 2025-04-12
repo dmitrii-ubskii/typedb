@@ -147,8 +147,6 @@ impl Context {
     const DEFAULT_DATABASE: &'static str = "test";
     const ADMIN_USERNAME: &'static str = "admin";
     const ADMIN_PASSWORD: &'static str = "password";
-    const STEP_REATTEMPT_SLEEP: Duration = Duration::from_millis(250);
-    const STEP_REATTEMPT_LIMIT: u32 = 20;
 
     const SERVER_START_CHECK_INTERVAL: Duration = Duration::from_secs(1);
     const SERVER_MAX_START_TIME: Duration = Duration::from_secs(10);
@@ -219,7 +217,6 @@ impl Context {
     }
 
     pub async fn after_scenario(&mut self) {
-        sleep(Context::STEP_REATTEMPT_SLEEP).await;
         self.cleanup_transactions().await;
         self.cleanup_background_transactions().await;
         self.cleanup_databases().await;

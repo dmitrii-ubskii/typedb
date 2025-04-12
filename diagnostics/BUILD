@@ -37,7 +37,7 @@ rust_library(
 
 checkstyle_test(
     name = "checkstyle",
-    include = glob(["*"]),
+    include = glob(["*", "*/*"]),
     exclude = glob([
         "Cargo.*",
     ]),
