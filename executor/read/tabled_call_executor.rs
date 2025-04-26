@@ -9,8 +9,8 @@ use std::{
 };
 
 use answer::variable_value::VariableValue;
+use compiler::executable::match_::planner::match_executable::FunctionCallStep;
 use compiler::VariablePosition;
-use ir::pipeline::function_signature::FunctionID;
 
 use crate::{
     batch::FixedBatch,
@@ -23,19 +23,6 @@ use crate::{
     row::MaybeOwnedRow,
 };
 
-pub(crate) struct TabledCallExecutor {
-    function_id: FunctionID,
-    argument_positions: Vec<VariablePosition>,
-    assignment_positions: Vec<Option<VariablePosition>>,
-    output_width: u32
-}
-
-impl fmt::Debug for TabledCallExecutor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TabledCallExecutor (function id {:?})", self.function_id)
-    }
-}
-
 #[derive(Debug)]
 pub struct TabledCallExecutorState {
     pub(crate) call_key: CallKey,
@@ -45,6 +32,23 @@ pub struct TabledCallExecutorState {
 }
 
 impl TabledCallExecutorState {
+    pub(crate) fn restore_from_suspension(instruction: &FunctionCallStep, input: MaybeOwnedRow<'static>, next_table_index: TableIndex) -> Self {
+        Self::new(instruction, input, next_table_index)
+    }
+    pub(crate) fn create_fresh_state(instruction: &FunctionCallStep, input: MaybeOwnedRow<'static>) -> Self {
+        Self::new(instruction, input, TableIndex(0))
+    }
+
+    fn new(instruction: &FunctionCallStep, input: MaybeOwnedRow<'static>, next_table_row: TableIndex) -> Self {
+        let arguments = MaybeOwnedRow::new_owned(
+            instruction.arguments.iter().map(|pos| input.get(*pos).to_owned()).collect(),
+            input.multiplicity(),
+            input.provenance(),
+        );
+        let call_key = CallKey { function_id: instruction.function_id.clone(), arguments };
+        TabledCallExecutorState { call_key, input, next_table_row, last_seen_scc_total_table_size: None }
+    }
+
     pub(crate) fn add_batch_to_table(&mut self, state: &TabledFunctionState, batch: FixedBatch) -> FixedBatch {
         let deduplicated_batch = state.add_batch_to_table(batch);
         *self.next_table_row += deduplicated_batch.len() as usize;
@@ -91,38 +95,24 @@ pub(super) enum TabledCallResult<'a> {
     Suspend,
 }
 
+pub(crate) struct TabledCallExecutor(pub FunctionCallStep);
+
+impl fmt::Debug for TabledCallExecutor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TabledCallExecutor (function id {:?})", self.0.function_id)
+    }
+}
+
 impl TabledCallExecutor {
-    pub(crate) fn new(
-        function_id: FunctionID,
-        argument_positions: Vec<VariablePosition>,
-        assignment_positions: Vec<Option<VariablePosition>>,
-        output_width: u32,
-    ) -> Self {
-        Self { function_id, argument_positions, assignment_positions, output_width }
-    }
-
-    pub(crate) fn create_fresh_state(&mut self, input: MaybeOwnedRow<'static>) -> TabledCallExecutorState{
-        self.create_state(input, TableIndex(0))
-    }
-
-    pub(crate) fn restore_from_suspension(&mut self, input: MaybeOwnedRow<'static>, next_table_index: TableIndex) -> TabledCallExecutorState {
-        self.create_state(input, next_table_index)
-    }
-
-    fn create_state(&mut self, input: MaybeOwnedRow<'static>, next_table_row: TableIndex) -> TabledCallExecutorState {
-        let arguments = MaybeOwnedRow::new_owned(
-            self.argument_positions.iter().map(|pos| input.get(*pos).to_owned()).collect(),
-            input.multiplicity(),
-            input.provenance(),
-        );
-        let call_key = CallKey { function_id: self.function_id.clone(), arguments };
-        TabledCallExecutorState { call_key, input, next_table_row, last_seen_scc_total_table_size: None }
+    pub(crate) fn step(&self) -> &FunctionCallStep {
+        &self.0
     }
 
     pub(crate) fn map_output(&self, input: MaybeOwnedRow<'_>, returned_batch: FixedBatch) -> FixedBatch {
-        let mut output_batch = FixedBatch::new(self.output_width);
-        let check_indices: Vec<_> = self
-            .assignment_positions
+        let step = self.step();
+        let mut output_batch = FixedBatch::new(step.output_width);
+        let check_indices: Vec<_> = step
+            .assigned
             .iter()
             .enumerate()
             .filter_map(|(src, &dst)| Some((VariablePosition::new(src as u32), dst?)))
@@ -137,7 +127,7 @@ impl TabledCallExecutor {
                     output_row.copy_from_row(input.as_reference());
                     output_row.copy_mapped(
                         returned_row,
-                        self.assignment_positions
+                        step.assigned
                             .iter()
                             .enumerate()
                             .filter_map(|(src, &dst)| Some((VariablePosition::new(src as u32), dst?))),

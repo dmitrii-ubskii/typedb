@@ -181,12 +181,7 @@ pub(crate) fn create_executors_for_match(
 
                 let function = function_registry.get(&function_call.function_id).unwrap();
                 if let FunctionTablingType::Tabled(_) = function.tabling_type {
-                    let executor = TabledCallExecutor::new(
-                        function_call.function_id.clone(),
-                        function_call.arguments.clone(),
-                        function_call.assigned.clone(),
-                        function_call.output_width,
-                    );
+                    let executor = TabledCallExecutor(function_call.clone());
                     steps.push(StepExecutors::TabledCall(executor))
                 } else {
                     let inner_executors = create_executors_for_function(

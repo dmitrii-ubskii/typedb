@@ -255,7 +255,7 @@ impl PatternExecutor {
     fn push_nested_pattern(&mut self, index: ExecutorIndex, input: MaybeOwnedRow<'_>) {
         match &mut self.executors[*index] {
             StepExecutors::TabledCall(tabled_call) => {
-                let call_executor_state = tabled_call.create_fresh_state(input.clone().into_owned());
+                let call_executor_state = TabledCallExecutorState::create_fresh_state(&tabled_call.step(), input.clone().into_owned());
                 self.control_stack.push(ExecuteTabledCall { index, call_executor_state }.into());
             }
             StepExecutors::Disjunction(DisjunctionExecutor { branches, .. }) => {
@@ -369,7 +369,7 @@ fn restore_suspension(
         PatternSuspension::AtTabledCall(suspended_call) => {
             let TabledCallSuspension { executor_index, next_table_row, input_row, .. } = suspended_call;
             let executor = executors[*executor_index].unwrap_tabled_call();
-            let call_executor_state = executor.restore_from_suspension(input_row, next_table_row);
+            let call_executor_state = TabledCallExecutorState::restore_from_suspension(executor.step(), input_row, next_table_row);
             // last_seen_scc_total_table_size is None because a suspension is within a cycle, not at the entry.
             // last_seen_scc_total_table_size is set only for entry
             control_stack.push(ExecuteTabledCall { index: executor_index, call_executor_state }.into())
