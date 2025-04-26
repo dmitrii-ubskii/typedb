@@ -31,6 +31,17 @@ use crate::{
 };
 use crate::read::tabled_call_executor::TabledCallExecutorState;
 
+
+#[cfg(not(debug_assertions))]
+compile_error!(r#"
+All executors except ImmediateExecutors are trivial transformations of the Steps.
+Since ImmediateExecutors form a pattern, this means PatternExecutor has Vec<StepExecutor> instead of Vec<ExecutionStep> - Which is just a MatchExecutable
+
+ My ideal state is where we fully separate out the instructions (ExecutionStep) from the state (ConstrolStack Element).
+ And what we call presently call executors can be dissolved as they are trivial wrappers around the two.
+ At this point, PatternExecutor could also be dissolved as it is a trivial a combination of code (MatchExecutable) and program state (ControlStack).
+"#);
+
 #[derive(Debug)]
 pub(crate) struct PatternExecutor {
     executable_id: u64,
