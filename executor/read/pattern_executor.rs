@@ -29,6 +29,7 @@ use crate::{
     row::MaybeOwnedRow,
     ExecutionInterrupt, Provenance,
 };
+use crate::read::tabled_call_executor::TabledCallExecutorState;
 
 #[derive(Debug)]
 pub(crate) struct PatternExecutor {
@@ -176,14 +177,14 @@ impl PatternExecutor {
                         self.push_next_instruction(context, index.next(), batch)?;
                     }
                 }
-                ControlInstruction::ExecuteTabledCall(ExecuteTabledCall { index, last_seen_table_size }) => {
+                ControlInstruction::ExecuteTabledCall(ExecuteTabledCall { index, call_executor_state }) => {
                     self.execute_tabled_call(
                         context,
                         interrupt,
                         tabled_functions,
                         suspensions,
                         index,
-                        last_seen_table_size,
+                        call_executor_state,
                     )?;
                 }
                 ControlInstruction::CollectingStage(CollectingStage { index, mut collector }) => {
@@ -254,8 +255,8 @@ impl PatternExecutor {
     fn push_nested_pattern(&mut self, index: ExecutorIndex, input: MaybeOwnedRow<'_>) {
         match &mut self.executors[*index] {
             StepExecutors::TabledCall(tabled_call) => {
-                tabled_call.prepare(input.clone().into_owned());
-                self.control_stack.push(ExecuteTabledCall { index, last_seen_table_size: None }.into());
+                let call_executor_state = tabled_call.create_fresh_state(input.clone().into_owned());
+                self.control_stack.push(ExecuteTabledCall { index, call_executor_state }.into());
             }
             StepExecutors::Disjunction(DisjunctionExecutor { branches, .. }) => {
                 for (idx, branch) in branches.iter_mut().enumerate() {
@@ -295,15 +296,15 @@ impl PatternExecutor {
         tabled_functions: &mut TabledFunctions,
         caller_suspensions: &mut QueryPatternSuspensions,
         index: ExecutorIndex,
-        table_size_at_last_restore: Option<usize>,
+        mut call_executor_state: TabledCallExecutorState,
     ) -> Result<(), ReadExecutionError> {
         let executor = self.executors[*index].unwrap_tabled_call();
-        let call_key = executor.active_call_key().unwrap();
+        let call_key = call_executor_state.active_call_key();
         let function_state = tabled_functions.get_or_create_function_state(context, call_key)?;
-        let found = match executor.try_read_next_batch(&function_state) {
-            TabledCallResult::RetrievedFromTable(batch) => Some(batch),
+        let found = match call_executor_state.try_read_next_batch(&function_state) {
+            TabledCallResult::RetrievedFromTable(batch) => Some((batch, call_executor_state)),
             TabledCallResult::Suspend => {
-                caller_suspensions.push_tabled_call(index, executor);
+                caller_suspensions.push_tabled_call(index, &call_executor_state);
                 None
             }
             TabledCallResult::MustExecutePattern(mut pattern_state_mutex_guard) => {
@@ -325,8 +326,8 @@ impl PatternExecutor {
                     function_suspensions,
                 )?;
                 if let Some(batch) = batch_opt {
-                    let deduplicated_batch = executor.add_batch_to_table(&function_state, batch);
-                    Some(deduplicated_batch)
+                    let deduplicated_batch = call_executor_state.add_batch_to_table(&function_state, batch);
+                    Some((deduplicated_batch, call_executor_state))
                 } else {
                     // Don't use suspend_count_before == suspend_count_after, since we can get away with just one.
                     if !function_suspensions.is_empty() {
@@ -334,24 +335,25 @@ impl PatternExecutor {
                             // This was an entry into a new SCC. We might have to retry!
                             drop(pattern_state_mutex_guard);
                             let new_table_size = tabled_functions.total_table_size();
-                            if Some(new_table_size) != table_size_at_last_restore {
+                            if Some(new_table_size) != call_executor_state.last_seen_scc_total_table_size {
                                 tabled_functions.may_prepare_to_retry_suspended();
+                                call_executor_state.last_seen_scc_total_table_size = Some(new_table_size);
                                 self.control_stack.push(
-                                    ExecuteTabledCall { index, last_seen_table_size: Some(new_table_size) }.into(),
+                                    ExecuteTabledCall { index, call_executor_state }.into(),
                                 );
                             } // else, we're done!!!
                         } else {
-                            caller_suspensions.push_tabled_call(index, executor);
+                            caller_suspensions.push_tabled_call(index, &call_executor_state);
                         }
                     }
                     None
                 }
             }
         };
-        if let Some(batch) = found {
+        if let Some((batch, call_executor_state)) = found {
+            let mapped = executor.map_output(call_executor_state.input.clone().into_owned(), batch);
             self.control_stack
-                .push(ExecuteTabledCall { index, last_seen_table_size: table_size_at_last_restore }.into());
-            let mapped = executor.map_output(batch);
+                .push(ExecuteTabledCall { index, call_executor_state }.into());
             self.push_next_instruction(context, index.next(), mapped)?;
         }
         Ok(())
@@ -367,9 +369,10 @@ fn restore_suspension(
         PatternSuspension::AtTabledCall(suspended_call) => {
             let TabledCallSuspension { executor_index, next_table_row, input_row, .. } = suspended_call;
             let executor = executors[*executor_index].unwrap_tabled_call();
-            executor.restore_from_suspension(input_row, next_table_row);
-            // last_seen_table_size is None because a suspension is within a cycle, not at the entry. last_seen_table_size is set only for entry
-            control_stack.push(ExecuteTabledCall { index: executor_index, last_seen_table_size: None }.into())
+            let call_executor_state = executor.restore_from_suspension(input_row, next_table_row);
+            // last_seen_scc_total_table_size is None because a suspension is within a cycle, not at the entry.
+            // last_seen_scc_total_table_size is set only for entry
+            control_stack.push(ExecuteTabledCall { index: executor_index, call_executor_state }.into())
         }
         PatternSuspension::AtNestedPattern(suspended_nested) => {
             let NestedPatternSuspension { executor_index: index, input_row, branch_index, depth } = suspended_nested;

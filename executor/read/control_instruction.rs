@@ -15,6 +15,7 @@ use crate::{
     },
     row::MaybeOwnedRow,
 };
+use crate::read::tabled_call_executor::TabledCallExecutorState;
 
 #[derive(Debug)]
 pub(super) enum ControlInstruction {
@@ -88,7 +89,7 @@ pub(super) struct ExecuteDisjunctionBranch {
 #[derive(Debug)]
 pub(super) struct ExecuteTabledCall {
     pub(super) index: ExecutorIndex,
-    pub(super) last_seen_table_size: Option<usize>,
+    pub(super) call_executor_state: TabledCallExecutorState,
 }
 
 #[derive(Debug)]

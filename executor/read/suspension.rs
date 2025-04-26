@@ -10,6 +10,7 @@ use crate::{
     read::{tabled_call_executor::TabledCallExecutor, tabled_functions::TableIndex, BranchIndex, ExecutorIndex},
     row::MaybeOwnedRow,
 };
+use crate::read::tabled_call_executor::TabledCallExecutorState;
 
 #[derive(Debug)]
 pub(crate) enum PatternSuspension {
@@ -112,10 +113,10 @@ impl QueryPatternSuspensions {
     pub(super) fn push_tabled_call(
         &mut self,
         executor_index: ExecutorIndex,
-        tabled_call_executor: &TabledCallExecutor,
+        call_executor_state: &TabledCallExecutorState,
     ) {
         self.suspending_patterns_tree
-            .push(tabled_call_executor.create_suspension_at(executor_index, self.current_depth))
+            .push(call_executor_state.create_suspension_at(executor_index, self.current_depth))
     }
 
     pub(super) fn next_restore_point_at_current_depth(&mut self) -> Option<PatternSuspension> {
