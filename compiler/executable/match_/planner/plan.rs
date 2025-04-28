@@ -1325,10 +1325,8 @@ impl ConjunctionPlan<'_> {
         selected_variables: impl IntoIterator<Item = Variable> + Clone,
         already_assigned_positions: &HashMap<Variable, ExecutorVariable>,
         variable_registry: &VariableRegistry,
-        branch_id: Option<BranchID>,
     ) -> Result<MatchExecutableBuilder, QueryPlanningError> {
         let mut match_builder = MatchExecutableBuilder::new(
-            branch_id,
             already_assigned_positions,
             selected_variables.clone().into_iter().collect(),
             input_variables.clone().into_iter().collect(),
@@ -1551,7 +1549,6 @@ impl ConjunctionPlan<'_> {
                     match_builder.selected_variables.iter().copied(),
                     match_builder.position_mapping(),
                     variable_registry,
-                    None,
                 )?;
                 let variable_positions: HashMap<Variable, ExecutorVariable> = negation
                     .index
@@ -2045,14 +2042,13 @@ impl DisjunctionPlan<'_> {
     ) -> Result<DisjunctionBuilder, QueryPlanningError> {
         let mut branches: Vec<_> = Vec::with_capacity(self.branches.len());
         let mut assigned_positions = assigned_positions.clone();
-        for (branch_id, branch) in self.branch_ids.iter().zip(self.branches.iter()) {
+        for branch in &self.branches {
             let lowered_branch = branch.lower(
                 input_variable_annotations,
                 disjunction_inputs.clone(),
                 selected_variables.clone(),
                 &assigned_positions,
                 variable_registry,
-                Some(*branch_id),
             )?;
             assigned_positions = lowered_branch.position_mapping().clone();
             branches.push(lowered_branch);

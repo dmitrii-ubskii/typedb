@@ -170,21 +170,6 @@ fn add_type_statement(
     Ok(())
 }
 
-fn extend_from_inline_typeql_expression(
-    function_index: &impl FunctionSignatureIndex,
-    constraints: &mut ConstraintsBuilder<'_, '_>,
-    typeql_expression: &typeql::Expression,
-) -> Result<Variable, Box<RepresentationError>> {
-    if let typeql::Expression::Variable(typeql_var) = typeql_expression {
-        register_typeql_var(constraints, typeql_var)
-    } else {
-        let expression = build_expression(function_index, constraints, typeql_expression)?;
-        let assigned = constraints.create_anonymous_variable(typeql_expression.span())?;
-        constraints.add_assignment(assigned, expression, typeql_expression.span())?;
-        Ok(assigned)
-    }
-}
-
 pub(crate) fn register_typeql_var(
     constraints: &mut ConstraintsBuilder<'_, '_>,
     var: &typeql::Variable,

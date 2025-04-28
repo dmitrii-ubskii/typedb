@@ -52,24 +52,6 @@ pub struct TranslatedPipeline {
     pub value_parameters: ParameterRegistry,
 }
 
-impl TranslatedPipeline {
-    pub(crate) fn new(
-        translation_context: TranslationContext,
-        value_parameters: ParameterRegistry,
-        translated_preamble: Vec<Function>,
-        translated_fetch: Option<FetchObject>,
-        translated_stages: Vec<TranslatedStage>,
-    ) -> Self {
-        TranslatedPipeline {
-            translated_preamble,
-            translated_stages,
-            translated_fetch,
-            variable_registry: translation_context.variable_registry,
-            value_parameters,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum TranslatedStage {
     Match { block: Block, source_span: Option<Span> },

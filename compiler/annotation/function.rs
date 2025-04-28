@@ -119,10 +119,6 @@ impl<'a, T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunction
     pub(crate) fn new(schema_functions: &'a HashMap<DefinitionKey, T1>, local_functions: &'a Vec<T2>) -> Self {
         Self { schema_functions, local_functions }
     }
-
-    // pub(crate) fn empty() -> Self {
-    //     Self::new(HashMap::new(), Vec::new())
-    // }
 }
 
 impl<T1: GetAnnotatedSignature, T2: GetAnnotatedSignature> AnnotatedFunctionSignatures
@@ -511,21 +507,6 @@ fn annotate_return(
             .map(|instruction| FunctionParameterAnnotation::Value(instruction.output_type()))
             .collect(),
         AnnotatedFunctionReturn::ReduceCheck {} => vec![FunctionParameterAnnotation::Value(ValueType::Boolean)],
-    }
-}
-
-fn get_function_parameter<V: From<Variable> + Ord>(
-    variable: Variable,
-    body_variable_annotations: &BTreeMap<V, Arc<BTreeSet<Type>>>,
-    body_variable_value_types: &BTreeMap<Variable, ExpressionValueType>,
-) -> FunctionParameterAnnotation {
-    if let Some(arced_types) = body_variable_annotations.get(&variable.into()) {
-        let types: &BTreeSet<Type> = arced_types;
-        FunctionParameterAnnotation::Concept(types.clone())
-    } else if let Some(expression_value_type) = body_variable_value_types.get(&variable) {
-        FunctionParameterAnnotation::Value(expression_value_type.value_type().clone())
-    } else {
-        unreachable!("Could not find annotations for a function argument or return variable.")
     }
 }
 

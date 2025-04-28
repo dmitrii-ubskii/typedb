@@ -85,7 +85,6 @@ pub fn compile(
         selected_variables.iter().copied(),
         &assigned_identities,
         variable_registry,
-        None,
     )
     .map_err(|source| MatchCompilationError::PlanningError { typedb_source: source })?
     .finish(variable_registry);
@@ -290,12 +289,10 @@ struct MatchExecutableBuilder {
     next_output: VariablePosition,
 
     planner_statistics: PlannerStatistics,
-    branch_id: Option<BranchID>,
 }
 
 impl MatchExecutableBuilder {
     fn new(
-        branch_id: Option<BranchID>,
         assigned_positions: &HashMap<Variable, ExecutorVariable>,
         selected_variables: Vec<Variable>,
         input_variables: Vec<Variable>,
@@ -313,7 +310,6 @@ impl MatchExecutableBuilder {
             .unwrap_or(0);
         let next_output = VariablePosition::new(next_position);
         Self {
-            branch_id,
             selected_variables,
             input_variables,
             current_outputs,

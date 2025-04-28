@@ -6,21 +6,10 @@
 
 use concept::error::ConceptReadError;
 use error::typedb_error;
-use ir::pattern::conjunction::Conjunction;
-
-use crate::annotation::pipeline::AnnotatedPipeline;
 
 pub mod redundant_constraints;
 pub mod relation_index;
 pub mod transform;
-
-pub(crate) trait ConjunctionTransformation {
-    fn apply(conjunction: &mut Conjunction);
-}
-
-pub(crate) trait PipelineTransformation {
-    fn apply(pipeline: &mut AnnotatedPipeline);
-}
 
 typedb_error!(
     pub StaticOptimiserError(component = "Static optimiser", prefix = "SOP") {

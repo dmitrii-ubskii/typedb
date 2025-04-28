@@ -58,10 +58,6 @@ impl ExecutableFunctionRegistry {
             FunctionID::Preamble(id) => self.preamble_functions.get(id),
         }
     }
-
-    pub(crate) fn schema_functions(&self) -> Arc<HashMap<DefinitionKey, ExecutableFunction>> {
-        self.schema_functions.clone()
-    }
 }
 
 impl FunctionCallCostProvider for ExecutableFunctionRegistry {

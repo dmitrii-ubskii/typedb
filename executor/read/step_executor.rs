@@ -229,8 +229,7 @@ pub(crate) fn create_executors_for_match(
                 .into();
                 // Hack: wrap it in a distinct
                 let step = StepExecutors::StreamModifier(StreamModifierExecutor::new_distinct(
-                    PatternExecutor::new(next_executable_id(), vec![inner_step]),
-                    step.output_width,
+                    PatternExecutor::new(next_executable_id(), vec![inner_step])
                 ));
                 steps.push(step);
             }
@@ -343,11 +342,10 @@ pub(super) fn create_executors_for_function_pipeline_stages(
         ExecutableStage::Require(_) => Err(Box::new(ConceptReadError::UnimplementedFunctionality {
             functionality: UnimplementedFeature::PipelineStageInFunction("require"),
         })),
-        ExecutableStage::Distinct(distinct_executable) => {
+        ExecutableStage::Distinct(_) => {
             // Complete this sentence for
             let step = StreamModifierExecutor::new_distinct(
-                PatternExecutor::new(next_executable_id(), previous_stage_steps),
-                distinct_executable.output_row_mapping.values().len() as u32,
+                PatternExecutor::new(next_executable_id(), previous_stage_steps)
             );
             Ok(vec![step.into()])
         }

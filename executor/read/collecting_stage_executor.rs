@@ -9,7 +9,6 @@ use std::{fmt, iter::Peekable, sync::Arc};
 use compiler::executable::{modifiers::SortExecutable, reduce::ReduceRowsExecutable};
 use ir::pipeline::modifier::SortVariable;
 use lending_iterator::LendingIterator;
-use resource::profile::StorageCounters;
 use storage::snapshot::ReadableSnapshot;
 
 use crate::{
@@ -127,7 +126,6 @@ pub(super) trait CollectedStageIteratorTrait {
 // Reduce
 pub(super) struct ReduceCollector {
     active_reducer: GroupedReducer,
-    output: Option<BatchRowIterator>,
     output_width: u32,
 }
 
@@ -140,7 +138,7 @@ impl fmt::Debug for ReduceCollector {
 impl ReduceCollector {
     fn new(reduce_executable: Arc<ReduceRowsExecutable>) -> Self {
         let output_width = (reduce_executable.input_group_positions.len() + reduce_executable.reductions.len()) as u32;
-        Self { active_reducer: GroupedReducer::new(reduce_executable), output: None, output_width }
+        Self { active_reducer: GroupedReducer::new(reduce_executable), output_width }
     }
 }
 

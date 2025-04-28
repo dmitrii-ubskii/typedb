@@ -114,14 +114,6 @@ pub(super) struct Yield {
     pub(super) batch: FixedBatch,
 }
 
-impl ReshapeForReturn {
-    pub(crate) fn positions_to_mapping(
-        positions: &[VariablePosition],
-    ) -> impl Iterator<Item = (VariablePosition, VariablePosition)> + '_ {
-        positions.iter().enumerate().map(|(dst, &src)| (src, VariablePosition::new(dst as u32)))
-    }
-}
-
 macro_rules! impl_from_for_enum {
     // Nothing, we just need the compile error when the feature is deleted
     ($enum_name:ident from $inner:ident as $variant:ident) => {
