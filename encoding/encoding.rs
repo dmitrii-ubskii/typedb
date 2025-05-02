@@ -20,6 +20,7 @@ pub mod error;
 pub mod graph;
 pub mod layout;
 pub mod value;
+// extra comment hoping we don't have to build the dependencies. One more
 
 /*
  * TODO: things we may want to allow the user to configure, per database:
@@ -27,7 +28,6 @@ pub mod value;
  * - Bytes per Entity/Relation (ObjectID) (max number of instances per type)
  */
 
-// extra comment hoping we don't have to build the dependencies
 #[derive(Clone, Copy, Debug)]
 pub enum EncodingKeyspace {
     /// Keyspace optimised for 11 byte prefix seeks:
