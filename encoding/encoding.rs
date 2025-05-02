@@ -27,6 +27,7 @@ pub mod value;
  * - Bytes per Entity/Relation (ObjectID) (max number of instances per type)
  */
 
+// extra comment hoping we don't have to build the dependencies
 #[derive(Clone, Copy, Debug)]
 pub enum EncodingKeyspace {
     /// Keyspace optimised for 11 byte prefix seeks:
