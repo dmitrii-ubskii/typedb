@@ -25,7 +25,7 @@ build:
       command: |
         sudo apt update
         sudo apt install -y libclang-dev
-        curl -L https://github.com/rui314/mold/releases/download/v2.38.1/mold-2.38.1-x86_64-linux.tar.gz | tar -xz
+        curl -L https://github.com/rui314/mold/releases/download/v2.38.1/mold-2.38.1-x86_64-linux.tar.gz | tar -xz -C /usr/local  --strip-components=1
         sudo cp -r mold-2.38.1-x86_64-linux/* /usr/local/
         bazel run @typedb_dependencies//tool/bazelinstall:remote_cache_setup.sh
         bazel build //... 
