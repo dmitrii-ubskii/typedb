@@ -36,7 +36,8 @@ pub(crate) fn encode_row(
         )?;
         encoded_row.push(typedb_protocol::RowEntry { entry: Some(row_entry) });
     }
-    Ok(typedb_protocol::ConceptRow { row: encoded_row })
+    let involved_branches = row.provenance().0.to_le_bytes().iter().copied().collect();
+    Ok(typedb_protocol::ConceptRow { row: encoded_row, involved_branches })
 }
 
 pub(crate) fn encode_row_entry(
