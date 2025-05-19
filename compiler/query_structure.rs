@@ -4,10 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use answer::variable::Variable;
 use encoding::value::label::Label;
@@ -19,11 +16,13 @@ use ir::{
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::annotation::{
-    pipeline::AnnotatedStage,
-    type_annotations::{BlockAnnotations, TypeAnnotations},
+use crate::{
+    annotation::{
+        pipeline::AnnotatedStage,
+        type_annotations::{BlockAnnotations, TypeAnnotations},
+    },
+    VariablePosition,
 };
-use crate::VariablePosition;
 
 #[derive(Debug, Clone)]
 pub struct QueryStructure {
