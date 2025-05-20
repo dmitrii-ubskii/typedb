@@ -150,7 +150,7 @@ enum StructureConstraint {
     },
     Value {
         #[serde(rename = "attributeType")]
-        attribute_type: QueryStructureVertexResponse,
+        attribute_type: StructureVertex,
         #[serde(rename = "valueType")]
         value_type: String,
     },
@@ -421,10 +421,10 @@ fn encode_structure_constraint(
                     .to_owned(),
             },
         }),
-        Constraint::Value(value) => constraints.push(QueryStructureConstraintResponse {
+        Constraint::Value(value) => constraints.push(StructureConstraintWithSpan {
             text_span: span,
-            constraint: QueryStructureConstraint::Value {
-                attribute_type: query_structure_vertex(context, value.attribute_type())?,
+            constraint: StructureConstraint::Value {
+                attribute_type: encode_structure_vertex(context, value.attribute_type())?,
                 value_type: value.value_type().to_string(),
             },
         }),
