@@ -81,6 +81,10 @@ impl ConstraintVertex<'_> {
         }
     }
 
+    pub(crate) fn can_produce(&self, var: VariableVertexId) -> bool {
+        self.variables().any(|v| v == var)
+    }
+
     pub(crate) fn join_from_direction_and_inputs(
         &self,
         dir: &Direction,
