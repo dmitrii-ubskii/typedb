@@ -81,6 +81,10 @@ impl ConstraintVertex<'_> {
         }
     }
 
+    pub(crate) fn can_produce(&self, var: VariableVertexId) -> bool {
+        self.variables().any(|v| v == var)
+    }
+
     pub(crate) fn join_from_direction_and_inputs(
         &self,
         dir: &Direction,
@@ -381,7 +385,7 @@ impl Costed for IidPlanner<'_> {
 #[derive(Clone)]
 pub(crate) struct IsaPlanner<'a> {
     isa: &'a Isa<Variable>,
-    thing: VariableVertexId,
+    pub(crate) thing: VariableVertexId,
     type_: Input,
     pub(crate) unrestricted_expected_size: f64,
 }

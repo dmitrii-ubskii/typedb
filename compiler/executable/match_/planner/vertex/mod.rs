@@ -88,13 +88,6 @@ impl PlannerVertex<'_> {
         matches!(self, Self::Constraint(_))
     }
 
-    pub(super) fn as_variable(&self) -> Option<&VariableVertex> {
-        match self {
-            Self::Variable(v) => Some(v),
-            _ => None,
-        }
-    }
-
     pub(super) fn can_be_trivial(&self) -> bool {
         matches!(
             self,
@@ -103,6 +96,28 @@ impl PlannerVertex<'_> {
                 | Self::Constraint(ConstraintVertex::TypeList(_))
                 | Self::Constraint(ConstraintVertex::Isa(_))
         )
+    }
+
+    pub(super) fn can_produce(&self, var: VariableVertexId) -> bool {
+        match self {
+            PlannerVertex::Variable(_) => false,
+            PlannerVertex::Constraint(inner) => inner.can_produce(var),
+            PlannerVertex::Is(_) => false, // technically can, but at least one side must be bound, so we are conservative here
+            PlannerVertex::LinksDeduplication(_) => false,
+            PlannerVertex::Comparison(_) => false,
+            PlannerVertex::Unsatisfiable(_) => false,
+            PlannerVertex::Expression(inner) => inner.can_produce(var),
+            PlannerVertex::FunctionCall(inner) => inner.can_produce(var),
+            PlannerVertex::Negation(_) => false,
+            PlannerVertex::Disjunction(inner) => inner.can_produce(var),
+        }
+    }
+
+    pub(super) fn as_variable(&self) -> Option<&VariableVertex> {
+        match self {
+            Self::Variable(v) => Some(v),
+            _ => None,
+        }
     }
 
     pub(super) fn as_variable_mut(&mut self) -> Option<&mut VariableVertex> {
@@ -313,6 +328,10 @@ impl<'a> ExpressionPlanner<'a> {
     pub(crate) fn variables(&self) -> impl Iterator<Item = VariableVertexId> + '_ {
         self.inputs.iter().chain(iter::once(&self.output)).copied()
     }
+
+    fn can_produce(&self, var: VariableVertexId) -> bool {
+        self.output == var
+    }
 }
 
 impl Costed for ExpressionPlanner<'_> {
@@ -350,6 +369,10 @@ impl<'a> FunctionCallPlanner<'a> {
 
     fn is_valid(&self, vertex_plan: &[VertexId], _graph: &Graph<'_>) -> bool {
         self.arguments.iter().all(|&arg| vertex_plan.contains(&VertexId::Variable(arg)))
+    }
+
+    fn can_produce(&self, var: VariableVertexId) -> bool {
+        self.assigned.contains(&var)
     }
 }
 
@@ -613,6 +636,10 @@ impl<'a> DisjunctionPlanner<'a> {
 
     pub(super) fn builder(&self) -> &DisjunctionPlanBuilder<'a> {
         &self.builder
+    }
+
+    fn can_produce(&self, var: VariableVertexId) -> bool {
+        !self.input_variables.contains(&var) && self.shared_variables.contains(&var)
     }
 }
 

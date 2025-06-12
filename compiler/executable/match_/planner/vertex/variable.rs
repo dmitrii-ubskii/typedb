@@ -288,6 +288,13 @@ impl ThingPlanner {
         self.restriction_from_above.insert(other);
     }
 
+    pub(crate) fn is_restricted(&self) -> bool {
+        !self.restriction_from_above.is_empty()
+            || !self.restriction_from_below.is_empty()
+            || !self.restriction_equal.is_empty()
+            || !self.restriction_exact.is_empty()
+    }
+
     fn set_binding(&mut self, binding_pattern: PatternVertexId) {
         self.binding = Some(binding_pattern);
     }

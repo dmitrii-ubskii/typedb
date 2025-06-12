@@ -124,7 +124,7 @@ fn make_builder<'a>(
         match pattern {
             NestedPattern::Disjunction(disjunction) => {
                 let planner = DisjunctionPlanBuilder::new(
-                    disjunction.branch_ids().iter().copied().collect(),
+                    disjunction.branch_ids().to_vec(),
                     disjunction
                         .conjunctions()
                         .iter()
@@ -653,7 +653,47 @@ impl<'a> ConjunctionPlanBuilder<'a> {
     ) -> Result<(Vec<VertexId>, HashMap<PatternVertexId, CostMetaData>, Cost), QueryPlanningError> {
         const INDENT: &str = "";
 
-        let search_patterns: HashSet<_> = self.graph.pattern_to_variable.keys().copied().collect();
+        let mut search_patterns = HashSet::new();
+        let mut forced_checks = HashSet::new();
+        for (&p, vs) in &self.graph.pattern_to_variable {
+            match self.graph.elements[&VertexId::Pattern(p)] {
+                PlannerVertex::Constraint(ConstraintVertex::Isa(ref isa)) => {
+                    let PlannerVertex::Variable(VariableVertex::Thing(thing)) =
+                        &self.graph.elements[&VertexId::Variable(isa.thing)]
+                    else {
+                        unreachable!()
+                    };
+                    if !thing.is_restricted()
+                        && vs.iter().all(|&var| {
+                            self.graph.variable_to_pattern[&var].iter().any(|&vp| {
+                                vp != p
+                                    && !forced_checks.contains(&vp)
+                                    && self.graph.elements[&VertexId::Pattern(vp)].can_produce(var)
+                            })
+                        })
+                    {
+                        forced_checks.insert(p);
+                    } else {
+                        search_patterns.insert(p); // did not find another producer
+                    }
+                }
+                PlannerVertex::Constraint(ConstraintVertex::TypeList(_)) => {
+                    if vs.iter().all(|&var| {
+                        self.graph.variable_to_pattern[&var].iter().any(|&vp| {
+                            vp != p
+                                && !forced_checks.contains(&vp)
+                                && self.graph.elements[&VertexId::Pattern(vp)].can_produce(var)
+                        })
+                    }) {
+                        forced_checks.insert(p);
+                    } else {
+                        search_patterns.insert(p); // did not find another producer
+                    }
+                }
+                _ => _ = search_patterns.insert(p),
+            }
+        }
+
         let num_patterns = search_patterns.len();
 
         const BEAM_REDUCTION_CYCLE: usize = 2;
@@ -776,8 +816,18 @@ impl<'a> ConjunctionPlanBuilder<'a> {
             best_partial_plans = new_plans_heap.into_vec();
         }
 
-        let best_plan =
+        let mut best_plan =
             best_partial_plans.into_iter().min().ok_or(QueryPlanningError::ExpectedPlannableConjunction {})?;
+        for check in forced_checks {
+            let check = StepExtension {
+                pattern_id: check,
+                pattern_metadata: CostMetaData::Direction(Direction::Reverse), // only used by `isa`
+                step_cost: Cost { cost: 0.02, io_ratio: 1.0 },
+                step_join_var: None,
+                heuristic: best_plan.cumulative_cost,
+            };
+            best_plan = best_plan.clone_and_extend_with_new_step(check, &self.graph);
+        }
         let complete_plan = best_plan.into_complete_plan(&self.graph);
         event!(
             Level::TRACE,
