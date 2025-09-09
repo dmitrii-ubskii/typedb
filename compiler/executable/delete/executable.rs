@@ -13,7 +13,7 @@ use ir::{
     pipeline::VariableRegistry,
 };
 use typeql::common::Span;
-
+use concept::type_::type_manager::TypeManager;
 use crate::{
     annotation::type_annotations::TypeAnnotations,
     executable::{
@@ -37,6 +37,7 @@ pub struct DeleteExecutable {
 }
 
 pub fn compile(
+    type_manager: &TypeManager,
     input_variables: &HashMap<Variable, VariablePosition>,
     type_annotations: &TypeAnnotations,
     variable_registry: &VariableRegistry,

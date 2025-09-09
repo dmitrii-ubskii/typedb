@@ -357,6 +357,7 @@ fn compile_stage(
         }
         AnnotatedStage::Delete { block, deleted_variables, annotations, source_span } => {
             let plan = crate::executable::delete::executable::compile(
+                &type_manager,
                 stage_input_positions,
                 annotations,
                 variable_registry,

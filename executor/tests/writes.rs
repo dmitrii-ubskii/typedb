@@ -299,6 +299,7 @@ fn execute_delete<Snapshot: WritableSnapshot + 'static>(
         .collect::<HashMap<_, _>>();
 
     let delete_plan = compiler::executable::delete::executable::compile(
+        &type_manager,
         &input_row_format,
         &entry_annotations,
         &translation_context.variable_registry,
