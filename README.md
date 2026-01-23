@@ -215,4 +215,47 @@ confidence.
 ## Licensing
 
 It's released under the Mozilla Public License 2.0 (MPL 2.0).
-For license information, please see [LICENSE](https://github.com/typedb/typedb/blob/master/LICENSE). 
+For license information, please see [LICENSE](https://github.com/typedb/typedb/blob/master/LICENSE).
+
+## Hello World
+
+This section provides a quick start guide to get TypeDB running and verify it works.
+
+### Quick Start
+
+1. **Download TypeDB** from the [GitHub Releases](https://github.com/typedb/typedb/releases) or install via package manager:
+
+   ```bash
+   # macOS (Homebrew)
+   brew tap typedb/tap
+   brew install typedb
+
+   # Linux (apt)
+   sudo apt install software-properties-common apt-transport-https gpg
+   gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-key 8F3DA4B5E9AEF44C
+   gpg --export 8F3DA4B5E9AEF44C | sudo tee /etc/apt/trusted.gpg.d/typedb.gpg > /dev/null
+   echo "deb https://repo.typedb.com/public/public-release/deb/ubuntu trusty main" | sudo tee /etc/apt/sources.list.d/typedb.list > /dev/null
+   sudo apt update
+   sudo apt install typedb-all
+   ```
+
+2. **Start the TypeDB server**:
+
+   ```bash
+   typedb server
+   ```
+
+3. **Verify the server is running** by connecting with TypeDB Console in a new terminal:
+
+   ```bash
+   typedb console
+   ```
+
+   You should see the TypeDB Console prompt. Try creating a database:
+
+   ```
+   > database create test
+   > database list
+   ```
+
+   You should see `test` in the list of databases. TypeDB is now running successfully!   
