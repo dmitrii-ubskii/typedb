@@ -215,4 +215,42 @@ confidence.
 ## Licensing
 
 It's released under the Mozilla Public License 2.0 (MPL 2.0).
-For license information, please see [LICENSE](https://github.com/typedb/typedb/blob/master/LICENSE). 
+For license information, please see [LICENSE](https://github.com/typedb/typedb/blob/master/LICENSE).
+
+## Hello World
+
+Get started with TypeDB in minutes:
+
+```bash
+# Start TypeDB server
+typedb server
+
+# In another terminal, connect with TypeDB Console
+typedb console
+
+# Create a database
+> database create hello-world
+
+# Connect to the database
+> transaction hello-world schema write
+
+# Define a simple schema
+> define
+  entity person,
+    owns name;
+  attribute name, value string;
+
+# Commit the schema
+> commit
+
+# Insert data
+> transaction hello-world data write
+> insert $p isa person, has name "World";
+> commit
+
+# Query the data
+> transaction hello-world data read
+> match $p isa person, has name $n; get $n;
+```
+
+For more detailed tutorials and guides, visit the [TypeDB Documentation](https://typedb.com/docs). 
