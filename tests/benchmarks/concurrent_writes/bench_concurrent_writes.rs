@@ -215,7 +215,7 @@ fn execute_relation_batch(
         let a_id = idx % seed_count;
         let b_id = (idx + 1) % seed_count;
         let query_str = format!(
-            r#"match $a isa person, has name "person_{a_id}"; $b isa person, has name "person_{b_id}"; insert (friend: $a, friend: $b) isa friendship;"#
+            r#"match $a isa person, has name "person_{a_id}"; $b isa person, has name "person_{b_id}"; insert friendship (friend: $a, friend: $b);"#
         );
         let pipeline = typeql::parse_query(&query_str).unwrap().into_structure().into_pipeline();
         let (returned_tx, result) = execute_write_query_in_write(
@@ -381,9 +381,6 @@ where
 fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize) {
     print_header("PureInsert", batch_size);
     for &num_threads in thread_counts {
-        if batch_size == 1 && num_threads > 16 {
-            continue;
-        }
         let (_tmp_dir, database) = create_database(SCHEMA);
         let timings = Arc::new(PhaseTimings::new());
         let total_transactions = TOTAL_OPS / batch_size;
@@ -600,7 +597,7 @@ fn run_pure_read_benchmark(thread_counts: &[usize]) {
 // --- Main ---
 
 fn main() {
-    let write_thread_counts = [1, 2, 4, 8, 16, 32];
+    let write_thread_counts = [1, 2, 4, 8, 16, 32, 64];
     let read_thread_counts = [1, 2, 4, 8, 16, 32, 64];
 
     eprintln!("Concurrent Write Scalability Benchmark Suite");
@@ -610,30 +607,30 @@ fn main() {
     eprintln!();
 
     // W1: Pure Insert
-    for &batch_size in &[1000, 100, 1] {
+    for &batch_size in &[1000, 100, 10] {
         run_pure_insert_benchmark(&write_thread_counts, batch_size);
     }
-
-    // W2: Pure Update (match-insert generating Puts)
-    for &batch_size in &[1000, 100, 1] {
-        run_pure_update_benchmark(&write_thread_counts, batch_size);
-    }
-
-    // W3: Insert Relations
-    for &batch_size in &[1000, 100, 1] {
-        run_insert_relation_benchmark(&write_thread_counts, batch_size);
-    }
-
-    // W4: Mixed 50/50
-    for &batch_size in &[1000, 100] {
-        run_mixed_benchmark(&write_thread_counts, batch_size, 0.5);
-    }
-
-    // W5: Mixed 20/80
-    for &batch_size in &[1000, 100] {
-        run_mixed_benchmark(&write_thread_counts, batch_size, 0.2);
-    }
-
-    // W6: Pure Read
-    run_pure_read_benchmark(&read_thread_counts);
+    //
+    // // W2: Pure Update (match-insert generating Puts)
+    // for &batch_size in &[1000, 100, 1] {
+    //     run_pure_update_benchmark(&write_thread_counts, batch_size);
+    // }
+    //
+    // // W3: Insert Relations
+    // for &batch_size in &[1000, 100, 1] {
+    //     run_insert_relation_benchmark(&write_thread_counts, batch_size);
+    // }
+    //
+    // // W4: Mixed 50/50
+    // for &batch_size in &[1000, 100] {
+    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.5);
+    // }
+    //
+    // // W5: Mixed 20/80
+    // for &batch_size in &[1000, 100] {
+    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.2);
+    // }
+    //
+    // // W6: Pure Read
+    // run_pure_read_benchmark(&read_thread_counts);
 }
