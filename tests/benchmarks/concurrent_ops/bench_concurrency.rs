@@ -27,7 +27,7 @@ use options::{QueryOptions, TransactionOptions};
 use storage::durability_client::WALClient;
 use test_utils::{create_tmp_dir, TempDir};
 
-const TOTAL_OPS: usize = 100_000;
+const TOTAL_OPS: usize = 300_000;
 const READ_OPS: usize = 10_000;
 
 const DB_NAME: &str = "bench-concurrency";
