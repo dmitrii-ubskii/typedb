@@ -9,7 +9,7 @@
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, RwLock,
+        Arc, Mutex, RwLock,
     },
     thread,
     thread::JoinHandle,
@@ -41,39 +41,88 @@ const SCHEMA: &str = r#"define
     person plays friendship:friend;
 "#;
 
+struct TxSample {
+    open_ns: u64,
+    exec_ns: u64,
+    commit_ns: u64,
+}
+
 struct PhaseTimings {
-    open_nanos: AtomicU64,
-    execute_nanos: AtomicU64,
-    commit_nanos: AtomicU64,
-    tx_count: AtomicU64,
+    samples: Mutex<Vec<TxSample>>,
 }
 
 impl PhaseTimings {
     fn new() -> Self {
-        Self {
-            open_nanos: AtomicU64::new(0),
-            execute_nanos: AtomicU64::new(0),
-            commit_nanos: AtomicU64::new(0),
-            tx_count: AtomicU64::new(0),
-        }
+        Self { samples: Mutex::new(Vec::new()) }
     }
 
-    fn record(&self, open_ns: u64, execute_ns: u64, commit_ns: u64) {
-        self.open_nanos.fetch_add(open_ns, Ordering::Relaxed);
-        self.execute_nanos.fetch_add(execute_ns, Ordering::Relaxed);
-        self.commit_nanos.fetch_add(commit_ns, Ordering::Relaxed);
-        self.tx_count.fetch_add(1, Ordering::Relaxed);
+    fn record(&self, open_ns: u64, exec_ns: u64, commit_ns: u64) {
+        self.samples.lock().unwrap().push(TxSample { open_ns, exec_ns, commit_ns });
     }
 
-    fn summary(&self) -> (f64, f64, f64, u64) {
-        let count = self.tx_count.load(Ordering::Relaxed);
+    fn analyze(&self) -> TimingAnalysis {
+        let samples = self.samples.lock().unwrap();
+        let count = samples.len();
         if count == 0 {
-            return (0.0, 0.0, 0.0, 0);
+            return TimingAnalysis::empty();
         }
-        let open_avg = self.open_nanos.load(Ordering::Relaxed) as f64 / count as f64 / 1000.0;
-        let exec_avg = self.execute_nanos.load(Ordering::Relaxed) as f64 / count as f64 / 1000.0;
-        let commit_avg = self.commit_nanos.load(Ordering::Relaxed) as f64 / count as f64 / 1000.0;
-        (open_avg, exec_avg, commit_avg, count)
+
+        let mut open: Vec<u64> = samples.iter().map(|s| s.open_ns).collect();
+        let mut exec: Vec<u64> = samples.iter().map(|s| s.exec_ns).collect();
+        let mut commit: Vec<u64> = samples.iter().map(|s| s.commit_ns).collect();
+        let mut total: Vec<u64> = samples.iter().map(|s| s.open_ns + s.exec_ns + s.commit_ns).collect();
+        open.sort_unstable();
+        exec.sort_unstable();
+        commit.sort_unstable();
+        total.sort_unstable();
+
+        TimingAnalysis {
+            count,
+            open: DistStats::from_sorted(&open),
+            exec: DistStats::from_sorted(&exec),
+            commit: DistStats::from_sorted(&commit),
+            total: DistStats::from_sorted(&total),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DistStats {
+    mean_us: f64,
+    min_us: f64,
+    p50_us: f64,
+    p95_us: f64,
+    p99_us: f64,
+    max_us: f64,
+}
+
+impl DistStats {
+    fn from_sorted(sorted: &[u64]) -> Self {
+        let n = sorted.len();
+        let sum: u64 = sorted.iter().sum();
+        Self {
+            mean_us: sum as f64 / n as f64 / 1000.0,
+            min_us: sorted[0] as f64 / 1000.0,
+            p50_us: sorted[n / 2] as f64 / 1000.0,
+            p95_us: sorted[(n as f64 * 0.95) as usize] as f64 / 1000.0,
+            p99_us: sorted[(n as f64 * 0.99) as usize] as f64 / 1000.0,
+            max_us: sorted[n - 1] as f64 / 1000.0,
+        }
+    }
+}
+
+struct TimingAnalysis {
+    count: usize,
+    open: DistStats,
+    exec: DistStats,
+    commit: DistStats,
+    total: DistStats,
+}
+
+impl TimingAnalysis {
+    fn empty() -> Self {
+        let zero = DistStats { mean_us: 0.0, min_us: 0.0, p50_us: 0.0, p95_us: 0.0, p99_us: 0.0, max_us: 0.0 };
+        Self { count: 0, open: zero, exec: DistStats { mean_us: 0.0, min_us: 0.0, p50_us: 0.0, p95_us: 0.0, p99_us: 0.0, max_us: 0.0 }, commit: DistStats { mean_us: 0.0, min_us: 0.0, p50_us: 0.0, p95_us: 0.0, p99_us: 0.0, max_us: 0.0 }, total: zero }
     }
 }
 
@@ -260,32 +309,28 @@ fn print_header(name: &str, batch_size: usize) {
     eprintln!("=== {name} | batch={batch_size} ===");
 }
 
+fn print_dist(label: &str, d: &DistStats) {
+    eprintln!(
+        "    {:<8} mean {:>10.0}us | p50 {:>10.0}us | p95 {:>10.0}us | p99 {:>10.0}us | max {:>10.0}us",
+        label, d.mean_us, d.p50_us, d.p95_us, d.p99_us, d.max_us,
+    );
+}
+
 fn print_result(num_threads: usize, elapsed: std::time::Duration, total_ops: usize, timings: &PhaseTimings) {
     let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
-    let (open_us, exec_us, commit_us, count) = timings.summary();
-    let total_us = open_us + exec_us + commit_us;
-    if total_us > 0.0 {
-        eprintln!(
-            "Threads: {:>3} | Time: {:>8.1}ms | Ops/s: {:>10.0} | \
-             avg tx: open {:>8.0}us ({:>4.1}%) exec {:>8.0}us ({:>4.1}%) commit {:>8.0}us ({:>4.1}%) [{} txns]",
-            num_threads,
-            elapsed.as_secs_f64() * 1000.0,
-            ops_per_sec,
-            open_us,
-            open_us / total_us * 100.0,
-            exec_us,
-            exec_us / total_us * 100.0,
-            commit_us,
-            commit_us / total_us * 100.0,
-            count,
-        );
-    } else {
-        eprintln!(
-            "Threads: {:>3} | Time: {:>8.1}ms | Ops/s: {:>10.0}",
-            num_threads,
-            elapsed.as_secs_f64() * 1000.0,
-            ops_per_sec,
-        );
+    let a = timings.analyze();
+    eprintln!(
+        "Threads: {:>3} | Time: {:>8.1}ms | Ops/s: {:>10.0} | [{} txns]",
+        num_threads,
+        elapsed.as_secs_f64() * 1000.0,
+        ops_per_sec,
+        a.count,
+    );
+    if a.count > 0 {
+        print_dist("open", &a.open);
+        print_dist("exec", &a.exec);
+        print_dist("commit", &a.commit);
+        print_dist("TOTAL", &a.total);
     }
 }
 
@@ -300,33 +345,18 @@ fn print_mixed_result(
 ) {
     let w_ops_s = write_ops as f64 / elapsed.as_secs_f64();
     let r_ops_s = read_ops as f64 / elapsed.as_secs_f64();
-    let (open_us, exec_us, commit_us, count) = timings.summary();
-    let total_us = open_us + exec_us + commit_us;
-    if total_us > 0.0 {
-        eprintln!(
-            "Threads: {:>3} ({:>2}W+{:>2}R) | Time: {:>8.1}ms | W-ops/s: {:>10.0} | R-ops/s: {:>10.0} | \
-             avg w-tx: open {:>8.0}us exec {:>8.0}us commit {:>8.0}us [{} w-txns]",
-            num_threads,
-            write_threads,
-            read_threads,
-            elapsed.as_secs_f64() * 1000.0,
-            w_ops_s,
-            r_ops_s,
-            open_us,
-            exec_us,
-            commit_us,
-            count,
-        );
-    } else {
-        eprintln!(
-            "Threads: {:>3} ({:>2}W+{:>2}R) | Time: {:>8.1}ms | W-ops/s: {:>10.0} | R-ops/s: {:>10.0}",
-            num_threads,
-            write_threads,
-            read_threads,
-            elapsed.as_secs_f64() * 1000.0,
-            w_ops_s,
-            r_ops_s,
-        );
+    let a = timings.analyze();
+    eprintln!(
+        "Threads: {:>3} ({:>2}W+{:>2}R) | Time: {:>8.1}ms | W-ops/s: {:>10.0} | R-ops/s: {:>10.0} | [{} w-txns]",
+        num_threads, write_threads, read_threads,
+        elapsed.as_secs_f64() * 1000.0,
+        w_ops_s, r_ops_s, a.count,
+    );
+    if a.count > 0 {
+        print_dist("open", &a.open);
+        print_dist("exec", &a.exec);
+        print_dist("commit", &a.commit);
+        print_dist("TOTAL", &a.total);
     }
 }
 

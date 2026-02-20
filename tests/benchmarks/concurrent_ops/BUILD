@@ -6,8 +6,8 @@ load("@typedb_dependencies//tool/checkstyle:rules.bzl", "checkstyle_test")
 load("@rules_rust//rust:defs.bzl", "rust_test", "rustfmt_test")
 
 rust_test(
-    name = "bench_concurrent_writes",
-    srcs = ["bench_concurrent_writes.rs"],
+    name = "bench_concurrency",
+    srcs = ["bench_concurrency.rs"],
     deps = [
         "//common/options",
         "//database",
@@ -26,7 +26,7 @@ rust_test(
 rustfmt_test(
     name = "rustfmt_test",
     targets = [
-        ":bench_concurrent_writes",
+        ":bench_concurrency",
     ],
     size = "small",
 )
