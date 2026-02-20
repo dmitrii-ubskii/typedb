@@ -653,21 +653,21 @@ fn main() {
     for &batch_size in &[1000, 100, 10] {
         run_pure_insert_benchmark(&write_thread_counts, batch_size, show_dist);
     }
-    //
-    // // W2: Pure Update (match-insert generating Puts)
-    // for &batch_size in &[1000, 100, 1] {
-    //     run_pure_update_benchmark(&write_thread_counts, batch_size, show_dist);
-    // }
-    //
-    // // W3: Insert Relations
-    // for &batch_size in &[1000, 100, 1] {
-    //     run_insert_relation_benchmark(&write_thread_counts, batch_size, show_dist);
-    // }
-    //
-    // // W4: Mixed 50/50
-    // for &batch_size in &[1000, 100] {
-    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.5, show_dist);
-    // }
+
+    // W2: Pure Update (match-insert generating Puts)
+    for &batch_size in &[1000, 100, 10] {
+        run_pure_update_benchmark(&write_thread_counts, batch_size, show_dist);
+    }
+
+    // W3: Insert Relations
+    for &batch_size in &[1000, 100, 10] {
+        run_insert_relation_benchmark(&write_thread_counts, batch_size, show_dist);
+    }
+
+    // W4: Mixed 50/50
+    for &batch_size in &[1000, 100, 10] {
+        run_mixed_benchmark(&write_thread_counts, batch_size, 0.5, show_dist);
+    }
     //
     // // W5: Mixed 20/80
     // for &batch_size in &[1000, 100] {
