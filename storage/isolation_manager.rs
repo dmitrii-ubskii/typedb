@@ -13,6 +13,7 @@ use std::{
     error::Error,
     fmt,
     io::Read,
+    ops::Deref,
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
         Arc, OnceLock, RwLock,
@@ -32,15 +33,23 @@ use crate::{
         DurabilityClient, DurabilityClientError, DurabilityRecord, SequencedDurabilityRecord,
         UnsequencedDurabilityRecord,
     },
+    keyspace::KEYSPACE_MAXIMUM_COUNT,
     sequence_number::SequenceNumber,
     snapshot::{buffer::OperationsBuffer, lock::LockType, write::Write},
     write_batches::WriteBatches,
 };
 
-// Lightweight bloom filter for fast pre-filtering in compute_dependency.
-const BLOOM_BITS: usize = 16384;
+// Bloom filter for fast pre-filtering in compute_dependency.
+// 1KB per filter, k=2 hash functions (FNV-1a based).
+const BLOOM_BITS: usize = 8192;
 const BLOOM_MASK: usize = BLOOM_BITS - 1;
 const BLOOM_U64S: usize = BLOOM_BITS / 64;
+
+// Skip bloom filter construction when a key set exceeds this size.
+// At 8192 bits with k=2, 4000 keys gives ~39% per-element false positive rate,
+// beyond which the bloom filter provides diminishing benefit relative to its
+// construction cost.
+const BLOOM_KEY_THRESHOLD: usize = 4000;
 
 struct QuickBloom {
     bits: [u64; BLOOM_U64S],
@@ -72,12 +81,148 @@ impl QuickBloom {
         ((h as usize) & BLOOM_MASK, ((h >> 18) as usize) & BLOOM_MASK)
     }
 
-    fn from_btree_keys<V>(map: &std::collections::BTreeMap<ByteArray<BUFFER_KEY_INLINE>, V>) -> Self {
+    fn from_btree_keys<V>(map: &std::collections::BTreeMap<ByteArray<BUFFER_KEY_INLINE>, V>) -> Option<Box<Self>> {
+        if map.is_empty() || map.len() > BLOOM_KEY_THRESHOLD {
+            return None;
+        }
         let mut bloom = Self::new();
         for key in map.keys() {
             bloom.insert(key.as_ref());
         }
-        bloom
+        Some(Box::new(bloom))
+    }
+}
+
+/// Wraps a CommitRecord with pre-computed bloom filters for each keyspace's writes
+/// and for locks. Stored in the timeline so blooms are built once and reused across
+/// all dependency checks against this record.
+struct IndexedCommitRecord {
+    record: CommitRecord,
+    writes_blooms: [Option<Box<QuickBloom>>; KEYSPACE_MAXIMUM_COUNT],
+    locks_bloom: Option<Box<QuickBloom>>,
+}
+
+impl IndexedCommitRecord {
+    fn new(record: CommitRecord) -> Self {
+        let mut writes_blooms: [Option<Box<QuickBloom>>; KEYSPACE_MAXIMUM_COUNT] = Default::default();
+        for (i, write_buffer) in record.operations().write_buffers().enumerate() {
+            writes_blooms[i] = QuickBloom::from_btree_keys(write_buffer.writes());
+        }
+        let locks_bloom = QuickBloom::from_btree_keys(record.operations().locks());
+        IndexedCommitRecord { record, writes_blooms, locks_bloom }
+    }
+
+    fn writes_bloom(&self, keyspace_index: usize) -> Option<&QuickBloom> {
+        self.writes_blooms[keyspace_index].as_deref()
+    }
+
+    fn locks_bloom(&self) -> Option<&QuickBloom> {
+        self.locks_bloom.as_deref()
+    }
+
+    fn into_record(self) -> CommitRecord {
+        self.record
+    }
+
+    fn compute_dependency(&self, predecessor: &IndexedCommitRecord) -> CommitDependency {
+        let mut puts_to_update = Vec::new();
+
+        let locks = self.operations().locks();
+        let predecessor_locks = predecessor.operations().locks();
+
+        for (ks_index, (write_buffer, pred_write_buffer)) in
+            self.operations().write_buffers().zip(predecessor.operations()).enumerate()
+        {
+            let writes = write_buffer.writes();
+            let predecessor_writes = pred_write_buffer.writes();
+            let pred_writes_bloom = predecessor.writes_bloom(ks_index);
+
+            for (key, write) in writes.iter() {
+                let key_bytes = key.as_ref();
+                if pred_writes_bloom.map_or(true, |b| b.may_contain(key_bytes)) {
+                    if let Some(predecessor_write) = predecessor_writes.get(key) {
+                        match (predecessor_write, write) {
+                            (Write::Insert { .. } | Write::Put { .. }, Write::Put { reinsert, .. }) => {
+                                puts_to_update.push(DependentPut::Inserted { reinsert: reinsert.clone() });
+                            }
+                            (Write::Delete, Write::Put { reinsert, .. }) => {
+                                puts_to_update.push(DependentPut::Deleted { reinsert: reinsert.clone() });
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                if matches!(write, Write::Delete)
+                    && predecessor.locks_bloom().map_or(true, |b| b.may_contain(key_bytes))
+                    && matches!(predecessor_locks.get(key), Some(LockType::Unmodifiable))
+                {
+                    return CommitDependency::Conflict(IsolationConflict::DeletingRequiredKey);
+                }
+            }
+
+            // Check for conflicts: our Unmodifiable locks vs predecessor Delete writes.
+            // Iterate the smaller collection and point-lookup into the larger one.
+            if locks.len() <= predecessor_writes.len() {
+                for (key, lock) in locks.iter() {
+                    if matches!(lock, LockType::Unmodifiable)
+                        && pred_writes_bloom.map_or(true, |b| b.may_contain(key.as_ref()))
+                        && matches!(predecessor_writes.get(key), Some(Write::Delete))
+                    {
+                        return CommitDependency::Conflict(IsolationConflict::RequireDeletedKey);
+                    }
+                }
+            } else {
+                for (key, write) in predecessor_writes.iter() {
+                    if matches!(write, Write::Delete)
+                        && self.locks_bloom().map_or(true, |b| b.may_contain(key.as_ref()))
+                        && matches!(locks.get(key), Some(LockType::Unmodifiable))
+                    {
+                        return CommitDependency::Conflict(IsolationConflict::RequireDeletedKey);
+                    }
+                }
+            }
+        }
+
+        // Check for conflicts: our Exclusive locks vs predecessor Exclusive locks.
+        // Iterate the smaller collection and point-lookup into the larger one.
+        if locks.len() <= predecessor_locks.len() {
+            for (key, lock) in locks.iter() {
+                if matches!(lock, LockType::Exclusive)
+                    && predecessor.locks_bloom().map_or(true, |b| b.may_contain(key.as_ref()))
+                    && matches!(predecessor_locks.get(key), Some(LockType::Exclusive))
+                {
+                    return CommitDependency::Conflict(IsolationConflict::ExclusiveLock);
+                }
+            }
+        } else {
+            for (key, lock) in predecessor_locks.iter() {
+                if matches!(lock, LockType::Exclusive)
+                    && self.locks_bloom().map_or(true, |b| b.may_contain(key.as_ref()))
+                    && matches!(locks.get(key), Some(LockType::Exclusive))
+                {
+                    return CommitDependency::Conflict(IsolationConflict::ExclusiveLock);
+                }
+            }
+        }
+
+        if puts_to_update.is_empty() {
+            CommitDependency::Independent
+        } else {
+            CommitDependency::DependentPuts { puts: puts_to_update }
+        }
+    }
+}
+
+impl Deref for IndexedCommitRecord {
+    type Target = CommitRecord;
+    fn deref(&self) -> &CommitRecord {
+        &self.record
+    }
+}
+
+impl fmt::Debug for IndexedCommitRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IndexedCommitRecord").field("record", &self.record).finish_non_exhaustive()
     }
 }
 
@@ -170,7 +315,7 @@ impl IsolationManager {
     fn validate_all_concurrent(
         &self,
         commit_sequence_number: SequenceNumber,
-        commit_record: &CommitRecord,
+        commit_record: &IndexedCommitRecord,
         durability_client: &impl DurabilityClient,
     ) -> Result<Option<IsolationConflict>, DurabilityClientError> {
         // TODO: decide if we should block until all predecessors finish, allow out of order (non-Calvin model/traditional model)
@@ -198,7 +343,7 @@ impl IsolationManager {
 
     fn validate_concurrent_from_disk(
         &self,
-        commit_record: &CommitRecord,
+        commit_record: &IndexedCommitRecord,
         stop_sequence_number: SequenceNumber,
         durability_client: &impl DurabilityClient,
     ) -> Result<Option<IsolationConflict>, DurabilityClientError> {
@@ -210,7 +355,9 @@ impl IsolationManager {
             if let Ok((_, commit_status)) = commit_status_result {
                 let commit_dependency = match commit_status {
                     CommitStatus::Aborted => CommitDependency::Independent,
-                    CommitStatus::Applied(predecessor_record) => commit_record.compute_dependency(&predecessor_record),
+                    CommitStatus::Applied(predecessor_record) => {
+                        commit_record.compute_dependency(&predecessor_record)
+                    }
                     CommitStatus::Pending(_) => {
                         unreachable!("Evicted records cannot be pending")
                     }
@@ -228,7 +375,7 @@ impl IsolationManager {
 
     fn validate_concurrent_from_windows(
         &self,
-        commit_record: &CommitRecord,
+        commit_record: &IndexedCommitRecord,
         commit_sequence_number: SequenceNumber,
         windows: &[Arc<TimelineWindow<TIMELINE_WINDOW_SIZE>>],
         first_window_sequence_number: SequenceNumber,
@@ -271,9 +418,10 @@ impl IsolationManager {
                     if commit_sequence_number >= stop_sequence_number {
                         None
                     } else {
+                        let indexed = IndexedCommitRecord::new(commit_record);
                         let status = match is_committed.get(&commit_sequence_number) {
-                            None => CommitStatus::Pending(MaybeOwns::Owned(commit_record)),
-                            Some(true) => CommitStatus::Applied(MaybeOwns::Owned(commit_record)),
+                            None => CommitStatus::Pending(MaybeOwns::Owned(indexed)),
+                            Some(true) => CommitStatus::Applied(MaybeOwns::Owned(indexed)),
                             Some(false) => CommitStatus::Aborted,
                         };
                         Some(Ok((commit_sequence_number, status)))
@@ -303,7 +451,7 @@ pub(crate) enum ValidatedCommit {
 }
 
 fn resolve_concurrent(
-    commit_record: &CommitRecord,
+    commit_record: &IndexedCommitRecord,
     predecessor_sequence_number: SequenceNumber,
     predecessor_window: &TimelineWindow<TIMELINE_WINDOW_SIZE>,
 ) -> Option<IsolationConflict> {
@@ -574,7 +722,7 @@ impl Drop for ReaderDropGuard {
 struct TimelineWindow<const SIZE: usize> {
     start: SequenceNumber,
     slot_status: [AtomicU8; SIZE],
-    commit_records: [OnceLock<CommitRecord>; SIZE],
+    commit_records: [OnceLock<IndexedCommitRecord>; SIZE],
     readers: AtomicU64,
 }
 
@@ -597,7 +745,7 @@ impl<const SIZE: usize> TimelineWindow<SIZE> {
 
     fn insert_pending(&self, sequence_number: SequenceNumber, commit_record: CommitRecord) {
         let index = sequence_number - self.start;
-        self.commit_records[index].set(commit_record).unwrap_or_log();
+        self.commit_records[index].set(IndexedCommitRecord::new(commit_record)).unwrap_or_log();
         self.slot_status[index].store(SlotMarker::Pending.as_u8(), Ordering::SeqCst);
     }
 
@@ -666,9 +814,9 @@ impl<const SIZE: usize> TimelineWindow<SIZE> {
 #[derive(Debug)]
 pub(crate) enum CommitStatus<'a> {
     Empty,
-    Pending(MaybeOwns<'a, CommitRecord>),
-    Validated(MaybeOwns<'a, CommitRecord>),
-    Applied(MaybeOwns<'a, CommitRecord>),
+    Pending(MaybeOwns<'a, IndexedCommitRecord>),
+    Validated(MaybeOwns<'a, IndexedCommitRecord>),
+    Applied(MaybeOwns<'a, IndexedCommitRecord>),
     Aborted,
 }
 
@@ -767,84 +915,6 @@ impl CommitRecord {
         assert_eq!(Self::RECORD_TYPE, record_type);
         // TODO: handle error with a better message
         bincode::deserialize_from(reader).unwrap_or_log()
-    }
-
-    fn compute_dependency(&self, predecessor: &CommitRecord) -> CommitDependency {
-        // TODO: this can be optimised by some kind of bit-wise AND of two bloom filter-like data
-        // structures first, since we assume few clashes this should mostly succeed
-        // TODO: can be optimised with an intersection of two sorted iterators instead of iterate + gets
-
-        let mut puts_to_update = Vec::new();
-
-        // we check self operations against predecessor operations.
-        //   if our buffer contains a delete, we check the predecessor doesn't have an Existing lock on it
-        // We check
-
-        let locks = self.operations().locks();
-        let predecessor_locks = predecessor.operations().locks();
-        let pred_locks_bloom = QuickBloom::from_btree_keys(predecessor_locks);
-
-        for (write_buffer, pred_write_buffer) in self.operations().write_buffers().zip(predecessor.operations()) {
-            let writes = write_buffer.writes();
-            let predecessor_writes = pred_write_buffer.writes();
-            let pred_writes_bloom = QuickBloom::from_btree_keys(predecessor_writes);
-
-            for (key, write) in writes.iter() {
-                if pred_writes_bloom.may_contain(key.as_ref()) {
-                    if let Some(predecessor_write) = predecessor_writes.get(key) {
-                        match (predecessor_write, write) {
-                            (Write::Insert { .. } | Write::Put { .. }, Write::Put { reinsert, .. }) => {
-                                puts_to_update.push(DependentPut::Inserted { reinsert: reinsert.clone() });
-                            }
-                            (Write::Delete, Write::Put { reinsert, .. }) => {
-                                puts_to_update.push(DependentPut::Deleted { reinsert: reinsert.clone() });
-                            }
-                            _ => (),
-                        }
-                    }
-                }
-                if matches!(write, Write::Delete)
-                    && pred_locks_bloom.may_contain(key.as_ref())
-                    && matches!(predecessor_locks.get(key), Some(LockType::Unmodifiable))
-                {
-                    return CommitDependency::Conflict(IsolationConflict::DeletingRequiredKey);
-                }
-            }
-
-            // Check for conflicts: our Unmodifiable locks vs predecessor Delete writes.
-            // Iterate the smaller collection and point-lookup into the larger one.
-            if locks.len() <= predecessor_writes.len() {
-                for (key, lock) in locks.iter() {
-                    if matches!(lock, LockType::Unmodifiable)
-                        && pred_writes_bloom.may_contain(key.as_ref())
-                        && matches!(predecessor_writes.get(key), Some(Write::Delete))
-                    {
-                        return CommitDependency::Conflict(IsolationConflict::RequireDeletedKey);
-                    }
-                }
-            } else {
-                for (key, write) in predecessor_writes.iter() {
-                    if matches!(write, Write::Delete) && matches!(locks.get(key), Some(LockType::Unmodifiable)) {
-                        return CommitDependency::Conflict(IsolationConflict::RequireDeletedKey);
-                    }
-                }
-            }
-        }
-
-        for (key, lock) in locks.iter() {
-            if matches!(lock, LockType::Exclusive)
-                && pred_locks_bloom.may_contain(key.as_ref())
-                && matches!(predecessor_locks.get(key), Some(LockType::Exclusive))
-            {
-                return CommitDependency::Conflict(IsolationConflict::ExclusiveLock);
-            }
-        }
-
-        if puts_to_update.is_empty() {
-            CommitDependency::Independent
-        } else {
-            CommitDependency::DependentPuts { puts: puts_to_update }
-        }
     }
 }
 
