@@ -344,22 +344,27 @@ where
     F: Fn(&Arc<Database<WALClient>>, usize, usize, &PhaseTimings) + Send + Sync + 'static,
 {
     let total_transactions = total_ops / ops_per_tx;
-    let transactions_per_thread = total_transactions / num_threads;
+    let next_batch = Arc::new(AtomicU64::new(0));
     let thread_fn = Arc::new(thread_fn);
 
     let start_signal = Arc::new(RwLock::new(()));
     let write_guard = start_signal.write().unwrap();
 
     let join_handles: Vec<JoinHandle<()>> = (0..num_threads)
-        .map(|thread_id| {
+        .map(|_thread_id| {
             let db = database.clone();
             let signal = start_signal.clone();
             let timings = timings.clone();
             let thread_fn = thread_fn.clone();
+            let next_batch = next_batch.clone();
+            let total = total_transactions;
             thread::spawn(move || {
                 drop(signal.read().unwrap());
-                for batch in 0..transactions_per_thread {
-                    let batch_id = thread_id * transactions_per_thread + batch;
+                loop {
+                    let batch_id = next_batch.fetch_add(1, Ordering::Relaxed) as usize;
+                    if batch_id >= total {
+                        break;
+                    }
                     thread_fn(&db, batch_id, ops_per_tx, &timings);
                 }
             })
@@ -384,8 +389,7 @@ fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize) {
         let (_tmp_dir, database) = create_database(SCHEMA);
         let timings = Arc::new(PhaseTimings::new());
         let total_transactions = TOTAL_OPS / batch_size;
-        let transactions_per_thread = total_transactions / num_threads;
-        let actual_ops = num_threads * transactions_per_thread * batch_size;
+        let actual_ops = total_transactions * batch_size;
 
         let elapsed = run_write_threads(&database, num_threads, batch_size, TOTAL_OPS, &timings, |db, batch_id, ops, t| {
             execute_insert_batch(db, batch_id, ops, t);
@@ -409,8 +413,7 @@ fn run_pure_update_benchmark(thread_counts: &[usize], batch_size: usize) {
         seed_persons(&database, UPDATE_SEED_COUNT);
         let timings = Arc::new(PhaseTimings::new());
         let total_transactions = TOTAL_OPS / batch_size;
-        let transactions_per_thread = total_transactions / num_threads;
-        let actual_ops = num_threads * transactions_per_thread * batch_size;
+        let actual_ops = total_transactions * batch_size;
 
         let seed_count = UPDATE_SEED_COUNT;
         let elapsed =
@@ -436,8 +439,7 @@ fn run_insert_relation_benchmark(thread_counts: &[usize], batch_size: usize) {
         seed_persons(&database, RELATION_SEED_COUNT);
         let timings = Arc::new(PhaseTimings::new());
         let total_transactions = TOTAL_OPS / batch_size;
-        let transactions_per_thread = total_transactions / num_threads;
-        let actual_ops = num_threads * transactions_per_thread * batch_size;
+        let actual_ops = total_transactions * batch_size;
 
         let seed_count = RELATION_SEED_COUNT;
         let elapsed =
@@ -474,7 +476,7 @@ fn run_mixed_benchmark(thread_counts: &[usize], batch_size: usize, write_ratio: 
 
         let ops_per_write_tx = batch_size;
         let total_write_txns = TOTAL_OPS / ops_per_write_tx;
-        let txns_per_write_thread = total_write_txns / write_threads;
+        let next_write_batch = Arc::new(AtomicU64::new(0));
 
         let running = Arc::new(AtomicBool::new(true));
 
@@ -484,16 +486,21 @@ fn run_mixed_benchmark(thread_counts: &[usize], batch_size: usize, write_ratio: 
         let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
         // Spawn write threads
-        for thread_id in 0..write_threads {
+        for _thread_id in 0..write_threads {
             let db = database.clone();
             let signal = start_signal.clone();
             let timings = write_timings.clone();
             let ops_counter = write_ops_total.clone();
             let seed_count = MIXED_SEED_COUNT;
+            let next_batch = next_write_batch.clone();
+            let total = total_write_txns;
             handles.push(thread::spawn(move || {
                 drop(signal.read().unwrap());
-                for batch in 0..txns_per_write_thread {
-                    let batch_id = thread_id * txns_per_write_thread + batch;
+                loop {
+                    let batch_id = next_batch.fetch_add(1, Ordering::Relaxed) as usize;
+                    if batch_id >= total {
+                        break;
+                    }
                     execute_relation_batch(&db, batch_id, ops_per_write_tx, seed_count, &timings);
                     ops_counter.fetch_add(ops_per_write_tx as u64, Ordering::Relaxed);
                 }
