@@ -7,6 +7,7 @@
 #![deny(unused_must_use)]
 
 use std::{
+    env,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex, RwLock,
@@ -316,7 +317,7 @@ fn print_dist(label: &str, d: &DistStats) {
     );
 }
 
-fn print_result(num_threads: usize, elapsed: std::time::Duration, total_ops: usize, timings: &PhaseTimings) {
+fn print_result(num_threads: usize, elapsed: std::time::Duration, total_ops: usize, timings: &PhaseTimings, show_dist: bool) {
     let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
     let a = timings.analyze();
     eprintln!(
@@ -326,7 +327,7 @@ fn print_result(num_threads: usize, elapsed: std::time::Duration, total_ops: usi
         ops_per_sec,
         a.count,
     );
-    if a.count > 0 {
+    if show_dist && a.count > 0 {
         print_dist("open", &a.open);
         print_dist("exec", &a.exec);
         print_dist("commit", &a.commit);
@@ -342,6 +343,7 @@ fn print_mixed_result(
     write_ops: usize,
     read_ops: usize,
     timings: &PhaseTimings,
+    show_dist: bool,
 ) {
     let w_ops_s = write_ops as f64 / elapsed.as_secs_f64();
     let r_ops_s = read_ops as f64 / elapsed.as_secs_f64();
@@ -352,7 +354,7 @@ fn print_mixed_result(
         elapsed.as_secs_f64() * 1000.0,
         w_ops_s, r_ops_s, a.count,
     );
-    if a.count > 0 {
+    if show_dist && a.count > 0 {
         print_dist("open", &a.open);
         print_dist("exec", &a.exec);
         print_dist("commit", &a.commit);
@@ -413,7 +415,7 @@ where
 
 // --- W1: Pure Insert ---
 
-fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize) {
+fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize, show_dist: bool) {
     print_header("PureInsert", batch_size);
     for &num_threads in thread_counts {
         let (_tmp_dir, database) = create_database(SCHEMA);
@@ -425,7 +427,7 @@ fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize) {
             execute_insert_batch(db, batch_id, ops, t);
         });
 
-        print_result(num_threads, elapsed, actual_ops, &timings);
+        print_result(num_threads, elapsed, actual_ops, &timings, show_dist);
     }
 }
 
@@ -433,7 +435,7 @@ fn run_pure_insert_benchmark(thread_counts: &[usize], batch_size: usize) {
 
 const UPDATE_SEED_COUNT: usize = 10_000;
 
-fn run_pure_update_benchmark(thread_counts: &[usize], batch_size: usize) {
+fn run_pure_update_benchmark(thread_counts: &[usize], batch_size: usize, show_dist: bool) {
     print_header("PureUpdate", batch_size);
     for &num_threads in thread_counts {
         if batch_size == 1 && num_threads > 16 {
@@ -451,7 +453,7 @@ fn run_pure_update_benchmark(thread_counts: &[usize], batch_size: usize) {
                 execute_update_batch(db, batch_id, ops, seed_count, t);
             });
 
-        print_result(num_threads, elapsed, actual_ops, &timings);
+        print_result(num_threads, elapsed, actual_ops, &timings, show_dist);
     }
 }
 
@@ -459,7 +461,7 @@ fn run_pure_update_benchmark(thread_counts: &[usize], batch_size: usize) {
 
 const RELATION_SEED_COUNT: usize = 1_000;
 
-fn run_insert_relation_benchmark(thread_counts: &[usize], batch_size: usize) {
+fn run_insert_relation_benchmark(thread_counts: &[usize], batch_size: usize, show_dist: bool) {
     print_header("InsertRelation", batch_size);
     for &num_threads in thread_counts {
         if batch_size == 1 && num_threads > 16 {
@@ -477,7 +479,7 @@ fn run_insert_relation_benchmark(thread_counts: &[usize], batch_size: usize) {
                 execute_relation_batch(db, batch_id, ops, seed_count, t);
             });
 
-        print_result(num_threads, elapsed, actual_ops, &timings);
+        print_result(num_threads, elapsed, actual_ops, &timings, show_dist);
     }
 }
 
@@ -485,7 +487,7 @@ fn run_insert_relation_benchmark(thread_counts: &[usize], batch_size: usize) {
 
 const MIXED_SEED_COUNT: usize = 1_000;
 
-fn run_mixed_benchmark(thread_counts: &[usize], batch_size: usize, write_ratio: f64) {
+fn run_mixed_benchmark(thread_counts: &[usize], batch_size: usize, write_ratio: f64, show_dist: bool) {
     let pct = (write_ratio * 100.0) as usize;
     let name = format!("Mixed{pct}Write");
     print_header(&name, batch_size);
@@ -575,7 +577,7 @@ fn run_mixed_benchmark(thread_counts: &[usize], batch_size: usize, write_ratio: 
         let w_ops = write_ops_total.load(Ordering::Relaxed) as usize;
         let r_ops = read_ops_total.load(Ordering::Relaxed) as usize;
 
-        print_mixed_result(num_threads, write_threads, read_threads, elapsed, w_ops, r_ops, &write_timings);
+        print_mixed_result(num_threads, write_threads, read_threads, elapsed, w_ops, r_ops, &write_timings, show_dist);
     }
 }
 
@@ -636,36 +638,40 @@ fn run_pure_read_benchmark(thread_counts: &[usize]) {
 fn main() {
     let write_thread_counts = [1, 2, 4, 8, 16, 32, 64];
     let read_thread_counts = [1, 2, 4, 8, 16, 32, 64];
+    let show_dist = env::var("BENCH_DIST").is_ok();
 
     eprintln!("Concurrent Write Scalability Benchmark Suite");
     eprintln!("=============================================");
     eprintln!("Total ops per write workload: {TOTAL_OPS}");
     eprintln!("Total ops for pure read:      {READ_OPS}");
+    if show_dist {
+        eprintln!("Distribution output:          enabled (BENCH_DIST)");
+    }
     eprintln!();
 
     // W1: Pure Insert
     for &batch_size in &[1000, 100, 10] {
-        run_pure_insert_benchmark(&write_thread_counts, batch_size);
+        run_pure_insert_benchmark(&write_thread_counts, batch_size, show_dist);
     }
     //
     // // W2: Pure Update (match-insert generating Puts)
     // for &batch_size in &[1000, 100, 1] {
-    //     run_pure_update_benchmark(&write_thread_counts, batch_size);
+    //     run_pure_update_benchmark(&write_thread_counts, batch_size, show_dist);
     // }
     //
     // // W3: Insert Relations
     // for &batch_size in &[1000, 100, 1] {
-    //     run_insert_relation_benchmark(&write_thread_counts, batch_size);
+    //     run_insert_relation_benchmark(&write_thread_counts, batch_size, show_dist);
     // }
     //
     // // W4: Mixed 50/50
     // for &batch_size in &[1000, 100] {
-    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.5);
+    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.5, show_dist);
     // }
     //
     // // W5: Mixed 20/80
     // for &batch_size in &[1000, 100] {
-    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.2);
+    //     run_mixed_benchmark(&write_thread_counts, batch_size, 0.2, show_dist);
     // }
     //
     // // W6: Pure Read
