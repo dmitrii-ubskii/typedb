@@ -30,7 +30,7 @@ use test_utils::{create_tmp_dir, TempDir};
 const TOTAL_OPS: usize = 100_000;
 const READ_OPS: usize = 10_000;
 
-const DB_NAME: &str = "bench-concurrent-writes";
+const DB_NAME: &str = "bench-concurrency";
 
 const SCHEMA: &str = r#"define
     attribute name value string;
