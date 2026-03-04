@@ -299,7 +299,7 @@ impl<Durability> MVCCStorage<Durability> {
         }
     }
 
-    pub(crate) fn write(&self, seq: SequenceNumber, operations: &OperationsBuffer) -> Result<(), KeyspacesError> {
+    pub(crate) fn write(keyspaces: &Keyspaces, seq: SequenceNumber, operations: &OperationsBuffer) -> Result<(), KeyspacesError> {
         for (keyspace_id, buffer) in operations.write_buffers() {
             let kv_writes = buffer
                 .writes()
@@ -307,7 +307,7 @@ impl<Durability> MVCCStorage<Durability> {
                 .map(|(key, write)| write.to_key_value(key, seq))
                 .flatten()
                 .map(|(mvcc_key, value)| (mvcc_key.into_bytes(), value));
-            self.keyspaces.get(keyspace_id).write(kv_writes)
+            keyspaces.get(keyspace_id).write(kv_writes)
                 .map_err(|e| KeyspacesError::KVStoreError { typedb_source: e.into() })?;
         }
         Ok(())

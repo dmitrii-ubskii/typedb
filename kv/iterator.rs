@@ -58,10 +58,12 @@ pub(crate) fn accept_value<E>(condition: &ContinueCondition, value: &Result<(&[u
         Ok((key, _)) => match condition {
             ContinueCondition::ExactPrefix(prefix) => key.starts_with(prefix),
             ContinueCondition::EndPrefixInclusive(end_inclusive) => {
-                end_inclusive.starts_with(key) || &key[0..end_inclusive.len()] <= &end_inclusive[..]
+                // pass to Rust's lexicographical byte comparison
+                *key <= &**end_inclusive
             }
             ContinueCondition::EndPrefixExclusive(end_exclusive) => {
-                end_exclusive.starts_with(key) || &key[0..end_exclusive.len()] < &end_exclusive[..]
+                // pass to Rust's lexicographical byte comparison
+                *key < &**end_exclusive
             }
             ContinueCondition::Always => true,
         },

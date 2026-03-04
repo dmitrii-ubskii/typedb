@@ -124,17 +124,9 @@ pub(crate) fn apply_recovered(
     for record in &pending_records {
         let seq = record.sequence_number();
         let operations = record.commit_record().operations();
-        for (keyspace_id, buffer) in operations.write_buffers() {
-            let kv_writes = buffer
-                .writes()
-                .iter()
-                .map(|(key, write)| write.to_key_value(key, seq))
-                .flatten()
-                .map(|(mvcc_key, value)| (mvcc_key.into_bytes(), value));
-            keyspaces.get(keyspace_id).write(kv_writes).map_err(|e| KeyspaceWrite {
-                typedb_source: KeyspacesError::KVStoreError { typedb_source: e.into() },
-            })?;
-        }
+        MVCCStorage::write(&keyspaces, seq, operations).map_err(|e| KeyspaceWrite {
+            typedb_source: KeyspacesError::KVStoreError { typedb_source: e.into() },
+        })?;
     }
 
     Ok(())
