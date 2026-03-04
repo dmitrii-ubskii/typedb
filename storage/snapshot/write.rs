@@ -12,11 +12,11 @@ use std::{
     },
 };
 
-use crate::sequence_number::SequenceNumber;
-use crate::{MVCCKey, StorageOperation};
 use bytes::byte_array::ByteArray;
 use resource::constants::snapshot::BUFFER_VALUE_INLINE;
 use serde::{Deserialize, Serialize};
+
+use crate::{sequence_number::SequenceNumber, MVCCKey, StorageOperation};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Write {
@@ -31,9 +31,7 @@ pub enum Write {
 impl Write {
     pub(crate) fn to_key_value(&self, key: &[u8], seq: SequenceNumber) -> Option<(MVCCKey<'_>, &[u8])> {
         match self {
-            Write::Insert { value } => {
-                Some((MVCCKey::build(key, seq, StorageOperation::Insert), value))
-            }
+            Write::Insert { value } => Some((MVCCKey::build(key, seq, StorageOperation::Insert), value)),
             Write::Put { value, reinsert, .. } => {
                 if reinsert.load(Ordering::SeqCst) {
                     Some((MVCCKey::build(key, seq, StorageOperation::Insert), value))
@@ -41,7 +39,7 @@ impl Write {
                     None
                 }
             }
-            Write::Delete => Some((MVCCKey::build(key, seq, StorageOperation::Delete), &[]))
+            Write::Delete => Some((MVCCKey::build(key, seq, StorageOperation::Delete), &[])),
         }
     }
 }

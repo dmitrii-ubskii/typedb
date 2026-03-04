@@ -6,13 +6,13 @@
 pub(crate) mod iterator;
 
 use std::{
+    borrow::Borrow,
     collections::BTreeMap,
     path::Path,
     sync::{Arc, RwLock},
 };
-use std::borrow::Borrow;
-use bytes::byte_array::ByteArray;
-use bytes::Bytes;
+
+use bytes::{byte_array::ByteArray, Bytes};
 use error::typedb_error;
 use primitive::key_range::KeyRange;
 use resource::{
@@ -86,10 +86,10 @@ impl InMemoryKVStore {
         InMemoryRangeIterator::new(&self.data.read().unwrap(), range, storage_counters)
     }
 
-    pub fn write<K, V>(&self, kv_iterator: impl Iterator<Item=(K, V)>) -> Result<(), Box<dyn KVStoreError>>
+    pub fn write<K, V>(&self, kv_iterator: impl Iterator<Item = (K, V)>) -> Result<(), Box<dyn KVStoreError>>
     where
         K: Borrow<[u8]>,
-        V: Borrow<[u8]>
+        V: Borrow<[u8]>,
     {
         let mut data = self.data.write().unwrap();
         kv_iterator.for_each(|(k, v)| {

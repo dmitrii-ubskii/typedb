@@ -4,16 +4,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::{collections::BTreeMap, sync::Arc};
+
 use durability::RawRecord;
 use error::typedb_error;
 use kv::keyspaces::{Keyspaces, KeyspacesError};
-use std::{collections::BTreeMap, sync::Arc};
 use tracing::{event, Level};
 
 use crate::{
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord},
     isolation_manager::{CommitRecord, CommitRecordRef, IsolationManager, StatusRecord, ValidatedCommit},
-    sequence_number::SequenceNumber, MVCCStorage
+    keyspaces_write,
+    sequence_number::SequenceNumber,
+    MVCCStorage,
 };
 
 /// Load commit data from the start onwards. Ignores any statuses that are not paired with commit data.
@@ -124,9 +127,7 @@ pub(crate) fn apply_recovered(
     for record in &pending_records {
         let seq = record.sequence_number();
         let operations = record.commit_record().operations();
-        MVCCStorage::write(&keyspaces, seq, operations).map_err(|e| KeyspaceWrite {
-            typedb_source: KeyspacesError::KVStoreError { typedb_source: e.into() },
-        })?;
+        keyspaces_write(&keyspaces, seq, operations).map_err(|e| KeyspaceWrite { typedb_source: e })?;
     }
 
     Ok(())

@@ -8,8 +8,7 @@ pub mod keyspaces;
 pub mod memory;
 pub mod rocks;
 
-use std::borrow::Borrow;
-use std::path::Path;
+use std::{borrow::Borrow, path::Path};
 
 use bytes::Bytes;
 use error::TypeDBError;
@@ -98,17 +97,13 @@ impl KVStore {
         }
     }
 
-    pub fn write< K, V>(&self, kv_iterator: impl Iterator<Item = (K, V)>) -> Result<(), Box<dyn KVStoreError>>
+    pub fn write<K, V>(&self, kv_iterator: impl Iterator<Item = (K, V)>) -> Result<(), Box<dyn KVStoreError>>
     where
         K: Borrow<[u8]>,
         V: Borrow<[u8]>,
     {
         match self {
-            Self::RocksDB(s) => {
-                let mut batch = rocksdb::WriteBatch::default();
-                kv_iterator.for_each(|(key, value)| batch.put(key.borrow(), value.borrow()));
-                s.write(batch)
-            }
+            Self::RocksDB(s) => s.write(kv_iterator),
             Self::InMemory(s) => s.write(kv_iterator),
         }
     }

@@ -61,6 +61,7 @@ pub mod sequence_number;
 pub mod snapshot;
 
 pub use kv::KVBackend;
+use resource::constants::storage::MVCC_KEY_INLINE_SIZE;
 
 #[derive(Debug)]
 pub struct MVCCStorage<Durability> {
@@ -266,7 +267,7 @@ impl<Durability> MVCCStorage<Durability> {
                                                // Write to the k-v store
                 commit_profile.snapshot_durable_write_data_confirmed();
 
-                self.write(ops_ref.sequence_number(), ops_ref.commit_record().operations())
+                keyspaces_write(&self.keyspaces, ops_ref.sequence_number(), ops_ref.commit_record().operations())
                     .map_err(|error| Keyspace { name: self.name.clone(), typedb_source: Arc::new(error) })?;
                 commit_profile.snapshot_storage_written();
 
@@ -297,20 +298,6 @@ impl<Durability> MVCCStorage<Durability> {
                 Err(Durability { name: self.name.clone(), typedb_source: error })
             }
         }
-    }
-
-    pub(crate) fn write(keyspaces: &Keyspaces, seq: SequenceNumber, operations: &OperationsBuffer) -> Result<(), KeyspacesError> {
-        for (keyspace_id, buffer) in operations.write_buffers() {
-            let kv_writes = buffer
-                .writes()
-                .iter()
-                .map(|(key, write)| write.to_key_value(key, seq))
-                .flatten()
-                .map(|(mvcc_key, value)| (mvcc_key.into_bytes(), value));
-            keyspaces.get(keyspace_id).write(kv_writes)
-                .map_err(|e| KeyspacesError::KVStoreError { typedb_source: e.into() })?;
-        }
-        Ok(())
     }
 
     fn set_initial_put_status(
@@ -506,6 +493,28 @@ impl<Durability> MVCCStorage<Durability> {
     }
 }
 
+pub(crate) fn keyspaces_write(
+    keyspaces: &Keyspaces,
+    seq: SequenceNumber,
+    operations: &OperationsBuffer,
+) -> Result<(), KeyspacesError> {
+    for (keyspace_id, buffer) in operations.write_buffers() {
+        let writes = buffer.writes();
+        if writes.is_empty() {
+            continue;
+        }
+        let kv_writes = writes
+            .iter()
+            .flat_map(|(key, write)| write.to_key_value(key, seq))
+            .map(|(mvcc_key, value)| (mvcc_key.into_bytes(), value));
+        keyspaces
+            .get(keyspace_id)
+            .write(kv_writes)
+            .map_err(|e| KeyspacesError::KVStoreError { typedb_source: e.into() })?;
+    }
+    Ok(())
+}
+
 typedb_error! {
     pub StorageOpenError(component = "Storage open", prefix = "STO") {
         StorageDirectoryExists(1, "Failed to open database '{name}' in directory '{path:?}'", name: String, path: PathBuf),
@@ -554,11 +563,8 @@ typedb_error! {
 
 /// MVCC keys are made of three parts: the [KEY][SEQ][OP]
 pub struct MVCCKey<'bytes> {
-    bytes: Bytes<'bytes, MVCC_KEY_INLINE_SIZE>,
+    bytes: Bytes<'bytes, { MVCC_KEY_INLINE_SIZE }>,
 }
-
-// byte array inline size can be adjusted to avoid allocation since these key are often short-lived
-const MVCC_KEY_INLINE_SIZE: usize = 128;
 
 impl<'bytes> MVCCKey<'bytes> {
     const OPERATION_START_NEGATIVE_OFFSET: usize = StorageOperation::serialised_len();
@@ -660,8 +666,10 @@ mod tests {
 
     use bytes::byte_array::ByteArray;
     use durability::wal::WAL;
-    use kv::{keyspaces::KeyspaceId, KVBackend, KVStore};
-    use kv::keyspaces::KeyspacesError;
+    use kv::{
+        keyspaces::{KeyspaceId, KeyspacesError},
+        KVBackend, KVStore,
+    };
     use resource::profile::StorageCounters;
     use test_utils::{create_tmp_dir, init_logging};
 

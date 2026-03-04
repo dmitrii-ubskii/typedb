@@ -4,9 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cmp::Ordering, collections::BTreeMap, ops::Bound};
 
-use bytes::{byte_array::ByteArray, Bytes};
+use bytes::{byte_array::ByteArray, util::increment, Bytes};
 use lending_iterator::{LendingIterator, Seekable};
 use primitive::key_range::{KeyRange, RangeEnd, RangeStart};
 use resource::{
@@ -33,26 +33,32 @@ impl InMemoryRangeIterator {
         range: &KeyRange<Bytes<'_, INLINE_BYTES>>,
         storage_counters: StorageCounters,
     ) -> Self {
-        let start_key: ByteArray<BUFFER_KEY_INLINE> = match range.start() {
-            RangeStart::Inclusive(bytes) => ByteArray::copy(bytes.as_ref()),
-            RangeStart::ExcludeFirstWithPrefix(bytes) => ByteArray::copy(bytes.as_ref()),
+        let start_bound: Bound<ByteArray<BUFFER_KEY_INLINE>> = match range.start() {
+            RangeStart::Inclusive(bytes) => Bound::Included(ByteArray::copy(bytes.as_ref())),
+            RangeStart::ExcludeFirstWithPrefix(bytes) => Bound::Excluded(ByteArray::copy(bytes.as_ref())),
             RangeStart::ExcludePrefix(bytes) => {
                 let mut cloned: ByteArray<BUFFER_KEY_INLINE> = ByteArray::copy(bytes.as_ref());
                 cloned.increment().unwrap();
-                cloned
+                Bound::Included(cloned)
             }
         };
 
-        let mut data: Vec<_> = btree.range(start_key..).map(|(k, v)| (k.clone(), v.clone())).collect();
-
-        // Handle ExcludeFirstWithPrefix: skip the first entry if it exactly matches the start
-        if matches!(range.start(), RangeStart::ExcludeFirstWithPrefix(_)) {
-            if let Some((first_key, _)) = data.first() {
-                if &first_key[..] == range.start().get_value().as_ref() {
-                    data.remove(0);
-                }
+        let end_bound: Bound<ByteArray<BUFFER_KEY_INLINE>> = match range.end() {
+            RangeEnd::WithinStartAsPrefix => {
+                let mut end = ByteArray::<BUFFER_KEY_INLINE>::copy(range.start().get_value().as_ref());
+                increment(&mut end).unwrap();
+                Bound::Excluded(end)
             }
-        }
+            RangeEnd::EndPrefixInclusive(end) => {
+                let mut end = ByteArray::<BUFFER_KEY_INLINE>::copy(end.as_ref());
+                increment(&mut end).unwrap();
+                Bound::Excluded(end)
+            }
+            RangeEnd::EndPrefixExclusive(end) => Bound::Excluded(ByteArray::copy(end.as_ref())),
+            RangeEnd::Unbounded => Bound::Unbounded,
+        };
+
+        let data: Vec<_> = btree.range((start_bound, end_bound)).map(|(k, v)| (k.clone(), v.clone())).collect();
 
         let continue_condition = match range.end() {
             RangeEnd::WithinStartAsPrefix => {
