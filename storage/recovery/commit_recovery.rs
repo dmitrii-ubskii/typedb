@@ -4,21 +4,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::{collections::BTreeMap, sync::Arc};
-
 use durability::RawRecord;
 use error::typedb_error;
-use kv::{
-    keyspaces::{Keyspaces, KeyspacesError},
-    write_batches::WriteBatches,
-};
+use kv::keyspaces::{Keyspaces, KeyspacesError};
+use std::{collections::BTreeMap, sync::Arc};
 use tracing::{event, Level};
 
 use crate::{
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord},
-    isolation_manager::{CommitRecord, IsolationManager, StatusRecord, ValidatedCommit},
-    sequence_number::SequenceNumber,
-    FromOperationsBuffer, MVCCStorage,
+    isolation_manager::{CommitRecord, CommitRecordRef, IsolationManager, StatusRecord, ValidatedCommit},
+    sequence_number::SequenceNumber, MVCCStorage
 };
 
 /// Load commit data from the start onwards. Ignores any statuses that are not paired with commit data.
@@ -96,12 +91,13 @@ pub(crate) fn apply_recovered(
 
     let isolation_manager = IsolationManager::new(*recovered_commits.first_key_value().unwrap().0);
 
-    let mut pending_writes = Vec::new();
+    let mut pending_records: Vec<CommitRecordRef> = Vec::new();
     for (commit_sequence_number, commit) in recovered_commits {
         match commit {
             RecoveryCommitStatus::Validated(commit_record) => {
-                pending_writes.push(WriteBatches::from_operations(commit_sequence_number, commit_record.operations()));
                 isolation_manager.load_validated(commit_sequence_number, commit_record);
+                let window = isolation_manager.get_window(commit_sequence_number);
+                pending_records.push(CommitRecordRef::new(window, commit_sequence_number));
             }
             RecoveryCommitStatus::Rejected => isolation_manager.load_aborted(commit_sequence_number),
             RecoveryCommitStatus::Pending(commit_record) => {
@@ -111,10 +107,10 @@ pub(crate) fn apply_recovered(
                     .map_err(|error| DurabilityClientRead { typedb_source: error })?;
                 drop(read_guard);
                 match validated_commit {
-                    ValidatedCommit::Write(write_batches) => {
+                    ValidatedCommit::Write(commit_record_ref) => {
                         MVCCStorage::persist_commit_status(true, commit_sequence_number, durability_client)
                             .map_err(|error| DurabilityClientWrite { typedb_source: error })?;
-                        pending_writes.push(write_batches);
+                        pending_records.push(commit_record_ref);
                     }
                     ValidatedCommit::Conflict(_) => {
                         MVCCStorage::persist_commit_status(false, commit_sequence_number, durability_client)
@@ -125,8 +121,20 @@ pub(crate) fn apply_recovered(
         }
     }
 
-    for write_batches in pending_writes {
-        keyspaces.write(write_batches).map_err(|error| KeyspaceWrite { typedb_source: error })?;
+    for record in &pending_records {
+        let seq = record.sequence_number();
+        let operations = record.commit_record().operations();
+        for (keyspace_id, buffer) in operations.write_buffers() {
+            let kv_writes = buffer
+                .writes()
+                .iter()
+                .map(|(key, write)| write.to_key_value(key, seq))
+                .flatten()
+                .map(|(mvcc_key, value)| (mvcc_key.into_bytes(), value));
+            keyspaces.get(keyspace_id).write(kv_writes).map_err(|e| KeyspaceWrite {
+                typedb_source: KeyspacesError::KVStoreError { typedb_source: e.into() },
+            })?;
+        }
     }
 
     Ok(())

@@ -12,7 +12,7 @@ use resource::profile::StorageCounters;
 use rocksdb::DBRawIterator;
 
 use crate::{
-    iterator::ContinueCondition,
+    iterator::{accept_value, ContinueCondition},
     rocks::{pool::PoolRecycleGuard, RocksKVError, RocksKVStore},
     KVStoreError,
 };
@@ -56,30 +56,6 @@ impl RocksRangeIterator {
         }
     }
 
-    fn accept_value(condition: &ContinueCondition, value: &<Self as LendingIterator>::Item<'_>) -> bool {
-        match value {
-            Ok((key, _)) => {
-                match condition {
-                    ContinueCondition::ExactPrefix(prefix) => key.starts_with(prefix),
-                    ContinueCondition::EndPrefixInclusive(end_inclusive) => {
-                        // if the key is shorter than the end, and the end starts with the key, then it must be OK
-                        //  example: A will be included when searching up to and including AA
-                        // otherwise, the key is longer and we check the corresponding ranges
-                        end_inclusive.starts_with(key) || &key[0..end_inclusive.len()] <= end_inclusive
-                    }
-                    ContinueCondition::EndPrefixExclusive(end_exclusive) => {
-                        // if the key is shorter than the end, and the end starts with the key, then it must be OK
-                        //  example: A will be included when searching up to but not including AA
-                        // otherwise, the key is longer and we check the corresponding ranges
-                        end_exclusive.starts_with(key) || &key[0..end_exclusive.len()] < end_exclusive
-                    }
-                    ContinueCondition::Always => true,
-                }
-            }
-            Err(_err) => true,
-        }
-    }
-
     pub(crate) fn new<'a, const INLINE_BYTES: usize>(
         kv_store: &RocksKVStore,
         range: &KeyRange<Bytes<'a, INLINE_BYTES>>,
@@ -118,7 +94,7 @@ impl RocksRangeIterator {
 
 impl LendingIterator for RocksRangeIterator {
     type Item<'a>
-    = Result<(&'a [u8], &'a [u8]), Box<dyn KVStoreError>>
+        = Result<(&'a [u8], &'a [u8]), Box<dyn KVStoreError>>
     where
         Self: 'a;
 
@@ -134,7 +110,7 @@ impl LendingIterator for RocksRangeIterator {
         // validate next against the Condition
         let item = match next {
             None => None,
-            Some(result) => match Self::accept_value(&self.continue_condition, &result) {
+            Some(result) => match accept_value(&self.continue_condition, &result) {
                 true => Some(result),
                 false => None,
             },
@@ -154,7 +130,7 @@ impl Seekable<[u8]> for RocksRangeIterator {
     }
 
     fn compare_key(&self, item: &Self::Item<'_>, key: &[u8]) -> Ordering {
-        compare_key(item, key)
+        crate::iterator::compare_key(item, key)
     }
 }
 
@@ -288,15 +264,6 @@ impl Seekable<[u8]> for DBIterator {
     }
 
     fn compare_key(&self, item: &Self::Item<'_>, key: &[u8]) -> Ordering {
-        compare_key(item, key)
-    }
-}
-
-pub(super) fn compare_key<E>(item: &Result<(&[u8], &[u8]), E>, key: &[u8]) -> Ordering {
-    if let Ok(item) = item {
-        let (peek, _) = item;
-        peek.cmp(&key)
-    } else {
-        Ordering::Equal
+        crate::iterator::compare_key(item, key)
     }
 }

@@ -42,7 +42,7 @@ use storage::{
     durability_client::{DurabilityClient, DurabilityClientError, WALClient},
     recovery::checkpoint::{Checkpoint, CheckpointCreateError, CheckpointLoadError},
     sequence_number::SequenceNumber,
-    MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
+    KVBackend, MVCCStorage, StorageDeleteError, StorageOpenError, StorageResetError,
 };
 use tracing::{event, Level};
 
@@ -250,7 +250,7 @@ impl Database<WALClient> {
         wal_client.register_record_type::<Statistics>();
 
         let storage = Arc::new(
-            MVCCStorage::create::<EncodingKeyspace>(name, path, wal_client)
+            MVCCStorage::create::<EncodingKeyspace>(name, path, wal_client, KVBackend::RocksDB)
                 .map_err(|error| StorageOpen { typedb_source: error })?,
         );
         let definition_key_generator = Arc::new(DefinitionKeyGenerator::new());
@@ -321,7 +321,7 @@ impl Database<WALClient> {
         let checkpoint = Checkpoint::open_latest(path)
             .map_err(|err| CheckpointLoad { name: name.to_string(), typedb_source: err })?;
         let storage = Arc::new(
-            MVCCStorage::load::<EncodingKeyspace>(&name, path, wal_client, &checkpoint)
+            MVCCStorage::load::<EncodingKeyspace>(&name, path, wal_client, &checkpoint, KVBackend::RocksDB)
                 .map_err(|error| StorageOpen { typedb_source: error })?,
         );
         let definition_key_generator = Arc::new(DefinitionKeyGenerator::new());
