@@ -7,14 +7,18 @@ REM needs to be called such that software installed
 REM by Chocolatey in prepare.bat is accessible
 CALL refreshenv
 
-REM build file
+REM Build the server binary with Cargo
 cargo build --profile=release
-copy target\release\typedb_server_bin.exe  .\
+if errorlevel 1 exit /b 1
+copy target\release\typedb_server_bin.exe .\
 
-
+REM Assemble the distribution zip and deploy to Cloudsmith.
+REM This bypasses Bazel for Windows because rules_rust's cargo_build_script_runner
+REM creates symlinks with mixed path separators, causing MSVC cl.exe to fail on
+REM native crate build scripts (ring, librocksdb-sys). Since the binary is already
+REM built by Cargo above, we assemble and deploy directly with Python.
 SET DEPLOY_ARTIFACT_USERNAME=%REPO_TYPEDB_USERNAME%
 SET DEPLOY_ARTIFACT_PASSWORD=%REPO_TYPEDB_PASSWORD%
-git rev-parse HEAD > version_snapshot.txt
-set /p VER=<version_snapshot.txt
-bazel --windows_enable_symlinks run --config=ci --define version=%VER% --enable_runfiles //:deploy-typedb-server -- snapshot
+python .circleci\windows\assemble_and_deploy.py snapshot
+if errorlevel 1 exit /b 1
 
