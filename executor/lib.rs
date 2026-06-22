@@ -10,6 +10,10 @@
 use std::{fmt, slice};
 
 use compiler::VariablePosition;
+pub use instruction::{
+    has_executor::HasExecutor, has_reverse_executor::HasReverseExecutor, iterator::TupleIterator,
+    links_executor::LinksExecutor, tuple::Tuple,
+};
 use ir::pattern::BranchID;
 use tokio::sync::broadcast::error::TryRecvError;
 

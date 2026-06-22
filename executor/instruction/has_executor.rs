@@ -48,7 +48,7 @@ use crate::{
     row::MaybeOwnedRow,
 };
 
-pub(crate) struct HasExecutor {
+pub struct HasExecutor {
     has: ir::pattern::constraint::Has<ExecutorVariable>,
     iterate_mode: BinaryIterateMode,
     variable_modes: VariableModes,
@@ -80,7 +80,7 @@ pub(super) const EXTRACT_ATTRIBUTE: HasVariableValueExtractor =
     |(has, _)| VariableValue::Thing(Thing::Attribute(has.attribute()));
 
 impl HasExecutor {
-    pub(crate) fn new<Snapshot: ReadableSnapshot>(
+    pub fn new<Snapshot: ReadableSnapshot>(
         has: HasInstruction<ExecutorVariable>,
         variable_modes: VariableModes,
         sort_by: ExecutorVariable,
@@ -169,7 +169,7 @@ impl HasExecutor {
         })
     }
 
-    pub(crate) fn get_iterator(
+    pub fn get_iterator(
         &self,
         context: &ExecutionContext<impl ReadableSnapshot + 'static>,
         row: MaybeOwnedRow<'_>,
