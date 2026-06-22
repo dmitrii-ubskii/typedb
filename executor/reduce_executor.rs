@@ -358,7 +358,7 @@ minmax_reducer_executors! {
     Decimal::decimal(Decimal),
     Date::date(NaiveDate),
     DateTime::date_time(NaiveDateTime),
-    DateTimeTZ::date_time_tz(DateTime<TimeZone>),
+    DateTimeTZ::date_time_tz(Box<DateTime<TimeZone>>),
 }
 
 #[derive(Debug, Clone)]
