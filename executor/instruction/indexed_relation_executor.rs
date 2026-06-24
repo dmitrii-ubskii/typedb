@@ -400,7 +400,7 @@ impl IndexedRelationExecutor {
                                     storage_counters.clone(),
                                 )
                                 .expect("Relation index should be available");
-                            let as_tuples = IndexedRelationTupleIterator::new(
+                            IndexedRelationTupleIterator::new(
                                 iterator,
                                 filter_for_row.clone(),
                                 self.tuple_positions.clone(),
@@ -411,8 +411,7 @@ impl IndexedRelationExecutor {
                                     Some(start_player),
                                     None,
                                 ),
-                            );
-                            as_tuples
+                            )
                         })
                         .collect_vec();
                     let merged_tuples: KMergeBy<
@@ -676,7 +675,7 @@ where
                 _ => unreachable!("only 5 components exist"),
             }
         });
-        TupleResult::Ok(Tuple::Quintuple(tuple))
+        TupleResult::Ok(Tuple::Quintuple(Box::new(tuple)))
     }
 
     fn tuple_to_indexed(&self, tuple: &Tuple<'_>) -> IndexedRelationPlayers {
