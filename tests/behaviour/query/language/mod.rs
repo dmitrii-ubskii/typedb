@@ -22,6 +22,7 @@ mod pipelines;
 mod put;
 mod redefine;
 mod reduce;
+mod r#struct;
 mod undefine;
 mod update;
 mod variables;
