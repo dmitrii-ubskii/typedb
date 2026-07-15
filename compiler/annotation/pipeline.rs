@@ -46,9 +46,8 @@ use crate::{
         },
         fetch::{AnnotatedFetch, annotate_fetch},
         function::{
-            AnnotatedFunctionSignatures, AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions,
-            AnnotatedSchemaFunctions, FunctionParameterAnnotation, annotate_preamble_functions,
-            get_annotations_from_labels_vec,
+            AnnotatedFunctionSignaturesImpl, AnnotatedPreambleFunctions, AnnotatedSchemaFunctions,
+            FunctionParameterAnnotation, annotate_preamble_functions, get_annotations_from_labels_vec,
         },
         match_inference::infer_types_for_block,
         type_annotations::{BlockAnnotations, ConstraintTypeAnnotations, TypeAnnotations},

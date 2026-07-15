@@ -5,7 +5,6 @@
  */
 
 use encoding::graph::type_::Kind;
-use params;
 
 use crate::Context;
 
