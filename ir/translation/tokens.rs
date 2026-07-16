@@ -21,7 +21,7 @@ use crate::{
     translation::literal::{FromTypeQLLiteral, translate_literal},
 };
 
-pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotation, LiteralParseError> {
+pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotation, Box<LiteralParseError>> {
     Ok(match typeql_kind {
         typeql::Annotation::Abstract(_) => Annotation::Abstract(AnnotationAbstract),
         typeql::Annotation::Cardinality(cardinality) => {
@@ -48,9 +48,9 @@ pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotati
             Annotation::Regex(AnnotationRegex::from_typeql_literal(regex, regex.span())?)
         }
         typeql::Annotation::Subkey(_) => {
-            return Err(LiteralParseError::UnimplementedLanguageFeature {
+            return Err(Box::new(LiteralParseError::UnimplementedLanguageFeature {
                 feature: error::UnimplementedFeature::Subkey,
-            });
+            }));
         }
         typeql::Annotation::Unique(_) => Annotation::Unique(AnnotationUnique),
         typeql::Annotation::Values(values) => Annotation::Values(AnnotationValues::new(
@@ -68,7 +68,7 @@ pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotati
 
 pub fn translate_annotation_category(
     annotation_category: &typeql::schema::undefinable::AnnotationCategory,
-) -> Result<AnnotationCategory, LiteralParseError> {
+) -> Result<AnnotationCategory, Box<LiteralParseError>> {
     match annotation_category {
         typeql::schema::undefinable::AnnotationCategory::Abstract => Ok(AnnotationCategory::Abstract),
         typeql::schema::undefinable::AnnotationCategory::Cardinality => Ok(AnnotationCategory::Cardinality),
@@ -79,7 +79,9 @@ pub fn translate_annotation_category(
         typeql::schema::undefinable::AnnotationCategory::Range => Ok(AnnotationCategory::Range),
         typeql::schema::undefinable::AnnotationCategory::Regex => Ok(AnnotationCategory::Regex),
         typeql::schema::undefinable::AnnotationCategory::Subkey => {
-            Err(LiteralParseError::UnimplementedLanguageFeature { feature: error::UnimplementedFeature::Subkey })
+            Err(Box::new(LiteralParseError::UnimplementedLanguageFeature {
+                feature: error::UnimplementedFeature::Subkey,
+            }))
         }
         typeql::schema::undefinable::AnnotationCategory::Unique => Ok(AnnotationCategory::Unique),
         typeql::schema::undefinable::AnnotationCategory::Values => Ok(AnnotationCategory::Values),

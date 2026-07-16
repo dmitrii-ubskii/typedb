@@ -54,7 +54,7 @@ pub fn translate_offset(
             Box::new(RepresentationError::LiteralParseError {
                 literal: typeql_offset.offset.value.clone(),
                 source_span: typeql_offset.span(),
-                typedb_source,
+                typedb_source: *typedb_source,
             })
         })
 }
@@ -69,7 +69,7 @@ pub fn translate_limit(
             Box::new(RepresentationError::LiteralParseError {
                 literal: typeql_limit.limit.value.clone(),
                 source_span: typeql_limit.span(),
-                typedb_source,
+                typedb_source: *typedb_source,
             })
         })
 }

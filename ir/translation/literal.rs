@@ -27,20 +27,22 @@ use typeql::{
 
 use crate::LiteralParseError;
 
-pub fn translate_literal(literal: &Literal) -> Result<Value<'static>, LiteralParseError> {
+pub fn translate_literal(literal: &Literal) -> Result<Value<'static>, Box<LiteralParseError>> {
     Value::from_typeql_literal(&literal.inner, literal.span())
 }
 
 pub trait FromTypeQLLiteral: Sized {
     type TypeQLLiteral;
-    fn from_typeql_literal(literal: &Self::TypeQLLiteral, source_span: Option<Span>)
-    -> Result<Self, LiteralParseError>;
+    fn from_typeql_literal(
+        literal: &Self::TypeQLLiteral,
+        source_span: Option<Span>,
+    ) -> Result<Self, Box<LiteralParseError>>;
 }
 
-fn parse_primitive<T: FromStr>(fragment: &str, source_span: Option<Span>) -> Result<T, LiteralParseError> {
+fn parse_primitive<T: FromStr>(fragment: &str, source_span: Option<Span>) -> Result<T, Box<LiteralParseError>> {
     fragment
         .parse::<T>()
-        .map_err(|_| LiteralParseError::FragmentParseError { fragment: fragment.to_owned(), source_span })
+        .map_err(|_| Box::new(LiteralParseError::FragmentParseError { fragment: fragment.to_owned(), source_span }))
 }
 
 impl FromTypeQLLiteral for Value<'static> {
@@ -49,7 +51,7 @@ impl FromTypeQLLiteral for Value<'static> {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         // We don't know the final type yet. Zip with value-type annotations when constructing the executor.
         match literal {
             ValueLiteral::Boolean(boolean) => Ok(Value::Boolean(bool::from_typeql_literal(boolean, source_span)?)),
@@ -69,9 +71,9 @@ impl FromTypeQLLiteral for Value<'static> {
             ValueLiteral::String(string) => {
                 Ok(Value::String(Cow::Owned(String::from_typeql_literal(string, source_span)?)))
             }
-            ValueLiteral::Struct(_) => {
-                Err(LiteralParseError::UnimplementedLanguageFeature { feature: error::UnimplementedFeature::Structs })
-            }
+            ValueLiteral::Struct(_) => Err(Box::new(LiteralParseError::UnimplementedLanguageFeature {
+                feature: error::UnimplementedFeature::Structs,
+            })),
         }
     }
 }
@@ -82,7 +84,7 @@ impl FromTypeQLLiteral for bool {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         parse_primitive(literal.value.as_str(), source_span)
     }
 }
@@ -93,7 +95,7 @@ impl FromTypeQLLiteral for i64 {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         // we parse into an i128 because +i64::MAX cannot contain the last value of i64::MIN when the sign  is ignored:
         // example: -9223372036854775808 is parsed as i64::parse(9223372036854775808), then the sign is computed
         // which fails since the max positive value is 9223372036854775807
@@ -102,10 +104,12 @@ impl FromTypeQLLiteral for i64 {
             Sign::Plus => unsigned,
             Sign::Minus => -unsigned,
         };
-        i64::try_from(signed).map_err(|_| LiteralParseError::LiteralOutOfRange {
-            value_type: "integer",
-            literal: literal.to_string(),
-            source_span,
+        i64::try_from(signed).map_err(|_| {
+            Box::new(LiteralParseError::LiteralOutOfRange {
+                value_type: "integer",
+                literal: literal.to_string(),
+                source_span,
+            })
         })
     }
 }
@@ -116,7 +120,7 @@ impl FromTypeQLLiteral for u32 {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         parse_primitive(literal.value.as_str(), source_span)
     }
 }
@@ -127,7 +131,7 @@ impl FromTypeQLLiteral for u64 {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         parse_primitive(literal.value.as_str(), source_span)
     }
 }
@@ -137,7 +141,7 @@ impl FromTypeQLLiteral for f64 {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let unsigned = parse_primitive::<f64>(literal.double.as_str(), source_span)?;
         if unsigned.is_finite() {
             match &literal.sign.unwrap_or(Sign::Plus) {
@@ -145,11 +149,11 @@ impl FromTypeQLLiteral for f64 {
                 Sign::Minus => Ok(-unsigned),
             }
         } else {
-            Err(LiteralParseError::LiteralOutOfRange {
+            Err(Box::new(LiteralParseError::LiteralOutOfRange {
                 value_type: "double",
                 literal: literal.to_string(),
                 source_span,
-            })
+            }))
         }
     }
 }
@@ -160,7 +164,7 @@ impl FromTypeQLLiteral for Decimal {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         // TODO: currently can't parse integer part == `i64::MIN`
         let decimal = parse_primitive::<Decimal>(&literal.decimal, source_span)?;
 
@@ -177,18 +181,18 @@ impl FromTypeQLLiteral for NaiveDate {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let (year, month, day) = (
             parse_primitive(literal.year.as_str(), source_span)?,
             parse_primitive(literal.month.as_str(), source_span)?,
             parse_primitive(literal.day.as_str(), source_span)?,
         );
-        NaiveDate::from_ymd_opt(year, month, day).ok_or(LiteralParseError::InvalidDate {
+        NaiveDate::from_ymd_opt(year, month, day).ok_or(Box::new(LiteralParseError::InvalidDate {
             year,
             month,
             day,
             source_span,
-        })
+        }))
     }
 }
 
@@ -198,7 +202,7 @@ impl FromTypeQLLiteral for NaiveTime {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let hour = parse_primitive(literal.hour.as_str(), source_span)?;
         let minute = parse_primitive(literal.minute.as_str(), source_span)?;
         let second =
@@ -212,7 +216,7 @@ impl FromTypeQLLiteral for NaiveTime {
         if let Some(naive_time) = NaiveTime::from_hms_nano_opt(hour, minute, second, nano) {
             Ok(naive_time)
         } else {
-            Err(LiteralParseError::InvalidTime { hour, minute, second, nano, source_span })
+            Err(Box::new(LiteralParseError::InvalidTime { hour, minute, second, nano, source_span }))
         }
     }
 }
@@ -223,7 +227,7 @@ impl FromTypeQLLiteral for TimeZone {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         match literal {
             typeql::value::TimeZone::IANA(name) => Ok(TimeZone::IANA(
                 Tz::from_str_insensitive(name)
@@ -249,7 +253,7 @@ impl FromTypeQLLiteral for NaiveDateTime {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let date = NaiveDate::from_typeql_literal(&literal.date, source_span)?;
         let time = NaiveTime::from_typeql_literal(&literal.time, source_span)?;
         Ok(NaiveDateTime::new(date, time))
@@ -262,7 +266,7 @@ impl FromTypeQLLiteral for chrono::DateTime<TimeZone> {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let date = NaiveDate::from_typeql_literal(&literal.date, source_span)?;
         let time = NaiveTime::from_typeql_literal(&literal.time, source_span)?;
         let tz = TimeZone::from_typeql_literal(&literal.timezone, source_span)?;
@@ -270,9 +274,9 @@ impl FromTypeQLLiteral for chrono::DateTime<TimeZone> {
         match date_time.and_local_timezone(tz) {
             MappedLocalTime::Single(dt) => Ok(dt),
             MappedLocalTime::Ambiguous(earliest, latest) => {
-                Err(LiteralParseError::AmbiguousLocalTime { date_time, tz, earliest, latest, source_span })
+                Err(Box::new(LiteralParseError::AmbiguousLocalTime { date_time, tz, earliest, latest, source_span }))
             }
-            MappedLocalTime::None => Err(LiteralParseError::NoSuchLocalTime { date_time, tz, source_span }),
+            MappedLocalTime::None => Err(Box::new(LiteralParseError::NoSuchLocalTime { date_time, tz, source_span })),
         }
     }
 }
@@ -283,7 +287,7 @@ impl FromTypeQLLiteral for Duration {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         let mut months = 0;
         let mut days = 0;
         let mut nanos = 0;
@@ -301,18 +305,18 @@ impl FromTypeQLLiteral for Duration {
             DurationLiteral::Time(time_part) => nanos = duration_time_part_to_nanos(time_part, source_span)?,
         }
 
-        Duration::new_checked(months, days, nanos).ok_or(LiteralParseError::LiteralOutOfRange {
+        Duration::new_checked(months, days, nanos).ok_or(Box::new(LiteralParseError::LiteralOutOfRange {
             value_type: "duration",
             literal: literal.to_string(),
             source_span,
-        })
+        }))
     }
 }
 
 fn duration_time_part_to_nanos(
     time_part: &typeql::value::DurationTime,
     source_span: Option<Span>,
-) -> Result<u64, LiteralParseError> {
+) -> Result<u64, Box<LiteralParseError>> {
     let mut nanos = 0;
     nanos += NANOS_PER_HOUR * parse_optional_int(&time_part.hours, source_span)?.unwrap_or(0);
     nanos += NANOS_PER_MINUTE * parse_optional_int(&time_part.minutes, source_span)?.unwrap_or(0);
@@ -330,7 +334,7 @@ fn duration_time_part_to_nanos(
 fn parse_optional_int<I: FromTypeQLLiteral<TypeQLLiteral = IntegerLiteral>>(
     literal: &Option<IntegerLiteral>,
     source_span: Option<Span>,
-) -> Result<Option<I>, LiteralParseError> {
+) -> Result<Option<I>, Box<LiteralParseError>> {
     match literal {
         Some(literal) => I::from_typeql_literal(literal, source_span).map(Some),
         None => Ok(None),
@@ -343,11 +347,13 @@ impl FromTypeQLLiteral for String {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<Self, LiteralParseError> {
-        literal.unescape().map_err(|err| LiteralParseError::CannotUnescapeString {
-            literal: literal.clone(),
-            typedb_source: err,
-            source_span,
+    ) -> Result<Self, Box<LiteralParseError>> {
+        literal.unescape().map_err(|err| {
+            Box::new(LiteralParseError::CannotUnescapeString {
+                literal: literal.clone(),
+                typedb_source: err,
+                source_span,
+            })
         })
     }
 }
@@ -358,7 +364,7 @@ impl FromTypeQLLiteral for AnnotationRegex {
     fn from_typeql_literal(
         literal: &Self::TypeQLLiteral,
         source_span: Option<Span>,
-    ) -> Result<AnnotationRegex, LiteralParseError> {
+    ) -> Result<Self, Box<LiteralParseError>> {
         Ok(AnnotationRegex::new(literal.regex.unescape_regex().map_err(|err| {
             LiteralParseError::CannotUnescapeRegexString {
                 literal: literal.regex.clone(),
