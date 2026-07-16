@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use cucumber::gherkin::Step;
+use itertools::Itertools;
 use macro_rules_attribute::apply;
 use params::{self, check_boolean};
 
@@ -135,8 +136,7 @@ pub async fn struct_get_fields_contains_or_doesnt(
             .unwrap();
         let struct_definition =
             &tx.type_manager.get_struct_definition(tx.snapshot.as_ref(), definition_key.clone()).unwrap();
-        let actual_fields: Vec<String> =
-            struct_definition.field_names.keys().cloned().map(|key| key.to_owned()).collect();
+        let actual_fields = struct_definition.field_names.keys().cloned().collect_vec();
         contains_or_doesnt.check(&expected_fields, &actual_fields);
     });
 }
