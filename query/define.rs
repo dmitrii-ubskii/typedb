@@ -67,10 +67,10 @@ fn checked_identifier(identifier: &typeql::Identifier) -> Result<&str, DefineErr
 }
 
 macro_rules! verify_empty_annotations_for_capability {
-    ($capability:ident, $annotation_error:path, $error_arg_name:ident) => {
+    ($struct_index:ident, $capability:ident, $annotation_error:path, $error_arg_name:ident $(,)?) => {
         if let Some(typeql_annotation) = &$capability.annotations.first() {
-            let annotation = translate_annotation(typeql_annotation)
-                .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+            let annotation = translate_annotation(&$struct_index, typeql_annotation)
+                .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
             let error = { $annotation_error { $error_arg_name: annotation.category() } };
             Err(DefineError::IllegalAnnotation { source_span: typeql_annotation.span(), typedb_source: error })
         } else {
@@ -312,9 +312,10 @@ fn define_type_annotations(
     let label = Label::parse_from(checked_identifier(&type_declaration.label.ident)?, type_declaration.label.span());
     let type_ = resolve_typeql_type(snapshot, type_manager, &label)
         .map_err(|typedb_source| DefineError::SymbolResolution { typedb_source })?;
+    let struct_index = ();
     for typeql_annotation in &type_declaration.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         match type_ {
             TypeEnum::Entity(entity) => {
                 if let Some(converted) = type_convert_and_validate_annotation_definition_need(
@@ -404,7 +405,13 @@ fn define_alias(
 }
 
 fn define_alias_annotations(typeql_capability: &TypeQLCapability) -> Result<(), DefineError> {
-    verify_empty_annotations_for_capability!(typeql_capability, AnnotationError::UnsupportedAliasAnnotation, category)
+    let struct_index = ();
+    verify_empty_annotations_for_capability!(
+        struct_index,
+        typeql_capability,
+        AnnotationError::UnsupportedAliasAnnotation,
+        category,
+    )
 }
 
 fn define_sub(
@@ -510,9 +517,10 @@ fn define_sub_entity_type_annotations(
     supertype: EntityType,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         let sub = Sub::<EntityType>::new(subtype, supertype);
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
@@ -543,9 +551,10 @@ fn define_sub_relation_type_annotations(
     supertype: RelationType,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         let sub = Sub::<RelationType>::new(subtype, supertype);
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
@@ -576,9 +585,10 @@ fn define_sub_attribute_type_annotations(
     supertype: AttributeType,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         let sub = Sub::<AttributeType>::new(subtype, supertype);
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
@@ -677,9 +687,10 @@ fn define_value_type_annotations(
     typeql_type: &Type,
     storage_counters: StorageCounters,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         if let Some(converted) = type_convert_and_validate_annotation_definition_need(
             snapshot,
             type_manager,
@@ -779,9 +790,10 @@ fn define_relates_annotations(
     relates: Relates,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
             type_manager,
@@ -1011,9 +1023,10 @@ fn define_owns_annotations(
     owns: Owns,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
             type_manager,
@@ -1088,9 +1101,10 @@ fn define_plays_annotations(
     plays: Plays,
     typeql_capability: &TypeQLCapability,
 ) -> Result<(), DefineError> {
+    let struct_index = ();
     for typeql_annotation in &typeql_capability.annotations {
-        let annotation = translate_annotation(typeql_annotation)
-            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source })?;
+        let annotation = translate_annotation(&struct_index, typeql_annotation)
+            .map_err(|typedb_source| DefineError::LiteralParseError { typedb_source: *typedb_source })?;
         if let Some(converted) = capability_convert_and_validate_annotation_definition_need(
             snapshot,
             type_manager,

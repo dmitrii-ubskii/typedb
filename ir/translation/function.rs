@@ -29,6 +29,7 @@ use crate::{
         FunctionRepresentationError, ParameterRegistry,
         function::{Function, FunctionBody, ReturnOperation},
         function_signature::{FunctionID, FunctionSignature, FunctionSignatureIndex},
+        struct_fields::StructFieldsIndex,
     },
     translation::{
         PipelineTranslationContext,
@@ -55,13 +56,15 @@ macro_rules! verify_variable_available {
 
 pub fn translate_typeql_function(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     function: &typeql::Function,
 ) -> Result<Function, Box<FunctionRepresentationError>> {
-    translate_function_from(function_index, &function.signature, &function.block, &function.annotations)
+    translate_function_from(function_index, struct_index, &function.signature, &function.block, &function.annotations)
 }
 
 fn translate_function_from(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     signature: &typeql::schema::definable::function::Signature,
     block: &FunctionBlock,
     annotations: &[typeql::Annotation],
@@ -84,7 +87,7 @@ fn translate_function_from(
     let (mut context, arguments) = PipelineTranslationContext::new_function_pipeline(args_sources_categories)
         .map_err(|typedb_source| FunctionRepresentationError::BlockDefinition { typedb_source })?;
     let mut value_parameters = ParameterRegistry::new();
-    let body = translate_function_block(function_index, &mut context, &mut value_parameters, block)?;
+    let body = translate_function_block(function_index, struct_index, &mut context, &mut value_parameters, block)?;
 
     // Check for unused arguments
     debug_assert!(arguments.iter().all(|&arg| context.variable_registry.get_variable_name(arg).is_some()));
@@ -170,12 +173,13 @@ pub(crate) fn function_argument_name_and_category(
 
 pub(crate) fn translate_function_block(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_block: &FunctionBlock,
 ) -> Result<FunctionBody, Box<FunctionRepresentationError>> {
     let (_translated_given, stages, fetch) =
-        translate_pipeline_stages(function_index, context, value_parameters, &function_block.stages)
+        translate_pipeline_stages(function_index, struct_index, context, value_parameters, &function_block.stages)
             .map_err(|typedb_source| FunctionRepresentationError::BlockDefinition { typedb_source })?;
     debug_assert!(_translated_given.is_none());
     let has_illegal_stages = stages.iter().any(|stage| match stage {
@@ -349,11 +353,11 @@ fn translate_function_annotations(
     typeql_annotations
         .iter()
         .map(|typeql_annotation| {
-            let annotation = translate_annotation(typeql_annotation).map_err(|typedb_source| {
+            let annotation = translate_annotation(&(), typeql_annotation).map_err(|typedb_source| {
                 FunctionRepresentationError::LiteralParseError {
                     annotation: typeql_annotation.clone(),
                     function: function_name.to_owned(),
-                    typedb_source,
+                    typedb_source: *typedb_source,
                     source_span: typeql_annotation.span(),
                 }
             })?;

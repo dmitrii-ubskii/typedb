@@ -37,6 +37,7 @@ pub mod function;
 pub mod function_signature;
 pub mod modifier;
 pub mod reduce;
+pub mod struct_fields;
 
 typedb_error! {
     pub FunctionReadError(component = "Function read", prefix = "FNR") {

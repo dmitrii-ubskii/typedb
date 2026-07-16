@@ -10,6 +10,7 @@ use concept::type_::annotation::{
     AnnotationUnique, AnnotationValues,
 };
 use encoding::{graph::type_::Kind, value::value_type::ValueType};
+use itertools::Itertools;
 use typeql::{
     annotation::CardinalityRange,
     common::{Spanned, error::TypeQLError},
@@ -18,10 +19,14 @@ use typeql::{
 
 use crate::{
     LiteralParseError, RepresentationError,
+    pipeline::struct_fields::StructFieldsIndex,
     translation::literal::{FromTypeQLLiteral, translate_literal},
 };
 
-pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotation, Box<LiteralParseError>> {
+pub fn translate_annotation(
+    struct_index: &impl StructFieldsIndex,
+    typeql_kind: &typeql::Annotation,
+) -> Result<Annotation, Box<LiteralParseError>> {
     Ok(match typeql_kind {
         typeql::Annotation::Abstract(_) => Annotation::Abstract(AnnotationAbstract),
         typeql::Annotation::Cardinality(cardinality) => {
@@ -41,8 +46,8 @@ pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotati
         typeql::Annotation::Independent(_) => Annotation::Independent(AnnotationIndependent),
         typeql::Annotation::Key(_) => Annotation::Key(AnnotationKey),
         typeql::Annotation::Range(range) => Annotation::Range(AnnotationRange::new(
-            range.min.as_ref().map(translate_literal).transpose()?,
-            range.max.as_ref().map(translate_literal).transpose()?,
+            range.min.as_ref().map(|x| translate_literal(struct_index, x)).transpose()?,
+            range.max.as_ref().map(|x| translate_literal(struct_index, x)).transpose()?,
         )),
         typeql::Annotation::Regex(regex) => {
             Annotation::Regex(AnnotationRegex::from_typeql_literal(regex, regex.span())?)
@@ -54,7 +59,7 @@ pub fn translate_annotation(typeql_kind: &typeql::Annotation) -> Result<Annotati
         }
         typeql::Annotation::Unique(_) => Annotation::Unique(AnnotationUnique),
         typeql::Annotation::Values(values) => Annotation::Values(AnnotationValues::new(
-            values.values.iter().map(translate_literal).collect::<Result<Vec<_>, _>>()?,
+            values.values.iter().map(|x| translate_literal(struct_index, x)).try_collect()?,
         )),
         typeql::Annotation::Doc(doc) => {
             Annotation::Doc(AnnotationDoc::new(String::from_typeql_literal(&doc.doc, doc.span())?))

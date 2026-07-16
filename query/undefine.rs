@@ -271,7 +271,7 @@ fn undefine_capability_annotation(
         annotation_undefinable.type_.span(),
     );
     let annotation_category = translate_annotation_category(&annotation_undefinable.annotation_category)
-        .map_err(|typedb_source| UndefineError::LiteralParseError { typedb_source })?;
+        .map_err(|typedb_source| UndefineError::LiteralParseError { typedb_source: *typedb_source })?;
 
     match &annotation_undefinable.capability {
         CapabilityBase::Sub(typeql_sub) => {
@@ -828,7 +828,7 @@ fn undefine_type_annotation(
     let type_ = resolve_typeql_type(snapshot, type_manager, &label)
         .map_err(|source| UndefineError::DefinitionResolution { typedb_source: source })?;
     let annotation_category = translate_annotation_category(&annotation_undefinable.annotation_category)
-        .map_err(|typedb_source| UndefineError::LiteralParseError { typedb_source })?;
+        .map_err(|typedb_source| UndefineError::LiteralParseError { typedb_source: *typedb_source })?;
     match type_ {
         TypeEnum::Entity(entity_type) => {
             check_can_and_need_undefine_type_annotation(

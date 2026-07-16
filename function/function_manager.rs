@@ -42,6 +42,7 @@ use ir::{
         function_signature::{
             FunctionID, FunctionIDAPI, FunctionSignature, FunctionSignatureIndex, HashMapFunctionSignatureIndex,
         },
+        struct_fields::StructFieldsIndex,
     },
     translation::{
         function::{FunctionAnnotation, build_signature, translate_typeql_function},
@@ -102,7 +103,8 @@ impl FunctionManager {
         // Prepare ir
         let function_index =
             HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
-        let mut translated = Self::translate_functions(&functions, &function_index)?;
+        let struct_index = ();
+        let mut translated = Self::translate_functions(&functions, &function_index, &struct_index)?;
 
         // Run type-inference
         let translated_refs = translated.iter().map(|(id, f)| (id.clone(), f)).collect();
@@ -141,8 +143,9 @@ impl FunctionManager {
         let buffered =
             HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
         let function_index = ReadThroughFunctionSignatureIndex::new(snapshot, self, buffered);
+        let struct_index = ();
         // Translate to ensure the function calls are valid references. Type-inference is done at commit-time.
-        let translated = Self::translate_functions(&functions, &function_index)?;
+        let translated = Self::translate_functions(&functions, &function_index, &struct_index)?;
         for (function, definition) in zip(functions.iter(), definitions) {
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let definition_key = &function.function_id;
@@ -215,8 +218,9 @@ impl FunctionManager {
         let buffered =
             HashMapFunctionSignatureIndex::build(functions.iter().map(|f| (f.function_id.clone().into(), &f.parsed)));
         let function_index = ReadThroughFunctionSignatureIndex::new(snapshot, self, buffered);
+        let struct_index = ();
         // Translate to ensure the function calls are valid references. Type-inference is done at commit-time.
-        Self::translate_functions(&functions, &function_index)?;
+        Self::translate_functions(&functions, &function_index, &struct_index)?;
         for (function, definition) in zip(functions.iter(), [definition].iter()) {
             let index_key = NameToFunctionDefinitionIndex::build(function.name().as_str()).into_storage_key();
             let definition_key = &function.function_id;
@@ -233,11 +237,15 @@ impl FunctionManager {
     pub(crate) fn translate_functions(
         functions: &[SchemaFunction],
         function_index: &impl FunctionSignatureIndex,
+        struct_index: &impl StructFieldsIndex,
     ) -> Result<HashMap<DefinitionKey, ir::pipeline::function::Function>, Box<FunctionError>> {
         functions
             .iter()
             .map(|function| {
-                Ok((function.function_id.clone(), translate_typeql_function(function_index, &function.parsed)?))
+                Ok((
+                    function.function_id.clone(),
+                    translate_typeql_function(function_index, struct_index, &function.parsed)?,
+                ))
             })
             .try_collect()
             .map_err(|err: Box<_>| Box::new(FunctionError::FunctionTranslation { typedb_source: *err }))

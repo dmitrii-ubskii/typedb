@@ -36,8 +36,9 @@ pub fn translate_insert(
     validate_insert_patterns(&insert.patterns)?;
     let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
+    let struct_index = ();
     let mut conjunction = builder.conjunction_mut();
-    add_patterns(&function_index, &mut conjunction, &insert.patterns)?;
+    add_patterns(&function_index, &struct_index, &mut conjunction, &insert.patterns)?;
     builder.finish()
 }
 
@@ -92,8 +93,9 @@ pub fn translate_update(
     validate_update_patterns(context, &update.patterns)?;
     let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
+    let struct_index = ();
     let mut conjunction = builder.conjunction_mut();
-    add_patterns(&function_index, &mut conjunction, &update.patterns)?;
+    add_patterns(&function_index, &struct_index, &mut conjunction, &update.patterns)?;
     builder.finish()
 }
 
@@ -105,8 +107,9 @@ pub fn translate_put(
     validate_insert_patterns(&put.patterns)?;
     let mut builder = Block::builder(context.new_block_builder_context(value_parameters));
     let function_index = HashMapFunctionSignatureIndex::empty();
+    let struct_index = ();
     let mut conjunction = builder.conjunction_mut();
-    add_patterns(&function_index, &mut conjunction, &put.patterns)?;
+    add_patterns(&function_index, &struct_index, &mut conjunction, &put.patterns)?;
     let block = builder.finish()?;
     for constraint in block.conjunction().constraints() {
         match constraint {
@@ -146,12 +149,12 @@ pub fn translate_delete(
 
 fn validate_delete(delete: &typeql::query::stage::Delete) -> Result<(), Box<RepresentationError>> {
     for deletable in &delete.deletables {
-        if let DeletableKind::Optional { deletables } = &deletable.kind {
-            if deletables.iter().any(|d| matches!(d.kind, DeletableKind::Optional { .. })) {
-                return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
-                    feature: UnimplementedFeature::NestedOptionalWrites,
-                }));
-            }
+        if let DeletableKind::Optional { deletables } = &deletable.kind
+            && deletables.iter().any(|d| matches!(d.kind, DeletableKind::Optional { .. }))
+        {
+            return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
+                feature: UnimplementedFeature::NestedOptionalWrites,
+            }));
         }
     }
     Ok(())
@@ -282,8 +285,11 @@ fn validate_update_expression_variables_availability(
             verify_variable_available!(context, variable => DeleteVariableUnavailable)?;
             Ok(())
         }
+        Expression::FieldAccess(field_access) => {
+            validate_update_expression_variables_availability(context, &field_access.receiver)
+        }
         Expression::ListIndex(list_index) => {
-            verify_variable_available!(context, list_index.variable => DeleteVariableUnavailable)?;
+            validate_update_expression_variables_availability(context, &list_index.receiver)?;
             validate_update_expression_variables_availability(context, &list_index.index)
         }
         Expression::Value(value) => Ok(()),

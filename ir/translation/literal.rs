@@ -14,21 +14,46 @@ use encoding::value::{
     duration_value::{DAYS_PER_WEEK, Duration, MONTHS_PER_YEAR, NANOS_PER_HOUR, NANOS_PER_MINUTE, NANOS_PER_SEC},
     timezone::TimeZone,
     value::Value,
+    value_struct::StructValue,
 };
 use typeql::{
     annotation::Regex,
     common::{Span, Spanned},
     value::{
         BooleanLiteral, DateFragment, DateTimeLiteral, DateTimeTZLiteral, DurationLiteral, IntegerLiteral, Literal,
-        Sign, SignedDecimalLiteral, SignedDoubleLiteral, SignedIntegerLiteral, StringLiteral, TimeFragment,
-        ValueLiteral,
+        Sign, SignedDecimalLiteral, SignedDoubleLiteral, SignedIntegerLiteral, StringLiteral, StructLiteral,
+        TimeFragment, ValueLiteral,
     },
 };
 
-use crate::LiteralParseError;
+use crate::{LiteralParseError, pipeline::struct_fields::StructFieldsIndex};
 
-pub fn translate_literal(literal: &Literal) -> Result<Value<'static>, Box<LiteralParseError>> {
-    Value::from_typeql_literal(&literal.inner, literal.span())
+pub fn translate_literal(
+    struct_index: &impl StructFieldsIndex,
+    literal: &Literal,
+) -> Result<Value<'static>, Box<LiteralParseError>> {
+    let source_span = literal.span();
+    // We don't know the final type yet. Zip with value-type annotations when constructing the executor.
+    match &literal.inner {
+        ValueLiteral::Boolean(boolean) => Ok(Value::Boolean(bool::from_typeql_literal(boolean, source_span)?)),
+        ValueLiteral::Integer(integer) => Ok(Value::Integer(i64::from_typeql_literal(integer, source_span)?)),
+        ValueLiteral::Decimal(decimal) => Ok(Value::Decimal(Decimal::from_typeql_literal(decimal, source_span)?)),
+        ValueLiteral::Double(double) => Ok(Value::Double(f64::from_typeql_literal(double, source_span)?)),
+        ValueLiteral::Date(date) => Ok(Value::Date(NaiveDate::from_typeql_literal(&date.date, source_span)?)),
+        ValueLiteral::DateTime(datetime) => {
+            Ok(Value::DateTime(NaiveDateTime::from_typeql_literal(datetime, source_span)?))
+        }
+        ValueLiteral::DateTimeTz(datetime_tz) => {
+            Ok(Value::DateTimeTZ(chrono::DateTime::from_typeql_literal(datetime_tz, source_span)?))
+        }
+        ValueLiteral::Duration(duration) => Ok(Value::Duration(Duration::from_typeql_literal(duration, source_span)?)),
+        ValueLiteral::String(string) => {
+            Ok(Value::String(Cow::Owned(String::from_typeql_literal(string, source_span)?)))
+        }
+        ValueLiteral::Struct(struct_literal) => {
+            todo!()
+        }
+    }
 }
 
 pub trait FromTypeQLLiteral: Sized {
@@ -43,39 +68,6 @@ fn parse_primitive<T: FromStr>(fragment: &str, source_span: Option<Span>) -> Res
     fragment
         .parse::<T>()
         .map_err(|_| Box::new(LiteralParseError::FragmentParseError { fragment: fragment.to_owned(), source_span }))
-}
-
-impl FromTypeQLLiteral for Value<'static> {
-    type TypeQLLiteral = ValueLiteral;
-
-    fn from_typeql_literal(
-        literal: &Self::TypeQLLiteral,
-        source_span: Option<Span>,
-    ) -> Result<Self, Box<LiteralParseError>> {
-        // We don't know the final type yet. Zip with value-type annotations when constructing the executor.
-        match literal {
-            ValueLiteral::Boolean(boolean) => Ok(Value::Boolean(bool::from_typeql_literal(boolean, source_span)?)),
-            ValueLiteral::Integer(integer) => Ok(Value::Integer(i64::from_typeql_literal(integer, source_span)?)),
-            ValueLiteral::Decimal(decimal) => Ok(Value::Decimal(Decimal::from_typeql_literal(decimal, source_span)?)),
-            ValueLiteral::Double(double) => Ok(Value::Double(f64::from_typeql_literal(double, source_span)?)),
-            ValueLiteral::Date(date) => Ok(Value::Date(NaiveDate::from_typeql_literal(&date.date, source_span)?)),
-            ValueLiteral::DateTime(datetime) => {
-                Ok(Value::DateTime(NaiveDateTime::from_typeql_literal(datetime, source_span)?))
-            }
-            ValueLiteral::DateTimeTz(datetime_tz) => {
-                Ok(Value::DateTimeTZ(chrono::DateTime::from_typeql_literal(datetime_tz, source_span)?))
-            }
-            ValueLiteral::Duration(duration) => {
-                Ok(Value::Duration(Duration::from_typeql_literal(duration, source_span)?))
-            }
-            ValueLiteral::String(string) => {
-                Ok(Value::String(Cow::Owned(String::from_typeql_literal(string, source_span)?)))
-            }
-            ValueLiteral::Struct(_) => Err(Box::new(LiteralParseError::UnimplementedLanguageFeature {
-                feature: error::UnimplementedFeature::Structs,
-            })),
-        }
-    }
 }
 
 impl FromTypeQLLiteral for bool {
@@ -399,10 +391,15 @@ pub mod tests {
         {
             let mut context = PipelineTranslationContext::new();
             let mut value_parameters = ParameterRegistry::new();
-            let block =
-                translate_match(&mut context, &mut value_parameters, &HashMapFunctionSignatureIndex::empty(), match_)?
-                    .finish()
-                    .unwrap();
+            let block = translate_match(
+                &mut context,
+                &mut value_parameters,
+                &HashMapFunctionSignatureIndex::empty(),
+                &(),
+                match_,
+            )?
+            .finish()
+            .unwrap();
             let x = block.conjunction().constraints()[0].as_expression_binding().unwrap().expression().get_root();
             match x {
                 Expression::Constant(id) => Ok(value_parameters.value_unchecked(id).to_owned()),

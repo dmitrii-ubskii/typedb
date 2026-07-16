@@ -38,6 +38,7 @@ use crate::{
         },
         function::{Function, FunctionBody, ReturnOperation},
         function_signature::{FunctionSignature, FunctionSignatureIndex},
+        struct_fields::StructFieldsIndex,
     },
     translation::{
         PipelineTranslationContext,
@@ -57,9 +58,10 @@ pub(super) fn translate_fetch(
     parent_context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     fetch: &TypeQLFetch,
 ) -> Result<FetchObject, Box<FetchRepresentationError>> {
-    translate_fetch_object(parent_context, value_parameters, function_index, &fetch.object)
+    translate_fetch_object(parent_context, value_parameters, function_index, struct_index, &fetch.object)
 }
 
 // This function returns a specific `FetchObject`, rather than the FetchSome` higher-level enum
@@ -68,6 +70,7 @@ fn translate_fetch_object(
     parent_context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     typeql_object: &TypeQLFetchObject,
 ) -> Result<FetchObject, Box<FetchRepresentationError>> {
     match &typeql_object.body {
@@ -90,7 +93,10 @@ fn translate_fetch_object(
                     entry.span().expect("Parser did not provide Fetch key-value text range."),
                 );
                 source_spans.insert(key_id.clone(), entry.span());
-                object.insert(key_id, translate_fetch_some(parent_context, value_parameters, function_index, value)?);
+                object.insert(
+                    key_id,
+                    translate_fetch_some(parent_context, value_parameters, function_index, struct_index, value)?,
+                );
             }
             Ok(FetchObject::Entries(object, source_spans))
         }
@@ -105,15 +111,20 @@ fn translate_fetch_some(
     parent_context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     fetch_some: &TypeQLFetchSome,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     match fetch_some {
         TypeQLFetchSome::Object(object) => {
-            translate_fetch_object(parent_context, value_parameters, function_index, object)
+            translate_fetch_object(parent_context, value_parameters, function_index, struct_index, object)
                 .map(|object| FetchSome::Object(Box::new(object)))
         }
-        TypeQLFetchSome::List(list) => translate_fetch_list(parent_context, value_parameters, function_index, list),
-        TypeQLFetchSome::Single(some) => translate_fetch_single(parent_context, value_parameters, function_index, some),
+        TypeQLFetchSome::List(list) => {
+            translate_fetch_list(parent_context, value_parameters, function_index, struct_index, list)
+        }
+        TypeQLFetchSome::Single(some) => {
+            translate_fetch_single(parent_context, value_parameters, function_index, struct_index, some)
+        }
     }
 }
 
@@ -121,6 +132,7 @@ fn translate_fetch_list(
     parent_context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     list: &TypeQLFetchList,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     match &list.stream {
@@ -146,6 +158,7 @@ fn translate_fetch_list(
                         parent_context,
                         value_parameters,
                         function_index,
+                        struct_index,
                         call,
                         checked_name,
                     )
@@ -156,7 +169,7 @@ fn translate_fetch_list(
             // clone context, since we don't want the inline function to affect the parent context
             let mut local_context = parent_context.clone();
             let (_translated_given, translated_stages, subfetch) =
-                translate_pipeline_stages(function_index, &mut local_context, value_parameters, stages)
+                translate_pipeline_stages(function_index, struct_index, &mut local_context, value_parameters, stages)
                     .map_err(|err| FetchRepresentationError::SubFetchRepresentation { typedb_source: err })?;
             debug_assert!(_translated_given.is_none());
             if let Some(subfetch) = subfetch {
@@ -174,12 +187,12 @@ fn translate_fetch_list(
         FetchStream::SubQueryFunctionBlock(block) => {
             // clone context, since we don't want the inline function to affect the parent context
             let mut local_context = parent_context.clone();
-            let body = translate_function_block(function_index, &mut local_context, value_parameters, block).map_err(
-                |typedb_source| FetchRepresentationError::FunctionRepresentation {
-                    declaration: block.clone(),
-                    typedb_source,
-                },
-            )?;
+            let body =
+                translate_function_block(function_index, struct_index, &mut local_context, value_parameters, block)
+                    .map_err(|typedb_source| FetchRepresentationError::FunctionRepresentation {
+                        declaration: block.clone(),
+                        typedb_source,
+                    })?;
             if !body.return_operation.is_scalar()
                 && !matches!(body.return_operation, ReturnOperation::ReduceReducer(_, _))
             {
@@ -198,6 +211,7 @@ fn translate_fetch_single(
     parent_context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     single: &TypeQLFetchSingle,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     match single {
@@ -210,18 +224,29 @@ fn translate_fetch_single(
                 Ok(FetchSome::SingleAttribute(FetchSingleAttribute { variable: owner, attribute }))
             }
         }
-        FetchSingle::Expression(expression) => match &expression {
+        FetchSingle::Expression(expression) => match expression {
             Expression::Variable(variable) => {
                 let var = try_get_variable(parent_context, variable)?;
                 Ok(FetchSome::SingleVar(var))
             }
+            Expression::FieldAccess(_) => todo!(),
             Expression::ListIndex(_) | Expression::Value(_) | Expression::Operation(_) | Expression::Paren(_) => {
-                translate_inline_expression_single(parent_context, value_parameters, function_index, expression)
+                translate_inline_expression_single(
+                    parent_context,
+                    value_parameters,
+                    function_index,
+                    struct_index,
+                    expression,
+                )
             }
             Expression::Function(call) => match &call.name {
-                FunctionName::Builtin(_) => {
-                    translate_inline_expression_single(parent_context, value_parameters, function_index, expression)
-                }
+                FunctionName::Builtin(_) => translate_inline_expression_single(
+                    parent_context,
+                    value_parameters,
+                    function_index,
+                    struct_index,
+                    expression,
+                ),
                 FunctionName::Identifier(name) => {
                     let checked_name = checked_identifier(name)
                         .map_err(|typedb_source| FetchRepresentationError::SubFetchRepresentation { typedb_source })?;
@@ -229,6 +254,7 @@ fn translate_fetch_single(
                         parent_context,
                         value_parameters,
                         function_index,
+                        struct_index,
                         call,
                         checked_name,
                     )
@@ -246,12 +272,12 @@ fn translate_fetch_single(
         FetchSingle::FunctionBlock(block) => {
             // clone context, since we don't want the inline function to affect the parent context
             let mut local_context = parent_context.clone();
-            let body = translate_function_block(function_index, &mut local_context, value_parameters, block).map_err(
-                |typedb_source| FetchRepresentationError::FunctionRepresentation {
-                    declaration: block.clone(),
-                    typedb_source,
-                },
-            )?;
+            let body =
+                translate_function_block(function_index, struct_index, &mut local_context, value_parameters, block)
+                    .map_err(|typedb_source| FetchRepresentationError::FunctionRepresentation {
+                        declaration: block.clone(),
+                        typedb_source,
+                    })?;
             if body.return_operation().is_stream() {
                 return Err(Box::new(FetchRepresentationError::ExpectedSingleFunctionBlock {
                     declaration: block.clone(),
@@ -306,6 +332,7 @@ fn translate_inline_expression_single(
     context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     expression: &Expression,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     // because expressions expect to be able to extract out function calls, we'll translate an expression
@@ -318,7 +345,7 @@ fn translate_inline_expression_single(
         value_parameters,
     );
     let mut builder = Block::builder(builder_context);
-    let assign_var = add_expression(function_index, &mut builder, expression)?;
+    let assign_var = add_expression(function_index, struct_index, &mut builder, expression)?;
     let block = builder
         .finish()
         .map_err(|err| FetchRepresentationError::ExpressionAsMatchRepresentation { typedb_source: err })?;
@@ -333,11 +360,12 @@ fn translate_inline_user_function_call_single(
     context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     call: &FunctionCall,
     function_name: &str,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     let (local_context, stage, assign_vars, signature) =
-        translate_inline_function_call(context, value_parameters, function_index, call, function_name)?;
+        translate_inline_function_call(context, value_parameters, function_index, struct_index, call, function_name)?;
     if signature.return_is_stream {
         Err(Box::new(FetchRepresentationError::ExpectedSingleInlineFunctionCall { declaration: call.clone() }))
     } else {
@@ -353,11 +381,12 @@ fn translate_inline_user_function_call_stream(
     context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     call: &FunctionCall,
     function_name: &str,
 ) -> Result<FetchSome, Box<FetchRepresentationError>> {
     let (local_context, stage, assign_vars, _) =
-        translate_inline_function_call(context, value_parameters, function_index, call, function_name)?;
+        translate_inline_function_call(context, value_parameters, function_index, struct_index, call, function_name)?;
     let parameters = value_parameters.clone();
     let return_ = ReturnOperation::Stream(assign_vars, call.span());
     let body = FunctionBody::new(vec![stage], return_);
@@ -369,6 +398,7 @@ fn translate_inline_function_call<'a>(
     context: &mut PipelineTranslationContext,
     value_parameters: &mut ParameterRegistry,
     function_index: &'a impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     call: &FunctionCall,
     function_name: &str,
 ) -> Result<
@@ -417,6 +447,7 @@ fn translate_inline_function_call<'a>(
 
     add_function_call(
         function_index,
+        struct_index,
         &mut conjunction.constraints_mut(),
         function_name,
         assign_vars.iter().map(|var| AssignedVariable::new_required(*var)).collect(),
@@ -435,6 +466,7 @@ fn translate_inline_function_call<'a>(
 
 fn add_expression(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     builder: &mut BlockBuilder<'_>,
     typeql_expression: &Expression,
 ) -> Result<Variable, Box<FetchRepresentationError>> {
@@ -443,8 +475,9 @@ fn add_expression(
         .constraints_mut()
         .create_anonymous_variable(None)
         .map_err(|err| FetchRepresentationError::ExpressionAsMatchRepresentation { typedb_source: err })?;
-    let expression = build_expression(function_index, &mut conjunction.constraints_mut(), typeql_expression)
-        .map_err(|err| FetchRepresentationError::ExpressionRepresentation { typedb_source: err })?;
+    let expression =
+        build_expression(function_index, struct_index, &mut conjunction.constraints_mut(), typeql_expression)
+            .map_err(|err| FetchRepresentationError::ExpressionRepresentation { typedb_source: err })?;
     let _ = conjunction
         .constraints_mut()
         .add_assignment(assign_var, expression, typeql_expression.span())

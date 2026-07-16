@@ -19,10 +19,10 @@ use crate::{
         constraint::ConstraintsBuilder,
         expression::{
             BuiltinConceptFunctionID, BuiltinValueFunctionCall, BuiltinValueFunctionID, Expression, ExpressionTree,
-            ExpressionTreeNodeId, ListConstructor, ListIndex, ListIndexRange, Operation, Operator,
+            ExpressionTreeNodeId, ListConstructor, ListIndexRange, Operation, Operator,
         },
     },
-    pipeline::function_signature::FunctionSignatureIndex,
+    pipeline::{function_signature::FunctionSignatureIndex, struct_fields::StructFieldsIndex},
     translation::{
         constraints::{
             register_type_label, register_type_scoped_label, register_typeql_var, split_out_inline_expressions,
@@ -34,16 +34,17 @@ use crate::{
 
 pub(super) fn add_typeql_expression(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     rhs: &typeql::Expression,
 ) -> Result<Vertex<Variable>, Box<RepresentationError>> {
     if let typeql::Expression::Value(literal) = rhs {
-        let id = register_typeql_literal(constraints, literal)?;
+        let id = register_typeql_literal(struct_index, constraints, literal)?;
         Ok(Vertex::Parameter(id))
     } else if let typeql::Expression::Variable(var) = rhs {
         Ok(Vertex::Variable(register_typeql_var(constraints, var)?))
     } else {
-        let expression = build_expression(function_index, constraints, rhs)?;
+        let expression = build_expression(function_index, struct_index, constraints, rhs)?;
         let variable = constraints.create_anonymous_variable(rhs.span())?;
         constraints.add_assignment(variable, expression, rhs.span())?;
         Ok(Vertex::Variable(variable))
@@ -52,37 +53,44 @@ pub(super) fn add_typeql_expression(
 
 pub(crate) fn build_expression(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     expression: &typeql::Expression,
 ) -> Result<ExpressionTree<Variable>, Box<RepresentationError>> {
     let mut tree = ExpressionTree::empty();
-    build_recursive(function_index, constraints, expression, &mut tree)?;
+    build_recursive(function_index, struct_index, constraints, expression, &mut tree)?;
     Ok(tree)
 }
 
 fn build_recursive(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     expression: &typeql::Expression,
     tree: &mut ExpressionTree<Variable>,
 ) -> Result<ExpressionTreeNodeId, Box<RepresentationError>> {
     let expression = match expression {
         typeql::Expression::Paren(inner) => {
-            return build_recursive(function_index, constraints, &inner.inner, tree);
+            return build_recursive(function_index, struct_index, constraints, &inner.inner, tree);
         }
         typeql::Expression::Variable(var) => Expression::Variable(register_typeql_var(constraints, var)?),
-        typeql::Expression::ListIndex(list_index) => {
-            let variable = register_typeql_var(constraints, &list_index.variable)?;
-            let id = build_recursive(function_index, constraints, &list_index.index, tree)?;
-            Expression::ListIndex(ListIndex::new(variable, id, list_index.span()))
+        typeql::Expression::FieldAccess(_field_access) => {
+            return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
+                feature: error::UnimplementedFeature::Lists,
+            }));
+        }
+        typeql::Expression::ListIndex(_list_index) => {
+            return Err(Box::new(RepresentationError::UnimplementedLanguageFeature {
+                feature: error::UnimplementedFeature::Lists,
+            }));
         }
         typeql::Expression::Value(literal) => {
-            let id = register_typeql_literal(constraints, literal)?;
+            let id = register_typeql_literal(struct_index, constraints, literal)?;
             Expression::Constant(id)
         }
         typeql::Expression::Operation(operation) => {
-            let left_id = build_recursive(function_index, constraints, &operation.left, tree)?;
-            let right_id = build_recursive(function_index, constraints, &operation.right, tree)?;
+            let left_id = build_recursive(function_index, struct_index, constraints, &operation.left, tree)?;
+            let right_id = build_recursive(function_index, struct_index, constraints, &operation.right, tree)?;
             Expression::Operation(Operation::new(
                 translate_operator(&operation.op),
                 left_id,
@@ -91,13 +99,13 @@ fn build_recursive(
             ))
         }
         typeql::Expression::Function(function_call) => {
-            build_function(function_index, constraints, function_call, tree)?
+            build_function(function_index, struct_index, constraints, function_call, tree)?
         } // Careful, could be either.
         typeql::Expression::List(list) => {
             let items = list
                 .items
                 .iter()
-                .map(|sub_expr| build_recursive(function_index, constraints, sub_expr, tree))
+                .map(|sub_expr| build_recursive(function_index, struct_index, constraints, sub_expr, tree))
                 .collect::<Result<Vec<_>, _>>()?;
             let len_id = constraints.parameters().register_value(
                 Value::Integer(items.len() as i64),
@@ -107,8 +115,8 @@ fn build_recursive(
         }
         typeql::Expression::ListIndexRange(range) => {
             let list_variable = register_typeql_var(constraints, &range.var)?;
-            let left_id = build_recursive(function_index, constraints, &range.from, tree)?;
-            let right_id = build_recursive(function_index, constraints, &range.to, tree)?;
+            let left_id = build_recursive(function_index, struct_index, constraints, &range.from, tree)?;
+            let right_id = build_recursive(function_index, struct_index, constraints, &range.to, tree)?;
             Expression::ListIndexRange(ListIndexRange::new(list_variable, left_id, right_id, range.span()))
         }
         typeql::Expression::Label(label) => {
@@ -128,14 +136,16 @@ fn build_recursive(
 }
 
 fn register_typeql_literal(
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     literal: &typeql::Literal,
 ) -> Result<ParameterID, Box<RepresentationError>> {
-    let value = translate_literal(literal).map_err(|typedb_source| RepresentationError::LiteralParseError {
-        literal: literal.to_string(),
-        source_span: literal.span(),
-        typedb_source,
-    })?;
+    let value =
+        translate_literal(struct_index, literal).map_err(|typedb_source| RepresentationError::LiteralParseError {
+            literal: literal.to_string(),
+            source_span: literal.span(),
+            typedb_source: *typedb_source,
+        })?;
     let id = constraints
         .parameters()
         .register_value(value, literal.span().expect("Parser did not provide Value text range"));
@@ -144,26 +154,28 @@ fn register_typeql_literal(
 
 fn add_builtin_function_call(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     builtin_id: BuiltinConceptFunctionID,
     assigned: Vec<AssignedVariable>,
     args: &[typeql::Expression],
     source_span: Option<Span>,
 ) -> Result<(), Box<RepresentationError>> {
-    let arguments = split_out_inline_expressions(function_index, constraints, args)?;
+    let arguments = split_out_inline_expressions(function_index, struct_index, constraints, args)?;
     constraints.add_builtin_function_binding(assigned, builtin_id, arguments, source_span)?;
     Ok(())
 }
 
 fn add_user_defined_function_call(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     function_name: &str,
     assigned: Vec<AssignedVariable>,
     args: &[typeql::Expression],
     source_span: Option<Span>,
 ) -> Result<(), Box<RepresentationError>> {
-    let arguments = split_out_inline_expressions(function_index, constraints, args)?;
+    let arguments = split_out_inline_expressions(function_index, struct_index, constraints, args)?;
     let callee = function_index
         .get_function_signature(function_name)
         .map_err(|typedb_source| RepresentationError::FunctionReadError { typedb_source })?;
@@ -179,6 +191,7 @@ fn add_user_defined_function_call(
 
 pub(crate) fn add_function_call(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     function_name: &str,
     assigned: Vec<AssignedVariable>,
@@ -186,14 +199,31 @@ pub(crate) fn add_function_call(
     source_span: Option<Span>,
 ) -> Result<(), Box<RepresentationError>> {
     if let Some(std_function_id) = BuiltinConceptFunctionID::from_str(function_name) {
-        add_builtin_function_call(function_index, constraints, std_function_id, assigned, args, source_span)
+        add_builtin_function_call(
+            function_index,
+            struct_index,
+            constraints,
+            std_function_id,
+            assigned,
+            args,
+            source_span,
+        )
     } else {
-        add_user_defined_function_call(function_index, constraints, function_name, assigned, args, source_span)
+        add_user_defined_function_call(
+            function_index,
+            struct_index,
+            constraints,
+            function_name,
+            assigned,
+            args,
+            source_span,
+        )
     }
 }
 
 fn build_function(
     function_index: &impl FunctionSignatureIndex,
+    struct_index: &impl StructFieldsIndex,
     constraints: &mut ConstraintsBuilder<'_, '_>,
     function_call: &typeql::expression::FunctionCall,
     tree: &mut ExpressionTree<Variable>,
@@ -203,7 +233,7 @@ fn build_function(
             let args = function_call
                 .args
                 .iter()
-                .map(|expr| build_recursive(function_index, constraints, expr, tree))
+                .map(|expr| build_recursive(function_index, struct_index, constraints, expr, tree))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Expression::BuiltinValueFunctionCall(BuiltinValueFunctionCall::new(
                 to_builtin_value_function_id(builtin, &args)?,
@@ -215,6 +245,7 @@ fn build_function(
             let assign = constraints.create_anonymous_variable(function_call.name.span())?;
             add_builtin_function_call(
                 function_index,
+                struct_index,
                 constraints,
                 to_builtin_concept_function_id(builtin, &function_call.args)?,
                 vec![AssignedVariable::new_required(assign)],
@@ -227,6 +258,7 @@ fn build_function(
             let assign = constraints.create_anonymous_variable(identifier.span())?;
             add_function_call(
                 function_index,
+                struct_index,
                 constraints,
                 checked_identifier(identifier)?,
                 vec![AssignedVariable::new_required(assign)],
@@ -359,7 +391,7 @@ pub mod tests {
     ) -> Result<Block, Box<RepresentationError>> {
         let mut query = typeql::parse_query(query_str).unwrap().into_structure().into_pipeline();
         let match_ = query.stages.remove(0).into_match();
-        translate_match(context, value_parameters, &HashMapFunctionSignatureIndex::empty(), &match_)
+        translate_match(context, value_parameters, &HashMapFunctionSignatureIndex::empty(), &(), &match_)
             .and_then(|builder| builder.finish())
     }
 
