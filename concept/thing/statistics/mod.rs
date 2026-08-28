@@ -55,7 +55,26 @@ use crate::{
     },
 };
 
-type StatisticsEncodingVersion = u64;
+mod commit_deltas;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u64)]
+enum StatisticsEncodingVersion {
+    V0 = 0,
+    V1 = 1,
+}
+
+impl TryFrom<u64> for StatisticsEncodingVersion {
+    type Error = (); // TODO proper error
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::V0),
+            1 => Ok(Self::V1),
+            _ => Err(()), // TODO proper error
+        }
+    }
+}
 
 /// Thing statistics, reflecting a snapshot of statistics accurate as of a particular sequence number
 /// When types are undefined, we retain the last count of the instances of the type
@@ -92,10 +111,36 @@ pub struct Statistics {
     // TODO: adding role types is possible, but won't help with filtering before reading storage since roles are not in the prefix
     pub links_index_counts: HashMap<ObjectType, HashMap<ObjectType, u64>>,
     // future: attribute value distributions, attribute value ownership distributions, etc.
+
+    //
+    pub total_invisible_count: u64,
+
+    pub total_invisible_thing_count: u64,
+    pub total_invisible_entity_count: u64,
+    pub total_invisible_relation_count: u64,
+    pub total_invisible_attribute_count: u64,
+    pub total_invisible_role_count: u64,
+    pub total_invisible_has_count: u64,
+
+    pub invisible_entity_counts: HashMap<EntityType, u64>,
+    pub invisible_relation_counts: HashMap<RelationType, u64>,
+    pub invisible_attribute_counts: HashMap<AttributeType, u64>,
+    pub invisible_role_counts: HashMap<RoleType, u64>,
+
+    pub invisible_has_attribute_counts: HashMap<ObjectType, HashMap<AttributeType, u64>>,
+    pub invisible_attribute_owner_counts: HashMap<AttributeType, HashMap<ObjectType, u64>>,
+    pub invisible_role_player_counts: HashMap<ObjectType, HashMap<RoleType, u64>>,
+    pub invisible_relation_role_counts: HashMap<RelationType, HashMap<RoleType, u64>>,
+    pub invisible_relation_role_player_counts: HashMap<RelationType, HashMap<RoleType, HashMap<ObjectType, u64>>>,
+    pub invisible_player_role_relation_counts: HashMap<ObjectType, HashMap<RoleType, HashMap<RelationType, u64>>>,
+
+    // TODO: adding role types is possible, but won't help with filtering before reading storage since roles are not in the prefix
+    pub invisible_links_index_counts: HashMap<ObjectType, HashMap<ObjectType, u64>>,
+    // future: attribute value distributions, attribute value ownership distributions, etc.
 }
 
 impl Statistics {
-    const ENCODING_VERSION: StatisticsEncodingVersion = 0;
+    const ENCODING_VERSION: StatisticsEncodingVersion = StatisticsEncodingVersion::V0;
     const COMMIT_CONTEXT_SIZE: u64 = 8;
     const COMMIT_CONTEXT_MEMORY_LIMIT: usize = 1 << 30; // 1 GiB
 
@@ -105,6 +150,7 @@ impl Statistics {
             sequence_number,
             last_durable_write_total_count: 0,
             last_durable_write_sequence_number: sequence_number,
+
             total_count: 0,
             total_thing_count: 0,
             total_entity_count: 0,
@@ -123,6 +169,25 @@ impl Statistics {
             relation_role_player_counts: HashMap::new(),
             player_role_relation_counts: HashMap::new(),
             links_index_counts: HashMap::new(),
+
+            total_invisible_count: 0,
+            total_invisible_thing_count: 0,
+            total_invisible_entity_count: 0,
+            total_invisible_relation_count: 0,
+            total_invisible_attribute_count: 0,
+            total_invisible_role_count: 0,
+            total_invisible_has_count: 0,
+            invisible_entity_counts: HashMap::new(),
+            invisible_relation_counts: HashMap::new(),
+            invisible_attribute_counts: HashMap::new(),
+            invisible_role_counts: HashMap::new(),
+            invisible_has_attribute_counts: HashMap::new(),
+            invisible_attribute_owner_counts: HashMap::new(),
+            invisible_role_player_counts: HashMap::new(),
+            invisible_relation_role_counts: HashMap::new(),
+            invisible_relation_role_player_counts: HashMap::new(),
+            invisible_player_role_relation_counts: HashMap::new(),
+            invisible_links_index_counts: HashMap::new(),
         }
     }
 
@@ -795,7 +860,7 @@ mod serialise {
     };
 
     use crate::{
-        thing::statistics::{SerialisableType, Statistics},
+        thing::statistics::{SerialisableType, Statistics, StatisticsEncodingVersion},
         type_::{
             attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType,
             relation_type::RelationType, role_type::RoleType,
@@ -902,6 +967,15 @@ mod serialise {
                 "PlayerIndexCounts" => Some(Field::LinksIndexCounts),
                 _ => None,
             }
+        }
+    }
+
+    impl Serialize for StatisticsEncodingVersion {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_u64(*self as u64)
         }
     }
 
@@ -1029,6 +1103,15 @@ mod serialise {
             }
 
             deserializer.deserialize_identifier(FieldVisitor)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for StatisticsEncodingVersion {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            u64::deserialize(deserializer).map(|u64| u64.try_into().unwrap()) // TODO proper error
         }
     }
 
