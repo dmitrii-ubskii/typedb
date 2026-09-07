@@ -296,8 +296,7 @@ pub mod tests {
     #[test]
     fn into_chunks_respects_the_chunk_size() {
         let tmp_dir = create_tmp_storage_dir();
-        let mut cache: SpilloverCache<String> =
-            SpilloverCache::new(&tmp_dir.as_ref().to_path_buf(), Some("chunks"), 5);
+        let mut cache: SpilloverCache<String> = SpilloverCache::new(&tmp_dir.as_ref().to_path_buf(), Some("chunks"), 5);
         for i in 0..23 {
             cache.insert(format!("{i:020}"), format!("v{i}")).unwrap();
         }
