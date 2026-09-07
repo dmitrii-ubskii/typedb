@@ -119,7 +119,7 @@ impl<T: Serialize + DeserializeOwned + Clone> Drop for SpilloverCache<T> {
         if self.disk_storage_path.as_os_str().is_empty() {
             return; // consumed by into_chunks: the chunks iterator owns the cleanup
         }
-        drop(std::mem::take(&mut self.disk_storage)); // release its files
+        self.disk_storage = None; // release its files before removing the directory
         if let Err(e) = std::fs::remove_dir_all(&self.disk_storage_path) {
             // Can be cleaned up by the cache's user
             event!(Level::TRACE, "Failed to delete a temporary DB directory {:?}: {e}", self.disk_storage_path);
@@ -140,49 +140,47 @@ impl<T: Serialize + DeserializeOwned + Clone> Iterator for SpilloverCacheChunks<
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut chunk = Vec::new();
+
         while chunk.len() < self.chunk_size {
-            if let Some(entry) = self.memory.next() {
-                chunk.push(entry);
+            match self.memory.next() {
+                Some(entry) => chunk.push(entry),
+                None => break,
             }
         }
 
-        if chunk.len() < self.chunk_size {
-            if let Some(disk_storage) = &self.disk_storage {
-                let mut iterator = disk_storage.raw_iterator();
-
-                match &self.disk_cursor {
-                    None => iterator.seek_to_first(),
-                    Some(cursor) => {
-                        iterator.seek(cursor);
-                        if iterator.valid() && iterator.key() == Some(cursor.as_slice()) {
-                            iterator.next();
-                        }
+        if let Some(disk_storage) = self.disk_storage.as_ref().filter(|_| chunk.len() < self.chunk_size) {
+            let mut iterator = disk_storage.raw_iterator();
+            match &self.disk_cursor {
+                None => iterator.seek_to_first(),
+                Some(cursor) => {
+                    iterator.seek(cursor);
+                    if iterator.valid() && iterator.key() == Some(cursor.as_slice()) {
+                        iterator.next();
                     }
                 }
-
-                while chunk.len() < self.chunk_size && iterator.valid() {
-                    let (key, bytes) = (iterator.key().unwrap(), iterator.value().unwrap());
-                    let value = match bincode::deserialize(bytes) {
-                        Ok(value) => value,
-                        Err(_) => return Some(Err(CacheError::DiskStorageDeserialization {})),
-                    };
-                    self.disk_cursor = Some(key.to_vec());
-                    chunk.push((String::from_utf8_lossy(key).into_owned(), value));
-                    iterator.next();
-                }
-                if let Err(source) = iterator.status() {
-                    return Some(Err(CacheError::DiskStorageAccess { source }));
-                }
+            }
+            while chunk.len() < self.chunk_size && iterator.valid() {
+                let (key, bytes) = (iterator.key().unwrap(), iterator.value().unwrap());
+                let value = match bincode::deserialize(bytes) {
+                    Ok(value) => value,
+                    Err(_) => return Some(Err(CacheError::DiskStorageDeserialization {})),
+                };
+                self.disk_cursor = Some(key.to_vec());
+                chunk.push((String::from_utf8_lossy(key).into_owned(), value));
+                iterator.next();
+            }
+            if let Err(source) = iterator.status() {
+                return Some(Err(CacheError::DiskStorageAccess { source }));
             }
         }
 
-        if chunk.is_empty() { None } else { Some(Ok(chunk)) }
+        (!chunk.is_empty()).then(|| Ok(chunk))
     }
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> Drop for SpilloverCacheChunks<T> {
     fn drop(&mut self) {
-        drop(self.disk_storage.take()); // release its files
+        self.disk_storage = None; // release its files
         if let Err(e) = std::fs::remove_dir_all(&self.disk_storage_path) {
             // Can be cleaned up by the cache's user
             event!(Level::TRACE, "Failed to delete a temporary DB directory {:?}: {e}", self.disk_storage_path);
@@ -267,5 +265,43 @@ pub mod tests {
 
         cache.remove("key2").unwrap();
         assert_eq!(get!(cache, "key2"), None);
+    }
+
+    fn collect_chunks(cache: SpilloverCache<String>, chunk_size: usize) -> Vec<(String, String)> {
+        cache.into_chunks(chunk_size).map(|chunk| chunk.unwrap()).collect::<Vec<_>>().concat()
+    }
+
+    #[test]
+    fn into_chunks_yields_every_entry_across_both_tiers() {
+        for &(threshold, total, chunk_size) in
+            // exercise a partial memory tail, a partial disk tail, and exact multiples of both
+            &[(5, 12, 4), (5, 17, 5), (5, 5, 4), (5, 3, 4), (100, 50, 10), (5, 20, 3)]
+        {
+            let tmp_dir = create_tmp_storage_dir();
+            let mut cache: SpilloverCache<String> =
+                SpilloverCache::new(&tmp_dir.as_ref().to_path_buf(), Some("chunks"), threshold);
+            for i in 0..total {
+                cache.insert(format!("{i:020}"), format!("v{i}")).unwrap();
+            }
+            let mut collected = collect_chunks(cache, chunk_size);
+            assert_eq!(collected.len(), total, "threshold={threshold} total={total} chunk={chunk_size}");
+            // The memory tier iterates in hash order and the disk tier in key order; the drain treats
+            // records independently, so completeness is what matters. Sort to compare as a set.
+            collected.sort();
+            let expected: Vec<_> = (0..total).map(|i| (format!("{i:020}"), format!("v{i}"))).collect();
+            assert_eq!(collected, expected, "every entry present exactly once");
+        }
+    }
+
+    #[test]
+    fn into_chunks_respects_the_chunk_size() {
+        let tmp_dir = create_tmp_storage_dir();
+        let mut cache: SpilloverCache<String> =
+            SpilloverCache::new(&tmp_dir.as_ref().to_path_buf(), Some("chunks"), 5);
+        for i in 0..23 {
+            cache.insert(format!("{i:020}"), format!("v{i}")).unwrap();
+        }
+        let sizes: Vec<usize> = cache.into_chunks(10).map(|chunk| chunk.unwrap().len()).collect();
+        assert_eq!(sizes, vec![10, 10, 3]);
     }
 }

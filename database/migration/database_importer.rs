@@ -272,7 +272,7 @@ struct PendingRolePlayer {
 #[derive(Debug)]
 struct PendingLog<T: Serialize + DeserializeOwned + Clone> {
     records: Option<SpilloverCache<T>>,
-    count: u64,
+    next_sequence: u64,
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> PendingLog<T> {
@@ -281,13 +281,13 @@ impl<T: Serialize + DeserializeOwned + Clone> PendingLog<T> {
     fn new(cache_directory: &PathBuf, database_name: &str) -> Self {
         Self {
             records: Some(SpilloverCache::new(cache_directory, Some(database_name), Self::CACHE_SPILLOVER_THRESHOLD)),
-            count: 0,
+            next_sequence: 0,
         }
     }
 
     fn append(&mut self, record: T) -> Result<(), DatabaseImportError> {
-        let key = format!("{:020}", self.count);
-        self.count += 1;
+        let key = format!("{:020}", self.next_sequence);
+        self.next_sequence += 1;
         self.records
             .as_mut()
             .expect("Pending records are only appended before the import stream is done")
@@ -295,8 +295,8 @@ impl<T: Serialize + DeserializeOwned + Clone> PendingLog<T> {
             .map_err(|source| DatabaseImportError::CacheError { source })
     }
 
-    fn take(&mut self) -> (Option<SpilloverCache<T>>, u64) {
-        (self.records.take(), std::mem::take(&mut self.count))
+    fn take(&mut self) -> Option<SpilloverCache<T>> {
+        self.records.take()
     }
 }
 
@@ -525,17 +525,17 @@ impl DatabaseImporter {
     }
 
     fn drain_pending_ownerships(&mut self) -> Result<(), DatabaseImportError> {
-        let (records, count) = self.data_info.attributes.pending_ownerships.take();
-        let Some(records) = records else { return Ok(()) };
-        if count > 0 {
-            event!(Level::DEBUG, "Writing {count} ownerships deferred until their attributes were imported.");
-        }
-        let mut unknown_attributes = 0;
+        let Some(records) = self.data_info.attributes.pending_ownerships.take() else { return Ok(()) };
+        let (mut written, mut unknown_attributes) = (0u64, 0);
         for chunk in records.into_chunks(Self::COMMIT_BATCH_SIZE as usize) {
             let chunk = chunk.map_err(|source| DatabaseImportError::CacheError { source })?;
             for (_, pending) in chunk {
                 self.import_pending_ownership(pending, &mut unknown_attributes)?;
+                written += 1;
             }
+        }
+        if written > 0 {
+            event!(Level::DEBUG, "Wrote {written} ownerships deferred until their attributes were imported.");
         }
         match unknown_attributes {
             0 => Ok(()),
@@ -573,17 +573,17 @@ impl DatabaseImporter {
     }
 
     fn drain_pending_role_players(&mut self) -> Result<(), DatabaseImportError> {
-        let (records, count) = self.data_info.objects.pending_role_players.take();
-        let Some(records) = records else { return Ok(()) };
-        if count > 0 {
-            event!(Level::DEBUG, "Writing {count} role players deferred until their instances were imported.");
-        }
-        let mut unknown_players = 0;
+        let Some(records) = self.data_info.objects.pending_role_players.take() else { return Ok(()) };
+        let (mut written, mut unknown_players) = (0u64, 0);
         for chunk in records.into_chunks(Self::COMMIT_BATCH_SIZE as usize) {
             let chunk = chunk.map_err(|source| DatabaseImportError::CacheError { source })?;
             for (_, pending) in chunk {
                 self.import_pending_role_player(pending, &mut unknown_players)?;
+                written += 1;
             }
+        }
+        if written > 0 {
+            event!(Level::DEBUG, "Wrote {written} role players deferred until their instances were imported.");
         }
         match unknown_players {
             0 => Ok(()),
