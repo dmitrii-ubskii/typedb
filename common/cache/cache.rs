@@ -33,6 +33,17 @@ impl<T: Serialize + DeserializeOwned + Clone> SpilloverCache<T> {
         SpilloverCache { memory_storage: HashMap::new(), disk_storage_path, disk_storage: None, memory_size_limit }
     }
 
+    pub fn into_chunks(mut self, chunk_size: usize) -> SpilloverCacheChunks<T> {
+        assert!(chunk_size > 0, "SpilloverCache chunks must be non-empty");
+        SpilloverCacheChunks {
+            memory: std::mem::take(&mut self.memory_storage).into_iter(),
+            disk_storage: self.disk_storage.take(),
+            disk_storage_path: std::mem::take(&mut self.disk_storage_path),
+            disk_cursor: None,
+            chunk_size,
+        }
+    }
+
     pub fn insert(&mut self, key: String, value: T) -> Result<(), CacheError> {
         self.remove(&key)?;
         match self.memory_storage.len() < self.memory_size_limit {
@@ -68,8 +79,14 @@ impl<T: Serialize + DeserializeOwned + Clone> SpilloverCache<T> {
         self.disk_storage
             .as_mut()
             .unwrap()
-            .put(key, serialized)
+            .put_opt(key, serialized, &Self::write_options())
             .map_err(|source| CacheError::DiskStorageAccess { source })
+    }
+
+    fn write_options() -> rocksdb::WriteOptions {
+        let mut options = rocksdb::WriteOptions::default();
+        options.disable_wal(true);
+        options
     }
 
     fn disk_storage_get(&self, key: &str) -> Result<Option<T>, CacheError> {
@@ -99,7 +116,73 @@ impl<T: Serialize + DeserializeOwned + Clone> SpilloverCache<T> {
 
 impl<T: Serialize + DeserializeOwned + Clone> Drop for SpilloverCache<T> {
     fn drop(&mut self) {
+        if self.disk_storage_path.as_os_str().is_empty() {
+            return; // consumed by into_chunks: the chunks iterator owns the cleanup
+        }
         drop(std::mem::take(&mut self.disk_storage)); // release its files
+        if let Err(e) = std::fs::remove_dir_all(&self.disk_storage_path) {
+            // Can be cleaned up by the cache's user
+            event!(Level::TRACE, "Failed to delete a temporary DB directory {:?}: {e}", self.disk_storage_path);
+        }
+    }
+}
+
+pub struct SpilloverCacheChunks<T: Serialize + DeserializeOwned + Clone> {
+    memory: std::collections::hash_map::IntoIter<String, T>,
+    disk_storage: Option<rocksdb::DB>,
+    disk_storage_path: PathBuf,
+    disk_cursor: Option<Vec<u8>>,
+    chunk_size: usize,
+}
+
+impl<T: Serialize + DeserializeOwned + Clone> Iterator for SpilloverCacheChunks<T> {
+    type Item = Result<Vec<(String, T)>, CacheError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut chunk = Vec::new();
+        while chunk.len() < self.chunk_size {
+            if let Some(entry) = self.memory.next() {
+                chunk.push(entry);
+            }
+        }
+
+        if chunk.len() < self.chunk_size {
+            if let Some(disk_storage) = &self.disk_storage {
+                let mut iterator = disk_storage.raw_iterator();
+
+                match &self.disk_cursor {
+                    None => iterator.seek_to_first(),
+                    Some(cursor) => {
+                        iterator.seek(cursor);
+                        if iterator.valid() && iterator.key() == Some(cursor.as_slice()) {
+                            iterator.next();
+                        }
+                    }
+                }
+
+                while chunk.len() < self.chunk_size && iterator.valid() {
+                    let (key, bytes) = (iterator.key().unwrap(), iterator.value().unwrap());
+                    let value = match bincode::deserialize(bytes) {
+                        Ok(value) => value,
+                        Err(_) => return Some(Err(CacheError::DiskStorageDeserialization {})),
+                    };
+                    self.disk_cursor = Some(key.to_vec());
+                    chunk.push((String::from_utf8_lossy(key).into_owned(), value));
+                    iterator.next();
+                }
+                if let Err(source) = iterator.status() {
+                    return Some(Err(CacheError::DiskStorageAccess { source }));
+                }
+            }
+        }
+
+        if chunk.is_empty() { None } else { Some(Ok(chunk)) }
+    }
+}
+
+impl<T: Serialize + DeserializeOwned + Clone> Drop for SpilloverCacheChunks<T> {
+    fn drop(&mut self) {
+        drop(self.disk_storage.take()); // release its files
         if let Err(e) = std::fs::remove_dir_all(&self.disk_storage_path) {
             // Can be cleaned up by the cache's user
             event!(Level::TRACE, "Failed to delete a temporary DB directory {:?}: {e}", self.disk_storage_path);
