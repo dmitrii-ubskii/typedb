@@ -271,12 +271,12 @@ struct PendingRolePlayer {
 }
 
 #[derive(Debug)]
-struct PendingLog<T: Serialize + DeserializeOwned + Clone> {
+struct SpilloverLog<T: Serialize + DeserializeOwned + Clone> {
     records: Option<SpilloverCache<T>>,
     next_sequence: u64,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> PendingLog<T> {
+impl<T: Serialize + DeserializeOwned + Clone> SpilloverLog<T> {
     const CACHE_SPILLOVER_THRESHOLD: usize = 300_000;
 
     fn new(cache_directory: &PathBuf, database_name: &str) -> Self {
@@ -304,14 +304,14 @@ impl<T: Serialize + DeserializeOwned + Clone> PendingLog<T> {
 #[derive(Debug)]
 struct ObjectsInfo {
     pub instance_id_mapping: InstanceIDMapping<Object>,
-    pub pending_role_players: PendingLog<PendingRolePlayer>,
+    pub pending_role_players: SpilloverLog<PendingRolePlayer>,
 }
 
 impl ObjectsInfo {
     fn new(cache_directory: &PathBuf, database_name: &str) -> Self {
         Self {
             instance_id_mapping: InstanceIDMapping::new(cache_directory, database_name),
-            pending_role_players: PendingLog::new(cache_directory, database_name),
+            pending_role_players: SpilloverLog::new(cache_directory, database_name),
         }
     }
 }
@@ -319,14 +319,14 @@ impl ObjectsInfo {
 #[derive(Debug)]
 struct AttributesInfo {
     pub instance_id_mapping: InstanceIDMapping<Attribute>,
-    pub pending_ownerships: PendingLog<PendingOwnership>,
+    pub pending_ownerships: SpilloverLog<PendingOwnership>,
 }
 
 impl AttributesInfo {
     fn new(cache_directory: &PathBuf, database_name: &str) -> Self {
         Self {
             instance_id_mapping: InstanceIDMapping::new(cache_directory, database_name),
-            pending_ownerships: PendingLog::new(cache_directory, database_name),
+            pending_ownerships: SpilloverLog::new(cache_directory, database_name),
         }
     }
 }
