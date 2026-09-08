@@ -95,8 +95,12 @@ impl OperationsBuffer {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.write_buffers().map(|w| w.writes().len()).sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.write_buffers().all(|w| w.is_empty())
     }
 }
 

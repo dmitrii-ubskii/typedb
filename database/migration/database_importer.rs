@@ -109,7 +109,8 @@ macro_rules! for_item_in_write_transaction {
         $self.data_transaction = Some(transaction);
         result?;
         $self.count_item();
-        if $self.transaction_item_count % DatabaseImporter::COMMIT_BATCH_SIZE == 0 {
+        let pending_writes = $self.data_transaction.as_ref().unwrap().snapshot.operations().len();
+        if pending_writes >= DatabaseImporter::MAX_WRITES_PER_COMMIT {
             let transaction = $self.data_transaction.take().unwrap();
             $self.commit_write_transaction(transaction)?;
         }
@@ -336,7 +337,6 @@ pub struct DatabaseImporter {
     schema_info: SchemaInfo,
     data_info: DataInfo,
     data_transaction: Option<TransactionWrite<WALClient>>,
-    transaction_item_count: u64,
     total_item_count: u64,
     interrupt: ExecutionInterrupt,
     schema_imported: bool,
@@ -349,7 +349,8 @@ impl std::fmt::Debug for DatabaseImporter {
 }
 
 impl DatabaseImporter {
-    const COMMIT_BATCH_SIZE: u64 = 10_000;
+    const MAX_WRITES_PER_COMMIT: usize = 10_000;
+    const DRAIN_CHUNK_SIZE: usize = 10_000;
 
     pub fn new(
         import_handler: Box<dyn DatabaseImportHandler>,
@@ -364,7 +365,6 @@ impl DatabaseImporter {
             schema_info: SchemaInfo::new(),
             data_info,
             data_transaction: None,
-            transaction_item_count: 0,
             total_item_count: 0,
             schema_imported: false,
             interrupt,
@@ -525,22 +525,46 @@ impl DatabaseImporter {
     }
 
     fn drain_pending_ownerships(&mut self) -> Result<(), DatabaseImportError> {
-        let Some(records) = self.data_info.attributes.pending_ownerships.take() else { return Ok(()) };
-        let (mut written, mut unknown_attributes) = (0u64, 0);
-        for chunk in records.into_chunks(Self::COMMIT_BATCH_SIZE as usize) {
-            let chunk = chunk.map_err(|source| DatabaseImportError::CacheError { source })?;
-            for (_, pending) in chunk {
-                self.import_pending_ownership(pending, &mut unknown_attributes)?;
+        let records = self.data_info.attributes.pending_ownerships.take();
+        match self.drain_pending(records, "ownerships", Self::import_pending_ownership)? {
+            0 => Ok(()),
+            unresolved => Err(DatabaseImportError::IncompleteOwnershipsOnDone { count: unresolved }),
+        }
+    }
+
+    fn drain_pending_role_players(&mut self) -> Result<(), DatabaseImportError> {
+        let records = self.data_info.objects.pending_role_players.take();
+        match self.drain_pending(records, "role players", Self::import_pending_role_player)? {
+            0 => Ok(()),
+            unresolved => Err(DatabaseImportError::IncompleteRolesOnDone { count: unresolved }),
+        }
+    }
+
+    fn drain_pending<T>(
+        &mut self,
+        records: Option<SpilloverCache<T>>,
+        concept_name: &str,
+        import_one: impl Fn(&mut Self, T, &mut usize) -> Result<(), DatabaseImportError>,
+    ) -> Result<usize, DatabaseImportError>
+    where
+        T: Serialize + DeserializeOwned + Clone,
+    {
+        let Some(records) = records else { return Ok(0) };
+        let (mut written, mut unresolved) = (0u64, 0);
+        for chunk in records.into_chunks(Self::DRAIN_CHUNK_SIZE) {
+            self.check_interrupt()?;
+            for (_key, pending) in chunk.map_err(|source| DatabaseImportError::CacheError { source })? {
+                import_one(self, pending, &mut unresolved)?;
                 written += 1;
             }
         }
         if written > 0 {
-            event!(Level::DEBUG, "Wrote {written} ownerships deferred until their attributes were imported.");
+            event!(
+                Level::DEBUG,
+                "Wrote {written} {concept_name} deferred until their referenced instances were imported."
+            );
         }
-        match unknown_attributes {
-            0 => Ok(()),
-            count => Err(DatabaseImportError::IncompleteOwnershipsOnDone { count }),
-        }
+        Ok(unresolved)
     }
 
     fn import_pending_ownership(
@@ -570,25 +594,6 @@ impl DatabaseImporter {
                 }
             }
         })
-    }
-
-    fn drain_pending_role_players(&mut self) -> Result<(), DatabaseImportError> {
-        let Some(records) = self.data_info.objects.pending_role_players.take() else { return Ok(()) };
-        let (mut written, mut unknown_players) = (0u64, 0);
-        for chunk in records.into_chunks(Self::COMMIT_BATCH_SIZE as usize) {
-            let chunk = chunk.map_err(|source| DatabaseImportError::CacheError { source })?;
-            for (_, pending) in chunk {
-                self.import_pending_role_player(pending, &mut unknown_players)?;
-                written += 1;
-            }
-        }
-        if written > 0 {
-            event!(Level::DEBUG, "Wrote {written} role players deferred until their instances were imported.");
-        }
-        match unknown_players {
-            0 => Ok(()),
-            count => Err(DatabaseImportError::IncompleteRolesOnDone { count }),
-        }
     }
 
     fn import_pending_role_player(
@@ -1060,7 +1065,6 @@ impl DatabaseImporter {
     }
 
     fn count_item(&mut self) {
-        self.transaction_item_count += 1;
         self.total_item_count += 1;
     }
 
