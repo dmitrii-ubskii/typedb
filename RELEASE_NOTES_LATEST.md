@@ -1,10 +1,10 @@
 **Download from TypeDB Package Repository:**
 
-[Distributions for 3.13.0-rc0](https://cloudsmith.io/~typedb/repos/public-release/packages/?q=name%3A%5Etypedb-all+version%3A3.13.0-rc0)
+[Distributions for 3.13.0](https://cloudsmith.io/~typedb/repos/public-release/packages/?q=name%3A%5Etypedb-all+version%3A3.13.0)
 
 **Pull the Docker image:**
 
-```docker pull typedb/typedb:3.13.0-rc0```
+```docker pull typedb/typedb:3.13.0```
 
 
 ## New Features
@@ -44,6 +44,17 @@
   
 
 ## Other Improvements
+- **Make CleanupIntervals pub in transaction**
+  
+  Use `pub use` for `CleanupIntervals` struct in `transaction` to expose this struct to the extensions of TypeDB.
+  
+  This PR fixes the broken dependency introduced by the rename of `CleanupRecord` to `CleanupIntervals`: https://github.com/typedb/typedb/commit/83476cd0d9e8705a651b55532c6d6c111d606425
+  
+  
+- **Disable implicit init py file creation for bazel python targets**
+  Disable implicit init py file creation for bazel python targets, as advised by: bazel-contrib/rules_python#2945 
+  
+  
 - **Cleanup record carries its commit's sequence number**
   
   Fix bug where a cleanup record would inherit the sequence number of the previous commit record in the WAL, rather than track the sequence number of the commit that it is associated with. This could lead to multiple cleanup records with the same sequence number, and conversely to some commit records lacking a corresponding cleanup record.
