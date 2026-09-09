@@ -18,7 +18,19 @@ use storage::{
     keyspace::{KeyspaceId, KeyspaceSet, rocks_resources::RocksResources},
 };
 
-use crate::layout::prefix::{Prefix, PrefixID};
+use crate::{
+    graph::{
+        definition::definition_key::DefinitionKey,
+        thing::{
+            ThingVertex,
+            edge::{ThingEdgeHas, ThingEdgeHasReverse, ThingEdgeIndexedRelation, ThingEdgeLinks},
+            vertex_attribute::AttributeVertex,
+            vertex_object::ObjectVertex,
+        },
+        type_::{edge::TypeEdge, vertex::TypeVertex},
+    },
+    layout::prefix::{Prefix, PrefixID},
+};
 
 pub mod error;
 pub mod graph;
@@ -174,5 +186,67 @@ pub trait Prefixed<const INLINE_SIZE: usize>: AsBytes<INLINE_SIZE> + Clone {
     fn prefix(&self) -> Prefix {
         let byte = self.clone().to_bytes()[Self::INDEX_PREFIX];
         Prefix::from_prefix_id(PrefixID::new(byte)).expect("Unrecognized prefix byte")
+    }
+}
+
+pub enum Decodable {
+    VertexEntityType(TypeVertex),
+    VertexRelationType(TypeVertex),
+    VertexAttributeType(TypeVertex),
+    VertexRoleType(TypeVertex),
+    DefinitionStruct(DefinitionKey),
+    DefinitionFunction(DefinitionKey),
+    ObjectVertex(ObjectVertex),
+    AttributeVertex(AttributeVertex),
+    TypeEdgeSub(TypeEdge),
+    TypeEdgeSubReverse(TypeEdge),
+    TypeEdgeOwns(TypeEdge),
+    TypeEdgeOwnsReverse(TypeEdge),
+    TypeEdgePlays(TypeEdge),
+    TypeEdgePlaysReverse(TypeEdge),
+    TypeEdgeRelates(TypeEdge),
+    TypeEdgeRelatesReverse(TypeEdge),
+    ThingEdgeHas(ThingEdgeHas),
+    ThingEdgeHasReverse(ThingEdgeHasReverse),
+    ThingEdgeLinks(ThingEdgeLinks),
+    ThingEdgeIndexedRelation(ThingEdgeIndexedRelation),
+}
+
+impl Decodable {
+    pub fn try_decode(bytes: &[u8]) -> Option<Self> {
+        match Prefix::from_prefix_id(PrefixID::new(*bytes.first()?))? {
+            Prefix::VertexEntityType => Some(Self::VertexEntityType(TypeVertex::try_decode(bytes)?)),
+            Prefix::VertexRelationType => Some(Self::VertexRelationType(TypeVertex::try_decode(bytes)?)),
+            Prefix::VertexAttributeType => Some(Self::VertexAttributeType(TypeVertex::try_decode(bytes)?)),
+            Prefix::VertexRoleType => Some(Self::VertexRoleType(TypeVertex::try_decode(bytes)?)),
+            Prefix::DefinitionStruct => Some(Self::DefinitionStruct(DefinitionKey::try_decode(bytes)?)),
+            Prefix::DefinitionFunction => Some(Self::DefinitionFunction(DefinitionKey::try_decode(bytes)?)),
+            Prefix::VertexEntity | Prefix::VertexRelation => Some(Self::ObjectVertex(ObjectVertex::try_decode(bytes)?)),
+            Prefix::VertexAttribute => Some(Self::AttributeVertex(AttributeVertex::try_decode(bytes)?)),
+            Prefix::EdgeSub => Some(Self::TypeEdgeSub(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeSubReverse => Some(Self::TypeEdgeSubReverse(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeOwns => Some(Self::TypeEdgeOwns(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeOwnsReverse => Some(Self::TypeEdgeOwnsReverse(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgePlays => Some(Self::TypeEdgePlays(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgePlaysReverse => Some(Self::TypeEdgePlaysReverse(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeRelates => Some(Self::TypeEdgeRelates(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeRelatesReverse => Some(Self::TypeEdgeRelatesReverse(TypeEdge::try_decode(bytes)?)),
+            Prefix::EdgeHas => Some(Self::ThingEdgeHas(ThingEdgeHas::try_decode(bytes)?)),
+            Prefix::EdgeHasReverse => Some(Self::ThingEdgeHasReverse(ThingEdgeHasReverse::try_decode(bytes)?)),
+            Prefix::EdgeLinks | Prefix::EdgeLinksReverse => {
+                Some(Self::ThingEdgeLinks(ThingEdgeLinks::try_decode(bytes)?))
+            }
+            Prefix::EdgeLinksIndex => {
+                Some(Self::ThingEdgeIndexedRelation(ThingEdgeIndexedRelation::try_decode(bytes)?))
+            }
+            Prefix::PropertyTypeVertex => todo!(),
+            Prefix::PropertyTypeEdge => todo!(),
+            Prefix::PropertyObjectVertex => todo!(),
+            Prefix::PropertyFunction => todo!(),
+            Prefix::IndexLabelToType => todo!(),
+            Prefix::IndexNameToDefinitionStruct => todo!(),
+            Prefix::IndexNameToDefinitionFunction => todo!(),
+            Prefix::IndexValueToStruct => todo!(),
+        }
     }
 }
