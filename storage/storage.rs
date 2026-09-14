@@ -568,6 +568,15 @@ impl<Durability> MVCCStorage<Durability> {
             .get_prev(key.bytes(), |raw_key, v| key_value_mapper(&MVCCKey::wrap_slice(raw_key), v))
     }
 
+    // pub fn iterate_keyspace<'this, const PREFIX_INLINE: usize>(
+    //     &'this self,
+    //     keyspace_id: KeyspaceId,
+    //     iterator_pool: &IteratorPool,
+    //     storage_counters: StorageCounters,
+    // ) -> KeyspaceRangeIterator {
+    //     self.keyspaces.get(keyspace_id).iterate(iterator_pool, storage_counters)
+    // }
+
     pub fn iterate_keyspace_range<'this, const PREFIX_INLINE: usize>(
         &'this self,
         iterator_pool: &IteratorPool,

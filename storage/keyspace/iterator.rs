@@ -49,7 +49,7 @@ impl KeyspaceRangeIterator {
         } else {
             iterpool.get_iterator_unprefixed(keyspace)
         };
-        let mut iterator = DBIterator::new_from(raw_iterator, start_prefix.as_ref(), storage_counters);
+        let iterator = DBIterator::new_from(raw_iterator, start_prefix.as_ref(), storage_counters);
 
         let continue_condition = match range.end() {
             RangeEnd::WithinStartAsPrefix => {
@@ -60,6 +60,19 @@ impl KeyspaceRangeIterator {
             RangeEnd::Unbounded => ContinueCondition::Always,
         };
         KeyspaceRangeIterator { iterator, continue_condition, keyspace_name: keyspace.name(), is_finished: false }
+    }
+
+    pub(crate) fn new_full<'a, const INLINE_BYTES: usize>(
+        keyspace: &'a Keyspace,
+        iterpool: &IteratorPool,
+        storage_counters: StorageCounters,
+    ) -> Self {
+        KeyspaceRangeIterator {
+            iterator: DBIterator::new_from(iterpool.get_iterator_unprefixed(keyspace), &[], storage_counters),
+            continue_condition: ContinueCondition::Always,
+            keyspace_name: keyspace.name(),
+            is_finished: false,
+        }
     }
 
     fn may_skip_start(iterator: &mut DBIterator, excluded_value: &[u8]) {

@@ -16,10 +16,7 @@ use std::{
 use durability::DurabilityRecordType;
 use encoding::{
     DecodableKey,
-    graph::{
-        Typed,
-        type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeIDUInt, TypeVertexEncoding},
-    },
+    graph::{thing::ThingVertex, type_::vertex::PrefixedTypeVertexEncoding},
 };
 use error::typedb_error;
 use resource::{
@@ -29,7 +26,6 @@ use resource::{
     },
     profile::StorageCounters,
 };
-use serde::{Deserialize, Serialize};
 use storage::{
     MVCCStorage,
     durability_client::{DurabilityClient, DurabilityClientError, DurabilityRecord, UnsequencedDurabilityRecord},
@@ -39,19 +35,59 @@ use storage::{
     record::CommitType,
     recovery::commit_recovery::{RecoveryCommitStatus, StorageRecoveryError, load_commit_data_from_with_context},
     sequence_number::SequenceNumber,
-    snapshot::{buffer::OperationsBuffer, write::Write},
+    snapshot::{ReadableSnapshot, buffer::OperationsBuffer, write::Write},
 };
 use tracing::{Level, event};
 
 use crate::{
-    thing::{ThingAPI, attribute::Attribute, entity::Entity, object::Object, relation::Relation},
+    thing::{
+        ThingAPI,
+        attribute::Attribute,
+        entity::Entity,
+        object::{Object, ObjectAPI},
+        relation::Relation,
+        thing_manager::ThingManager,
+    },
     type_::{
-        TypeAPI, attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType,
+        ObjectTypeAPI, TypeAPI, attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType,
         relation_type::RelationType, role_type::RoleType,
     },
 };
 
-type StatisticsEncodingVersion = u64;
+mod commit_deltas;
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u64)]
+enum StatisticsEncodingVersion {
+    V0 = 0,
+    V1 = 1,
+}
+
+impl TryFrom<u64> for StatisticsEncodingVersion {
+    type Error = (); // TODO proper error
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::V0),
+            1 => Ok(Self::V1),
+            _ => Err(()), // TODO proper error
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Counts {
+    pub visible: u64,
+    pub invisible: u64,
+}
+
+impl Counts {
+    const ZERO: Self = Self { visible: 0, invisible: 0 };
+
+    pub fn new(visible: u64, invisible: u64) -> Self {
+        Self { visible, invisible }
+    }
+}
 
 /// Thing statistics, reflecting a snapshot of statistics accurate as of a particular sequence number
 /// When types are undefined, we retain the last count of the instances of the type
@@ -62,36 +98,36 @@ pub struct Statistics {
     pub sequence_number: SequenceNumber,
 
     pub last_durable_write_sequence_number: SequenceNumber,
-    pub last_durable_write_total_count: u64,
+    pub last_durable_write_total_count: Counts,
 
-    pub total_count: u64,
+    pub total_count: Counts,
 
-    pub total_thing_count: u64,
-    pub total_entity_count: u64,
-    pub total_relation_count: u64,
-    pub total_attribute_count: u64,
-    pub total_role_count: u64,
-    pub total_has_count: u64,
+    pub total_thing_count: Counts,
+    pub total_entity_count: Counts,
+    pub total_relation_count: Counts,
+    pub total_attribute_count: Counts,
+    pub total_role_count: Counts,
+    pub total_has_count: Counts,
 
-    pub entity_counts: HashMap<EntityType, u64>,
-    pub relation_counts: HashMap<RelationType, u64>,
-    pub attribute_counts: HashMap<AttributeType, u64>,
-    pub role_counts: HashMap<RoleType, u64>,
+    pub entity_counts: HashMap<EntityType, Counts>,
+    pub relation_counts: HashMap<RelationType, Counts>,
+    pub attribute_counts: HashMap<AttributeType, Counts>,
+    pub role_counts: HashMap<RoleType, Counts>,
 
-    pub has_attribute_counts: HashMap<ObjectType, HashMap<AttributeType, u64>>,
-    pub attribute_owner_counts: HashMap<AttributeType, HashMap<ObjectType, u64>>,
-    pub role_player_counts: HashMap<ObjectType, HashMap<RoleType, u64>>,
-    pub relation_role_counts: HashMap<RelationType, HashMap<RoleType, u64>>,
-    pub relation_role_player_counts: HashMap<RelationType, HashMap<RoleType, HashMap<ObjectType, u64>>>,
-    pub player_role_relation_counts: HashMap<ObjectType, HashMap<RoleType, HashMap<RelationType, u64>>>,
+    pub has_attribute_counts: HashMap<ObjectType, HashMap<AttributeType, Counts>>,
+    pub attribute_owner_counts: HashMap<AttributeType, HashMap<ObjectType, Counts>>,
+    pub role_player_counts: HashMap<ObjectType, HashMap<RoleType, Counts>>,
+    pub relation_role_counts: HashMap<RelationType, HashMap<RoleType, Counts>>,
+    pub relation_role_player_counts: HashMap<RelationType, HashMap<RoleType, HashMap<ObjectType, Counts>>>,
+    pub player_role_relation_counts: HashMap<ObjectType, HashMap<RoleType, HashMap<RelationType, Counts>>>,
 
     // TODO: adding role types is possible, but won't help with filtering before reading storage since roles are not in the prefix
-    pub links_index_counts: HashMap<ObjectType, HashMap<ObjectType, u64>>,
+    pub links_index_counts: HashMap<ObjectType, HashMap<ObjectType, Counts>>,
     // future: attribute value distributions, attribute value ownership distributions, etc.
 }
 
 impl Statistics {
-    const ENCODING_VERSION: StatisticsEncodingVersion = 0;
+    const ENCODING_VERSION: StatisticsEncodingVersion = StatisticsEncodingVersion::V0;
     const COMMIT_CONTEXT_SIZE: u64 = 8;
     const COMMIT_CONTEXT_MEMORY_LIMIT: usize = 1 << 30; // 1 GiB
 
@@ -99,15 +135,16 @@ impl Statistics {
         Statistics {
             encoding_version: Self::ENCODING_VERSION,
             sequence_number,
-            last_durable_write_total_count: 0,
+            last_durable_write_total_count: Counts::ZERO,
             last_durable_write_sequence_number: sequence_number,
-            total_count: 0,
-            total_thing_count: 0,
-            total_entity_count: 0,
-            total_relation_count: 0,
-            total_attribute_count: 0,
-            total_role_count: 0,
-            total_has_count: 0,
+
+            total_count: Counts::ZERO,
+            total_thing_count: Counts::ZERO,
+            total_entity_count: Counts::ZERO,
+            total_relation_count: Counts::ZERO,
+            total_attribute_count: Counts::ZERO,
+            total_role_count: Counts::ZERO,
+            total_has_count: Counts::ZERO,
             entity_counts: HashMap::new(),
             relation_counts: HashMap::new(),
             attribute_counts: HashMap::new(),
@@ -119,6 +156,129 @@ impl Statistics {
             relation_role_player_counts: HashMap::new(),
             player_role_relation_counts: HashMap::new(),
             links_index_counts: HashMap::new(),
+        }
+    }
+
+    fn read_from_snapshot(snapshot: impl ReadableSnapshot, thing_manager: &ThingManager) -> Self {
+        let mut has_attribute_counts = HashMap::<_, HashMap<_, _>>::new();
+        let mut attribute_owner_counts = HashMap::<_, HashMap<_, _>>::new();
+
+        let mut total_entity_count = 0;
+        let mut entity_counts = HashMap::new();
+
+        let entity_iter = thing_manager.get_entities(&snapshot, StorageCounters::DISABLED);
+        for entity in entity_iter {
+            let entity = entity.unwrap();
+            total_entity_count += 1;
+            *entity_counts.entry(entity.type_()).or_default() += 1;
+            let owner_type = entity.type_().into_object_type();
+            let has_iter = entity.get_has_unordered(&snapshot, thing_manager, StorageCounters::DISABLED).unwrap();
+            for has in has_iter {
+                let (has, count) = has.unwrap();
+                let attribute = has.attribute();
+                *has_attribute_counts.entry(owner_type).or_default().entry(attribute.type_()).or_default() += count;
+                *attribute_owner_counts.entry(attribute.type_()).or_default().entry(owner_type).or_default() += count;
+            }
+        }
+
+        let mut total_relation_count = 0;
+        let mut relation_counts = HashMap::new();
+
+        let mut role_counts = HashMap::new();
+        let mut relation_role_counts = HashMap::<_, HashMap<_, _>>::new();
+        let mut role_player_counts = HashMap::<_, HashMap<_, _>>::new();
+        let mut relation_role_player_counts = HashMap::<_, HashMap<_, HashMap<_, _>>>::new();
+        let mut player_role_relation_counts = HashMap::<_, HashMap<_, HashMap<_, _>>>::new();
+        let mut links_index_counts = HashMap::<_, HashMap<_, _>>::new();
+
+        let relation_iter = thing_manager.get_relations(&snapshot, StorageCounters::DISABLED);
+        for relation in relation_iter {
+            let relation = relation.unwrap();
+            total_relation_count += 1;
+            *relation_counts.entry(relation.type_()).or_default() += 1;
+            let owner_type = relation.type_().into_object_type();
+            let has_iter = relation.get_has_unordered(&snapshot, thing_manager, StorageCounters::DISABLED).unwrap();
+            for has in has_iter {
+                let (has, count) = has.unwrap();
+                let attribute = has.attribute();
+                *has_attribute_counts.entry(owner_type).or_default().entry(attribute.type_()).or_default() += count;
+                *attribute_owner_counts.entry(attribute.type_()).or_default().entry(owner_type).or_default() += count;
+            }
+            let relates_iter = relation.get_players(&snapshot, thing_manager, StorageCounters::DISABLED);
+            let mut this_relation_players = BTreeMap::<_, u64>::new();
+            for relates in relates_iter {
+                let (roleplayer, count) = relates.unwrap();
+                let role = roleplayer.role_type();
+                let player = roleplayer.player();
+                *role_counts.entry(role).or_default() += count;
+                *relation_role_counts.entry(relation.type_()).or_default().entry(role).or_default() += count;
+                *role_player_counts.entry(player.type_()).or_default().entry(role).or_default() += count;
+                *relation_role_player_counts
+                    .entry(relation.type_())
+                    .or_default()
+                    .entry(role)
+                    .or_default()
+                    .entry(player.type_())
+                    .or_default() += count;
+                *player_role_relation_counts
+                    .entry(player.type_())
+                    .or_default()
+                    .entry(role)
+                    .or_default()
+                    .entry(relation.type_())
+                    .or_default() += count;
+                *this_relation_players.entry(player.type_()).or_default() += 1;
+            }
+            if relation.type_().relation_index_available(&snapshot, thing_manager.type_manager()).unwrap() {
+                for (player_1, count_1) in &this_relation_players {
+                    for (player_2, count_2) in &this_relation_players {
+                        let link_count = if player_1 == player_2 { count_1 * (count_2 - 1) } else { count_1 * count_2 };
+                        if link_count == 0 {
+                            continue;
+                        }
+                        *links_index_counts.entry(*player_1).or_default().entry(*player_2).or_default() += link_count;
+                    }
+                }
+            }
+        }
+
+        let mut total_attribute_count = 0;
+        let mut attribute_counts = HashMap::new();
+
+        let attribute_iter = thing_manager.get_attributes(&snapshot, StorageCounters::DISABLED).unwrap();
+        for attribute in attribute_iter {
+            let attribute = attribute.unwrap();
+            total_attribute_count += 1;
+            *attribute_counts.entry(attribute.type_()).or_default() += 1;
+        }
+
+        let total_thing_count = total_entity_count + total_relation_count + total_attribute_count;
+        let total_has_count = has_attribute_counts.values().map(|map| map.len() as u64).sum();
+        let total_role_count = role_counts.values().sum();
+
+        Self {
+            encoding_version: Self::ENCODING_VERSION,
+            sequence_number: snapshot.open_sequence_number(),
+            last_durable_write_sequence_number,
+            last_durable_write_total_count,
+            total_count,
+            total_thing_count,
+            total_entity_count,
+            total_relation_count,
+            total_attribute_count,
+            total_role_count,
+            total_has_count,
+            entity_counts,
+            relation_counts,
+            attribute_counts,
+            role_counts,
+            has_attribute_counts,
+            attribute_owner_counts,
+            role_player_counts,
+            relation_role_counts,
+            relation_role_player_counts,
+            player_role_relation_counts,
+            links_index_counts,
         }
     }
 
@@ -720,85 +880,6 @@ typedb_error!(
     }
 );
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
-enum SerialisableType {
-    Entity(TypeIDUInt),
-    Relation(TypeIDUInt),
-    Attribute(TypeIDUInt),
-    Role(TypeIDUInt),
-}
-
-impl SerialisableType {
-    pub(crate) fn into_entity_type(self) -> EntityType {
-        match self {
-            Self::Entity(id) => EntityType::build_from_type_id(TypeID::new(id)),
-            _ => panic!("Incompatible conversion."),
-        }
-    }
-
-    pub(crate) fn into_relation_type(self) -> RelationType {
-        match self {
-            Self::Relation(id) => RelationType::build_from_type_id(TypeID::new(id)),
-            _ => panic!("Incompatible conversion."),
-        }
-    }
-
-    pub(crate) fn into_object_type(self) -> ObjectType {
-        match self {
-            Self::Entity(id) => ObjectType::Entity(EntityType::build_from_type_id(TypeID::new(id))),
-            Self::Relation(id) => ObjectType::Relation(RelationType::build_from_type_id(TypeID::new(id))),
-            _ => panic!("Incompatible conversion."),
-        }
-    }
-
-    pub(crate) fn into_attribute_type(self) -> AttributeType {
-        match self {
-            Self::Attribute(id) => AttributeType::build_from_type_id(TypeID::new(id)),
-            _ => panic!("Incompatible conversion."),
-        }
-    }
-
-    pub(crate) fn into_role_type(self) -> RoleType {
-        match self {
-            Self::Role(id) => RoleType::build_from_type_id(TypeID::new(id)),
-            _ => panic!("Incompatible conversion."),
-        }
-    }
-}
-
-impl From<ObjectType> for SerialisableType {
-    fn from(object: ObjectType) -> Self {
-        match object {
-            ObjectType::Entity(entity) => Self::from(entity),
-            ObjectType::Relation(relation) => Self::from(relation),
-        }
-    }
-}
-
-impl From<EntityType> for SerialisableType {
-    fn from(entity: EntityType) -> Self {
-        Self::Entity(entity.vertex().type_id_().as_u16())
-    }
-}
-
-impl From<RelationType> for SerialisableType {
-    fn from(relation: RelationType) -> Self {
-        Self::Relation(relation.vertex().type_id_().as_u16())
-    }
-}
-
-impl From<AttributeType> for SerialisableType {
-    fn from(attribute: AttributeType) -> Self {
-        Self::Attribute(attribute.vertex().type_id_().as_u16())
-    }
-}
-
-impl From<RoleType> for SerialisableType {
-    fn from(role_type: RoleType) -> Self {
-        Self::Role(role_type.vertex().type_id_().as_u16())
-    }
-}
-
 impl DurabilityRecord for Statistics {
     const RECORD_TYPE: DurabilityRecordType = 10;
     const RECORD_NAME: &'static str = "thing_statistics";
@@ -817,6 +898,10 @@ impl UnsequencedDurabilityRecord for Statistics {}
 mod serialise {
     use std::{collections::HashMap, fmt};
 
+    use encoding::graph::{
+        Typed,
+        type_::vertex::{PrefixedTypeVertexEncoding, TypeID, TypeIDUInt, TypeVertexEncoding},
+    };
     use serde::{
         Deserialize, Deserializer, Serialize, Serializer, de,
         de::{MapAccess, SeqAccess, Visitor},
@@ -824,12 +909,91 @@ mod serialise {
     };
 
     use crate::{
-        thing::statistics::{SerialisableType, Statistics},
+        thing::statistics::{Counts, Statistics, StatisticsEncodingVersion},
         type_::{
             attribute_type::AttributeType, entity_type::EntityType, object_type::ObjectType,
             relation_type::RelationType, role_type::RoleType,
         },
     };
+
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
+    enum SerialisableType {
+        Entity(TypeIDUInt),
+        Relation(TypeIDUInt),
+        Attribute(TypeIDUInt),
+        Role(TypeIDUInt),
+    }
+
+    impl SerialisableType {
+        pub(crate) fn into_entity_type(self) -> EntityType {
+            match self {
+                Self::Entity(id) => EntityType::build_from_type_id(TypeID::new(id)),
+                _ => panic!("Incompatible conversion."),
+            }
+        }
+
+        pub(crate) fn into_relation_type(self) -> RelationType {
+            match self {
+                Self::Relation(id) => RelationType::build_from_type_id(TypeID::new(id)),
+                _ => panic!("Incompatible conversion."),
+            }
+        }
+
+        pub(crate) fn into_object_type(self) -> ObjectType {
+            match self {
+                Self::Entity(id) => ObjectType::Entity(EntityType::build_from_type_id(TypeID::new(id))),
+                Self::Relation(id) => ObjectType::Relation(RelationType::build_from_type_id(TypeID::new(id))),
+                _ => panic!("Incompatible conversion."),
+            }
+        }
+
+        pub(crate) fn into_attribute_type(self) -> AttributeType {
+            match self {
+                Self::Attribute(id) => AttributeType::build_from_type_id(TypeID::new(id)),
+                _ => panic!("Incompatible conversion."),
+            }
+        }
+
+        pub(crate) fn into_role_type(self) -> RoleType {
+            match self {
+                Self::Role(id) => RoleType::build_from_type_id(TypeID::new(id)),
+                _ => panic!("Incompatible conversion."),
+            }
+        }
+    }
+
+    impl From<ObjectType> for SerialisableType {
+        fn from(object: ObjectType) -> Self {
+            match object {
+                ObjectType::Entity(entity) => Self::from(entity),
+                ObjectType::Relation(relation) => Self::from(relation),
+            }
+        }
+    }
+
+    impl From<EntityType> for SerialisableType {
+        fn from(entity: EntityType) -> Self {
+            Self::Entity(entity.vertex().type_id_().as_u16())
+        }
+    }
+
+    impl From<RelationType> for SerialisableType {
+        fn from(relation: RelationType) -> Self {
+            Self::Relation(relation.vertex().type_id_().as_u16())
+        }
+    }
+
+    impl From<AttributeType> for SerialisableType {
+        fn from(attribute: AttributeType) -> Self {
+            Self::Attribute(attribute.vertex().type_id_().as_u16())
+        }
+    }
+
+    impl From<RoleType> for SerialisableType {
+        fn from(role_type: RoleType) -> Self {
+            Self::Role(role_type.vertex().type_id_().as_u16())
+        }
+    }
 
     enum Field {
         StatisticsVersion,
@@ -931,6 +1095,15 @@ mod serialise {
                 "PlayerIndexCounts" => Some(Field::LinksIndexCounts),
                 _ => None,
             }
+        }
+    }
+
+    impl Serialize for StatisticsEncodingVersion {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_u64(*self as u64)
         }
     }
 
@@ -1061,6 +1234,15 @@ mod serialise {
         }
     }
 
+    impl<'de> Deserialize<'de> for StatisticsEncodingVersion {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            u64::deserialize(deserializer).map(|u64| u64.try_into().unwrap()) // TODO proper error
+        }
+    }
+
     impl<'de> Deserialize<'de> for Statistics {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
@@ -1080,114 +1262,10 @@ mod serialise {
                     V: SeqAccess<'de>,
                 {
                     let statistics_version = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(0, &self))?;
-                    let sequence_number = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(1, &self))?;
-                    let last_durable_write_total_count =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(2, &self))?;
-                    let total_count = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(3, &self))?;
-                    let total_thing_count = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(4, &self))?;
-                    let total_entity_count = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(5, &self))?;
-                    let total_relation_count =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(6, &self))?;
-                    let total_attribute_count =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(7, &self))?;
-                    let total_role_count = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(8, &self))?;
-                    let total_has_count = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(9, &self))?;
-                    let encoded_entity_counts =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(10, &self))?;
-                    let entity_counts = into_entity_map(encoded_entity_counts);
-                    let encoded_relation_counts =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(11, &self))?;
-                    let relation_counts = into_relation_map(encoded_relation_counts);
-                    let encoded_attribute_counts =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(12, &self))?;
-                    let attribute_counts = into_attribute_map(encoded_attribute_counts);
-                    let encoded_role_counts =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(13, &self))?;
-                    let role_counts = into_role_map(encoded_role_counts);
-                    let encoded_has_attribute_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(14, &self))?;
-                    let has_attribute_counts = encoded_has_attribute_counts
-                        .into_iter()
-                        .map(|(type_1, map)| (type_1.into_object_type(), into_attribute_map(map)))
-                        .collect();
-                    let encoded_attribute_owner_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(15, &self))?;
-                    let attribute_owner_counts = encoded_attribute_owner_counts
-                        .into_iter()
-                        .map(|(type_1, map)| (type_1.into_attribute_type(), into_object_map(map)))
-                        .collect();
-                    let encoded_role_player_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(16, &self))?;
-                    let role_player_counts = encoded_role_player_counts
-                        .into_iter()
-                        .map(|(type_1, map)| (type_1.into_object_type(), into_role_map(map)))
-                        .collect();
-                    let encoded_relation_role_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(17, &self))?;
-                    let relation_role_counts = encoded_relation_role_counts
-                        .into_iter()
-                        .map(|(type_1, map)| (type_1.into_relation_type(), into_role_map(map)))
-                        .collect();
-                    let encoded_relation_role_player_counts: HashMap<
-                        SerialisableType,
-                        HashMap<SerialisableType, HashMap<SerialisableType, u64>>,
-                    > = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(18, &self))?;
-                    let relation_role_player_counts = encoded_relation_role_player_counts
-                        .into_iter()
-                        .map(|(type_1, map)| {
-                            (
-                                type_1.into_relation_type(),
-                                map.into_iter()
-                                    .map(|(type_1, map)| (type_1.into_role_type(), into_object_map(map)))
-                                    .collect(),
-                            )
-                        })
-                        .collect();
-                    let encoded_player_role_relation_counts: HashMap<
-                        SerialisableType,
-                        HashMap<SerialisableType, HashMap<SerialisableType, u64>>,
-                    > = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(19, &self))?;
-                    let player_role_relation_counts = encoded_player_role_relation_counts
-                        .into_iter()
-                        .map(|(type_1, map)| {
-                            (
-                                type_1.into_object_type(),
-                                map.into_iter()
-                                    .map(|(type_1, map)| (type_1.into_role_type(), into_relation_map(map)))
-                                    .collect(),
-                            )
-                        })
-                        .collect();
-                    let encoded_links_index_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
-                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(20, &self))?;
-                    let links_index_counts = encoded_links_index_counts
-                        .into_iter()
-                        .map(|(type_1, map)| (type_1.into_object_type(), into_object_map(map)))
-                        .collect();
-                    Ok(Statistics {
-                        encoding_version: statistics_version,
-                        sequence_number,
-                        last_durable_write_sequence_number: sequence_number,
-                        last_durable_write_total_count,
-                        total_count,
-                        total_thing_count,
-                        total_entity_count,
-                        total_relation_count,
-                        total_attribute_count,
-                        total_role_count,
-                        total_has_count,
-                        entity_counts,
-                        relation_counts,
-                        attribute_counts,
-                        role_counts,
-                        has_attribute_counts,
-                        attribute_owner_counts,
-                        role_player_counts,
-                        relation_role_counts,
-                        relation_role_player_counts,
-                        player_role_relation_counts,
-                        links_index_counts,
-                    })
+                    match statistics_version {
+                        StatisticsEncodingVersion::V0 => self.visit_seq_v0(seq),
+                        StatisticsEncodingVersion::V1 => todo!(),
+                    }
                 }
 
                 fn visit_map<V>(self, mut map: V) -> Result<Statistics, V::Error>
@@ -1460,6 +1538,127 @@ mod serialise {
                             .ok_or_else(|| de::Error::missing_field(Field::PlayerRoleRelationCounts.name()))?,
                         links_index_counts: links_indexs_counts
                             .ok_or_else(|| de::Error::missing_field(Field::LinksIndexCounts.name()))?,
+                    })
+                }
+            }
+
+            impl StatisticsVisitor {
+                fn visit_seq_v0<'de, V>(self, mut seq: V) -> Result<Statistics, <V as SeqAccess<'de>>::Error>
+                where
+                    V: SeqAccess<'de>,
+                {
+                    let sequence_number = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                    let last_durable_write_total_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(2, &self))?, 0);
+                    let total_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(3, &self))?, 0);
+                    let total_thing_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(4, &self))?, 0);
+                    let total_entity_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(5, &self))?, 0);
+                    let total_relation_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(6, &self))?, 0);
+                    let total_attribute_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(7, &self))?, 0);
+                    let total_role_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(8, &self))?, 0);
+                    let total_has_count =
+                        Counts::new(seq.next_element()?.ok_or_else(|| de::Error::invalid_length(9, &self))?, 0);
+                    let encoded_entity_counts =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(10, &self))?;
+                    let entity_counts = into_entity_map(encoded_entity_counts);
+                    let encoded_relation_counts =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(11, &self))?;
+                    let relation_counts = into_relation_map(encoded_relation_counts);
+                    let encoded_attribute_counts =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(12, &self))?;
+                    let attribute_counts = into_attribute_map(encoded_attribute_counts);
+                    let encoded_role_counts =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(13, &self))?;
+                    let role_counts = into_role_map(encoded_role_counts);
+                    let encoded_has_attribute_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(14, &self))?;
+                    let has_attribute_counts = encoded_has_attribute_counts
+                        .into_iter()
+                        .map(|(type_1, map)| (type_1.into_object_type(), into_attribute_map(map)))
+                        .collect();
+                    let encoded_attribute_owner_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(15, &self))?;
+                    let attribute_owner_counts = encoded_attribute_owner_counts
+                        .into_iter()
+                        .map(|(type_1, map)| (type_1.into_attribute_type(), into_object_map(map)))
+                        .collect();
+                    let encoded_role_player_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(16, &self))?;
+                    let role_player_counts = encoded_role_player_counts
+                        .into_iter()
+                        .map(|(type_1, map)| (type_1.into_object_type(), into_role_map(map)))
+                        .collect();
+                    let encoded_relation_role_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(17, &self))?;
+                    let relation_role_counts = encoded_relation_role_counts
+                        .into_iter()
+                        .map(|(type_1, map)| (type_1.into_relation_type(), into_role_map(map)))
+                        .collect();
+                    let encoded_relation_role_player_counts: HashMap<
+                        SerialisableType,
+                        HashMap<SerialisableType, HashMap<SerialisableType, u64>>,
+                    > = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(18, &self))?;
+                    let relation_role_player_counts = encoded_relation_role_player_counts
+                        .into_iter()
+                        .map(|(type_1, map)| {
+                            (
+                                type_1.into_relation_type(),
+                                map.into_iter()
+                                    .map(|(type_1, map)| (type_1.into_role_type(), into_object_map(map)))
+                                    .collect(),
+                            )
+                        })
+                        .collect();
+                    let encoded_player_role_relation_counts: HashMap<
+                        SerialisableType,
+                        HashMap<SerialisableType, HashMap<SerialisableType, u64>>,
+                    > = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(19, &self))?;
+                    let player_role_relation_counts = encoded_player_role_relation_counts
+                        .into_iter()
+                        .map(|(type_1, map)| {
+                            (
+                                type_1.into_object_type(),
+                                map.into_iter()
+                                    .map(|(type_1, map)| (type_1.into_role_type(), into_relation_map(map)))
+                                    .collect(),
+                            )
+                        })
+                        .collect();
+                    let encoded_links_index_counts: HashMap<SerialisableType, HashMap<SerialisableType, u64>> =
+                        seq.next_element()?.ok_or_else(|| de::Error::invalid_length(20, &self))?;
+                    let links_index_counts = encoded_links_index_counts
+                        .into_iter()
+                        .map(|(type_1, map)| (type_1.into_object_type(), into_object_map(map)))
+                        .collect();
+                    Ok(Statistics {
+                        encoding_version: StatisticsVersion::V0,
+                        sequence_number,
+                        last_durable_write_sequence_number: sequence_number,
+                        last_durable_write_total_count,
+                        total_count,
+                        total_thing_count,
+                        total_entity_count,
+                        total_relation_count,
+                        total_attribute_count,
+                        total_role_count,
+                        total_has_count,
+                        entity_counts,
+                        relation_counts,
+                        attribute_counts,
+                        role_counts,
+                        has_attribute_counts,
+                        attribute_owner_counts,
+                        role_player_counts,
+                        relation_role_counts,
+                        relation_role_player_counts,
+                        player_role_relation_counts,
+                        links_index_counts,
                     })
                 }
             }
