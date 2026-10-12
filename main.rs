@@ -7,7 +7,7 @@
 #![deny(unused_must_use)]
 #![deny(elided_lifetimes_in_paths)]
 
-use std::path::Path;
+use std::{path::Path, sync::atomic::Ordering};
 
 use clap::Parser;
 use logger::{initialise_logging_global, safe_eprintln};

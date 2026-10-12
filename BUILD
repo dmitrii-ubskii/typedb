@@ -39,6 +39,7 @@ rust_binary(
         "main.rs",
     ],
     deps = [
+        "//common/allocator",
         "//common/fail_point",
         "//common/logger",
         "//database",

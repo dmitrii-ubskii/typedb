@@ -40,6 +40,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "lending_iterator",
+ "primitive",
+ "serde",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5921,6 +5931,7 @@ dependencies = [
 name = "typedb_server_bin"
 version = "0.0.0"
 dependencies = [
+ "allocator",
  "answer",
  "clap",
  "database",
