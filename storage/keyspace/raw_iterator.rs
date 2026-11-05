@@ -44,13 +44,13 @@ impl IteratorItemState {
     }
 }
 
-/// SAFETY NOTE: `'static` here represents that the `DBIterator` owns the data.
-/// The item's lifetime is in fact invalidated when `iterator` is advanced.
+// SAFETY: `'static` here represents that the `DBIterator` owns the data.
+// The item's lifetime is in fact invalidated when `iterator` is advanced.
 pub(super) struct DBIterator {
     iterator: PoolRecycleGuard<DBRawIterator<'static>>,
     storage_counters: StorageCounters,
     // NOTE: when item is empty, that means that the kv pair the Rocks iterator _is currently pointing to_
-    //       has been yielded to the user, and the underlying iterator needs to be advanced before  reading
+    //       has been yielded to the user, and the underlying iterator needs to be advanced before reading
     state: IteratorItemState,
 }
 
@@ -67,6 +67,7 @@ impl DBIterator {
         this
     }
 
+    #[expect(dead_code, reason = "currently unused but may be relevant in future")]
     pub(super) fn peek(&mut self) -> Option<<Self as LendingIterator>::Item<'_>> {
         let state = self.next_internal();
         self.state = state;

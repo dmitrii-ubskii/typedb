@@ -792,14 +792,28 @@ impl<'bytes> MVCCKey<'bytes> {
         Self { bytes: Bytes::reference(bytes) }
     }
 
+    pub(crate) fn is_visible_to(&self, sequence_number: SequenceNumber) -> bool {
+        self.sequence_number() <= sequence_number
+    }
+
     fn bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    fn length(&self) -> usize {
+        self.bytes.length()
     }
 
     // TODO: the only reason this is `pub` is the leak in ThingVertexGenerator::sync_from_storage.
     // It seems to be the only reason MVCCKey is `pub` at all.
     pub fn key(&self) -> &[u8] {
         self.split().0
+    }
+
+    fn into_key(self) -> Bytes<'bytes, MVCC_KEY_INLINE_SIZE> {
+        let end = self.length() - Self::SEQUENCE_NUMBER_START_NEGATIVE_OFFSET;
+        let bytes = self.bytes;
+        bytes.truncate(end)
     }
 
     fn sequence_number(&self) -> SequenceNumber {

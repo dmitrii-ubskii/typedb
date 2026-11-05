@@ -26,7 +26,6 @@ pub(crate) struct MVCCRangeIterator {
     storage_counters: StorageCounters,
 
     last_visible_key: Option<ByteArray<MVCC_KEY_INLINE_SIZE>>,
-    item: Option<Result<(StorageKeyReference<'static>, &'static [u8]), MVCCReadError>>,
 }
 
 impl MVCCRangeIterator {
@@ -48,30 +47,36 @@ impl MVCCRangeIterator {
             iterator: Peekable::new(iterator),
             open_sequence_number,
             last_visible_key: None,
-            item: None,
             storage_counters,
         }
     }
 
-    pub(crate) fn peek(&mut self) -> Option<&Result<(StorageKeyReference<'_>, &[u8]), MVCCReadError>> {
-        type Item<'a> = <MVCCRangeIterator as LendingIterator>::Item<'a>;
-        if self.item.is_none() {
-            self.item = unsafe { std::mem::transmute::<Option<Item<'_>>, Option<Item<'static>>>(self.next()) };
+    pub(crate) fn peek(&mut self) -> Option<Result<(StorageKeyReference<'_>, &[u8]), MVCCReadError>> {
+        self.find_next_state();
+        match self.iterator.peek()? {
+            &Ok((key, value)) => Some(Ok(key_value_from_raw(self.keyspace_id, key, value))),
+            Err(err) => Some(Err(MVCCReadError::Keyspace {
+                storage_name: self.storage_name.clone(),
+                source: Arc::new(err.clone()),
+            })),
         }
-        self.item.as_ref()
     }
 
-    fn find_next_state(&mut self) -> bool {
+    fn find_next_state(&mut self) {
+        if self.iterator.get_peeked().is_some() {
+            return;
+        }
         while let Some(&Ok((key, _))) = self.iterator.peek() {
             let mvcc_key = MVCCKey::wrap_slice(key);
             let is_visible = mvcc_key.is_visible_to(self.open_sequence_number)
                 && !self.last_visible_key.as_ref().is_some_and(|key| key == mvcc_key.key());
             if is_visible {
-                self.last_visible_key = Some(ByteArray::copy(mvcc_key.key()));
+                match &mut self.last_visible_key {
+                    Some(last_visible_key) => last_visible_key.set(mvcc_key.key()),
+                    None => self.last_visible_key = Some(ByteArray::copy(mvcc_key.key())),
+                }
                 match mvcc_key.operation() {
-                    StorageOperation::Insert => {
-                        return true;
-                    }
+                    StorageOperation::Insert => return,
                     StorageOperation::Delete => {
                         self.storage_counters.increment_advance_mvcc_deleted();
                         self.iterator.next();
@@ -82,35 +87,31 @@ impl MVCCRangeIterator {
                 self.iterator.next();
             }
         }
-        false
     }
+}
+
+fn key_value_from_raw<'a>(
+    keyspace_id: KeyspaceId,
+    key: &'a [u8],
+    value: &'a [u8],
+) -> (StorageKeyReference<'a>, &'a [u8]) {
+    (StorageKeyReference::new_raw(keyspace_id, MVCCKey::wrap_slice(key).into_key().unwrap_reference()), value)
 }
 
 impl LendingIterator for MVCCRangeIterator {
     type Item<'a> = Result<(StorageKeyReference<'a>, &'a [u8]), MVCCReadError>;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
-        if let Some(item) = self.item.take() {
-            Some(item)
-        } else if self.find_next_state() {
-            let (key, value) = match self.iterator.next()? {
-                Ok(kv) => {
-                    self.storage_counters.increment_advance_mvcc_visible();
-                    kv
-                }
-                Err(error) => {
-                    return Some(Err(MVCCReadError::Keyspace {
-                        storage_name: self.storage_name.clone(),
-                        source: Arc::new(error.clone()),
-                    }));
-                }
-            };
-            Some(Ok((
-                StorageKeyReference::new_raw(self.keyspace_id, MVCCKey::wrap_slice(key).into_key().unwrap_reference()),
-                value,
-            )))
-        } else {
-            None
+        self.find_next_state();
+        match self.iterator.next()? {
+            Ok((key, value)) => {
+                self.storage_counters.increment_advance_mvcc_visible();
+                Some(Ok(key_value_from_raw(self.keyspace_id, key, value)))
+            }
+            Err(error) => Some(Err(MVCCReadError::Keyspace {
+                storage_name: self.storage_name.clone(),
+                source: Arc::new(error.clone()),
+            })),
         }
     }
 }
@@ -119,7 +120,6 @@ impl Seekable<[u8]> for MVCCRangeIterator {
     fn seek(&mut self, key: &[u8]) {
         if let Some(Ok((peek, _))) = self.peek() {
             if peek.bytes() < key {
-                self.item.take();
                 self.iterator.seek(key);
             }
         }

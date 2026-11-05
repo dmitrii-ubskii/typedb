@@ -213,7 +213,7 @@ impl SnapshotRangeIterator {
     ) -> Option<Result<(StorageKeyReference<'_>, &[u8]), Arc<SnapshotIteratorError>>> {
         match storage.peek()? {
             Ok(ok) => Some(Ok(ok)),
-            Err(error) => Some(Err(Arc::new(SnapshotIteratorError::MVCCRead { source: error }))),
+            Err(error) => Some(Err(Arc::new(SnapshotIteratorError::MVCCRead { source: error.clone() }))),
         }
     }
 
