@@ -30,10 +30,8 @@ pub(crate) struct MVCCRangeIterator {
 }
 
 impl MVCCRangeIterator {
-    //
     // TODO: optimisation for fixed-width keyspaces: we can skip to key[len(key) - 1] = key[len(key) - 1] + 1
     // once we find a successful key, to skip all 'older' versions of the key
-    //
     pub(crate) fn new<D, const PS: usize>(
         storage: &MVCCStorage<D>,
         iterpool: &IteratorPool,
